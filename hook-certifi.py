@@ -1,8 +1,7 @@
 """
-Initialisation module
+Python script to collect data files for the certifi module
 
-© 2023, Peter Cole.
-All rights reserved.
+© 2023, Peter Cole. All rights reserved.
 
 This file is part of EX-Installer.
 
@@ -20,10 +19,7 @@ You should have received a copy of the GNU General Public License
 along with CommandStation.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import sys
-import os
+from PyInstaller.utils.hooks import collect_data_files
 
-# In Linux we also need to set up SSL certs properly
-if getattr(sys, "frozen", None):
-    basedir = sys._MEIPASS
-    os.environ["SSL_CERT_FILE"] = os.path.join(basedir, "certifi", "cacert.pem")
+# Get the cacert.pem
+datas = collect_data_files('certifi')
