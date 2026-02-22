@@ -12,14 +12,8 @@ export class App {
 
     public attached(): void {
         var button = new Button({ isPrimary: true });
-        button.created = () => {
-            console.log('Button created');
-        };
+
         button.appendTo(this.primaryButton);
-        this.primaryButton.addEventListener('click', () => {
-            console.log('Button clicked');
-        });
-        console.log("attached called, primaryButton:", this.primaryButton);
     }
 
     async binding(): Promise<void> {
