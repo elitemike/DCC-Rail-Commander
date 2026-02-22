@@ -1,0 +1,52 @@
+<template>
+    <import from="../components/app-layout"></import>
+    <import from="../components/nav-bar"></import>
+
+    <app-layout title="Select Product">
+        <div class="max-w-3xl mx-auto space-y-6">
+            <p class="text-gray-700">
+                Choose the DCC-EX product to install on your
+                <strong>${state.selectedDevice?.name ?? 'device'}</strong>.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- EX-CommandStation -->
+                <div class="border rounded-xl p-6 cursor-pointer transition-all hover:shadow-md text-center"
+                    class.bind="state.selectedProduct === 'ex_commandstation' ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200'"
+                    click.trigger="selectProduct('ex_commandstation')">
+                    <div class="text-4xl mb-3">🚂</div>
+                    <h3 class="font-bold text-lg text-gray-800">EX-CommandStation</h3>
+                    <p class="text-sm text-gray-500 mt-2">DCC command station for controlling your layout</p>
+                    <div if.bind="!isDeviceSupported('ex_commandstation')" class="mt-2 text-xs text-red-500">Not
+                        supported on this device</div>
+                </div>
+
+                <!-- EX-IOExpander -->
+                <div class="border rounded-xl p-6 cursor-pointer transition-all hover:shadow-md text-center"
+                    class.bind="state.selectedProduct === 'ex_ioexpander' ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200'"
+                    click.trigger="selectProduct('ex_ioexpander')">
+                    <div class="text-4xl mb-3">🔌</div>
+                    <h3 class="font-bold text-lg text-gray-800">EX-IOExpander</h3>
+                    <p class="text-sm text-gray-500 mt-2">Additional I/O pins via I2C connection</p>
+                    <div if.bind="!isDeviceSupported('ex_ioexpander')" class="mt-2 text-xs text-red-500">Not supported
+                        on this device</div>
+                </div>
+
+                <!-- EX-Turntable -->
+                <div class="border rounded-xl p-6 cursor-pointer transition-all hover:shadow-md text-center"
+                    class.bind="state.selectedProduct === 'ex_turntable' ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200'"
+                    click.trigger="selectProduct('ex_turntable')">
+                    <div class="text-4xl mb-3">🔄</div>
+                    <h3 class="font-bold text-lg text-gray-800">EX-Turntable</h3>
+                    <p class="text-sm text-gray-500 mt-2">Stepper-driven turntable or traverser</p>
+                    <div if.bind="!isDeviceSupported('ex_turntable')" class="mt-2 text-xs text-red-500">Not supported on
+                        this device</div>
+                </div>
+            </div>
+        </div>
+
+        <nav-bar au-slot="footer" back-action.bind="() => goBack()" next-action.bind="() => goNext()"
+            next-disabled.bind="!state.selectedProduct">
+        </nav-bar>
+    </app-layout>
+</template>

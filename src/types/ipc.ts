@@ -72,9 +72,105 @@ export interface PythonElectronApi {
 
 // ── Augment Window global ─────────────────────────────────────────────────────
 
+// ── Arduino CLI ──────────────────────────────────────────────────────────────
+
+export interface ArduinoCliPlatformInfo {
+    id: string
+    installed: string
+    latest: string
+    name: string
+}
+
+export interface ArduinoCliLibraryInfo {
+    name: string
+    installedVersion: string
+    availableVersion?: string
+}
+
+export interface ArduinoCliBoardInfo {
+    name: string
+    fqbn: string
+    port: string
+    protocol: string
+    serialNumber?: string
+}
+
+export interface CompileResult {
+    success: boolean
+    output: string
+    error?: string
+}
+
+export interface UploadResult {
+    success: boolean
+    output: string
+    error?: string
+}
+
+export interface ArduinoCliElectronApi {
+    isInstalled: () => Promise<boolean>
+    getVersion: () => Promise<string | null>
+    downloadCli: () => Promise<{ success: boolean; error?: string }>
+    installPlatform: (platform: string, version?: string) => Promise<{ success: boolean; error?: string }>
+    installLibrary: (library: string, version?: string) => Promise<{ success: boolean; error?: string }>
+    getPlatforms: () => Promise<ArduinoCliPlatformInfo[]>
+    getLibraries: () => Promise<ArduinoCliLibraryInfo[]>
+    listBoards: () => Promise<ArduinoCliBoardInfo[]>
+    compile: (sketchPath: string, fqbn: string) => Promise<CompileResult>
+    upload: (sketchPath: string, fqbn: string, port: string) => Promise<UploadResult>
+    initConfig: () => Promise<{ success: boolean; error?: string }>
+    updateIndex: () => Promise<{ success: boolean; error?: string }>
+    onProgress: (cb: (payload: { phase: string; message: string }) => void) => () => void
+}
+
+// ── Git ──────────────────────────────────────────────────────────────────────
+
+export interface GitVersionInfo {
+    tag: string
+    major: number
+    minor: number
+    patch: number
+    type: 'Prod' | 'Devel' | 'unknown'
+}
+
+export interface GitElectronApi {
+    clone: (url: string, dest: string, branch?: string) => Promise<{ success: boolean; error?: string }>
+    pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>
+    listTags: (repoPath: string) => Promise<string[]>
+    checkout: (repoPath: string, ref: string) => Promise<{ success: boolean; error?: string }>
+    checkLocalChanges: (repoPath: string) => Promise<{ hasChanges: boolean; files: string[] }>
+    hardReset: (repoPath: string) => Promise<{ success: boolean; error?: string }>
+}
+
+// ── File System ──────────────────────────────────────────────────────────────
+
+export interface FileElectronApi {
+    readFile: (filePath: string) => Promise<string>
+    writeFile: (filePath: string, content: string) => Promise<void>
+    listDir: (dirPath: string) => Promise<string[]>
+    exists: (filePath: string) => Promise<boolean>
+    mkdir: (dirPath: string) => Promise<void>
+    copyFiles: (src: string, dest: string) => Promise<void>
+    deleteFiles: (filePath: string) => Promise<void>
+    getInstallDir: (subdir?: string) => Promise<string>
+    selectDirectory: () => Promise<string | null>
+}
+
+// ── Preferences ──────────────────────────────────────────────────────────────
+
+export interface PreferencesElectronApi {
+    get: (key: string) => Promise<unknown>
+    set: (key: string, value: unknown) => Promise<void>
+    getAll: () => Promise<Record<string, unknown>>
+}
+
 declare global {
     interface Window {
         usb: UsbElectronApi
         python: PythonElectronApi
+        arduinoCli: ArduinoCliElectronApi
+        git: GitElectronApi
+        files: FileElectronApi
+        preferences: PreferencesElectronApi
     }
 }

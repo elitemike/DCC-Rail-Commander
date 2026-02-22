@@ -15,9 +15,11 @@ export class UsbService {
     log: string[] = []
 
     private readonly unsubscribers: Array<() => void> = []
+    private initialized = false
 
     async initialize(): Promise<void> {
-        if (!window.usb) return
+        if (this.initialized || !window.usb) return
+        this.initialized = true
 
         // Initial device scan
         await this.refresh()

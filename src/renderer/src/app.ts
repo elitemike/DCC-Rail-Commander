@@ -1,36 +1,20 @@
-import { resolve } from 'aurelia'
-import { PythonService } from './services/python.service'
-import { Button } from '@syncfusion/ej2/buttons'
+import { route } from '@aurelia/router'
 
-
+@route({
+    routes: [
+        { path: '', redirectTo: 'welcome' },
+        { path: 'welcome', component: () => import('./views/welcome'), title: 'Welcome' },
+        { path: 'manage-cli', component: () => import('./views/manage-cli'), title: 'Manage Arduino CLI' },
+        { path: 'select-device', component: () => import('./views/select-device'), title: 'Select Device' },
+        { path: 'select-product', component: () => import('./views/select-product'), title: 'Select Product' },
+        { path: 'select-version', component: () => import('./views/select-version'), title: 'Select Version' },
+        { path: 'commandstation-config', component: () => import('./views/commandstation-config'), title: 'CommandStation Config' },
+        { path: 'ioexpander-config', component: () => import('./views/ioexpander-config'), title: 'IOExpander Config' },
+        { path: 'turntable-config', component: () => import('./views/turntable-config'), title: 'Turntable Config' },
+        { path: 'advanced-config', component: () => import('./views/advanced-config'), title: 'Advanced Config' },
+        { path: 'compile-upload', component: () => import('./views/compile-upload'), title: 'Compile & Upload' },
+    ],
+})
 export class App {
-    private readonly python = resolve(PythonService)
-    private primaryButton: HTMLElement = null as any;
-    boards: unknown[] = []
-    error: string | null = null
-    running = false
-
-    public attached(): void {
-        var button = new Button({ isPrimary: true });
-
-        button.appendTo(this.primaryButton);
-    }
-
-    async binding(): Promise<void> {
-        this.running = true
-        this.error = null
-        try {
-            const result = await this.python.run({ script: 'detect_boards.py' })
-            this.boards = result.output.map((line) => {
-                try { return JSON.parse(line as string) } catch { return { raw: line } }
-            })
-        } catch (err) {
-            this.error = (err as Error).message
-        } finally {
-            this.running = false
-        }
-
-
-    }
 }
 

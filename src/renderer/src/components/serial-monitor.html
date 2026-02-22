@@ -1,0 +1,18 @@
+<template>
+    <div class="serial-monitor flex flex-col h-full border rounded-lg overflow-hidden" if.bind="visible">
+        <div class="flex items-center justify-between px-4 py-2 bg-gray-100 border-b">
+            <h3 class="font-bold text-sm">Serial Monitor</h3>
+            <button click.trigger="close()" class="e-btn e-small e-outline">Close</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto bg-black text-green-400 font-mono text-xs p-3 min-h-[200px]" ref="outputEl">
+            <div repeat.for="line of output">${line}</div>
+        </div>
+
+        <div class="flex gap-2 p-2 border-t bg-gray-50">
+            <input type="text" value.bind="command" keydown.trigger="onKeydown($event)" placeholder="Enter command..."
+                class="flex-1 px-3 py-1 border rounded text-sm" />
+            <button click.trigger="send()" class="e-btn e-primary e-small">Send</button>
+        </div>
+    </div>
+</template>

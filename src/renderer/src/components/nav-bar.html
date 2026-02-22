@@ -1,0 +1,15 @@
+<template>
+    <div class="flex items-center justify-between">
+        <div class="flex gap-2">
+            <button if.bind="showBack" click.trigger="backAction()" disabled.bind="backDisabled"
+                class="e-btn e-outline">${backText}</button>
+        </div>
+
+        <div class="flex gap-2">
+            <button if.bind="showMonitor" click.trigger="monitorAction()" class="e-btn e-outline">Serial
+                Monitor</button>
+            <button if.bind="showNext" click.trigger="nextAction()" disabled.bind="nextDisabled"
+                class="e-btn e-primary">${nextText}</button>
+        </div>
+    </div>
+</template>

@@ -1,0 +1,40 @@
+<template>
+    <import from="../components/app-layout"></import>
+    <import from="../components/nav-bar"></import>
+
+    <app-layout title="Welcome to EX-Installer">
+        <div class="max-w-2xl mx-auto space-y-6">
+            <p class="text-lg text-gray-700">
+                EX-Installer helps you install and configure DCC-EX software products
+                onto Arduino-compatible devices for model railroad control.
+            </p>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <h2 class="text-lg font-semibold text-blue-800">What you can do:</h2>
+                <ul class="list-disc list-inside space-y-1 text-gray-700">
+                    <li>Install and configure <strong>EX-CommandStation</strong> for DCC control</li>
+                    <li>Install and configure <strong>EX-IOExpander</strong> for additional I/O pins</li>
+                    <li>Install and configure <strong>EX-Turntable</strong> for turntable/traverser control</li>
+                </ul>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                <h2 class="text-lg font-semibold text-amber-800">Before you begin:</h2>
+                <ul class="list-disc list-inside space-y-1 text-gray-700">
+                    <li>Connect your Arduino-compatible device via USB</li>
+                    <li>Ensure you have a stable internet connection for downloads</li>
+                    <li>The installer will download the Arduino CLI if not already present</li>
+                </ul>
+            </div>
+
+            <p class="text-sm text-gray-500">
+                Version ${state.appVersion} — Visit
+                <a href="https://dcc-ex.com" class="text-blue-600 underline" target="_blank">dcc-ex.com</a>
+                for documentation.
+            </p>
+        </div>
+
+        <nav-bar au-slot="footer" show-back.bind="false" next-text="Get Started" next-action.bind="() => goNext()">
+        </nav-bar>
+    </app-layout>
+</template>

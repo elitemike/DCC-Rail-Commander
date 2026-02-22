@@ -1,0 +1,75 @@
+<template>
+    <import from="../components/app-layout"></import>
+    <import from="../components/nav-bar"></import>
+
+    <app-layout title="Select Version">
+        <div class="max-w-2xl mx-auto space-y-6">
+            <p class="text-gray-700">
+                Choose the version of <strong>${productName}</strong> to install.
+            </p>
+
+            <!-- Clone/update progress -->
+            <div if.bind="busy" class="flex items-center gap-3">
+                <div class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span class="text-gray-600">${statusMessage}</span>
+            </div>
+
+            <!-- Version selection -->
+            <div if.bind="!busy && versions.length > 0" class="space-y-4">
+                <div class="space-y-2">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="radio" name="versionChoice" value="prod" checked.bind="versionChoice"
+                            class="w-4 h-4 text-blue-600" />
+                        <span>Latest Production: <strong>${latestProd ?? 'N/A'}</strong></span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="radio" name="versionChoice" value="devel" checked.bind="versionChoice"
+                            class="w-4 h-4 text-blue-600" />
+                        <span>Latest Development: <strong>${latestDevel ?? 'N/A'}</strong></span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="radio" name="versionChoice" value="select" checked.bind="versionChoice"
+                            class="w-4 h-4 text-blue-600" />
+                        <span>Select a specific version</span>
+                    </label>
+                </div>
+
+                <select if.bind="versionChoice === 'select'" value.bind="selectedTag"
+                    class="w-full border rounded-lg px-3 py-2">
+                    <option value="">-- Choose version --</option>
+                    <option repeat.for="v of versions" value.bind="v">${v}</option>
+                </select>
+            </div>
+
+            <!-- Config source -->
+            <div if.bind="!busy && versions.length > 0" class="border rounded-lg p-4 space-y-3">
+                <h3 class="font-semibold text-gray-800">Configuration Source</h3>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="radio" name="configSource" value="new" checked.bind="configSource"
+                        class="w-4 h-4 text-blue-600" />
+                    <span>Create new configuration</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="radio" name="configSource" value="existing" checked.bind="configSource"
+                        class="w-4 h-4 text-blue-600" />
+                    <span>Use existing configuration from a directory</span>
+                </label>
+
+                <div if.bind="configSource === 'existing'" class="flex gap-2 mt-2">
+                    <input type="text" value.bind="configDir" readonly placeholder="Select config directory..."
+                        class="flex-1 px-3 py-2 border rounded" />
+                    <button click.trigger="browseConfigDir()" class="e-btn e-outline">Browse</button>
+                </div>
+            </div>
+
+            <!-- Error display -->
+            <div if.bind="error" class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p class="text-red-700">${error}</p>
+            </div>
+        </div>
+
+        <nav-bar au-slot="footer" back-action.bind="() => goBack()" next-action.bind="() => goNext()"
+            next-disabled.bind="busy || !selectedVersion">
+        </nav-bar>
+    </app-layout>
+</template>

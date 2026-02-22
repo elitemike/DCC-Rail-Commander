@@ -1,27 +1,3 @@
-<import from="./components/device-list"></import>
-
-<h1>EX-Installer</h1>
-
-<p if.bind="running">Scanning for boards…</p>
-<p if.bind="error">${error}</p>
-
-<section if.bind="!running">
-    <h2>Detected Boards</h2>
-    <ul if.bind="boards.length > 0">
-        <li repeat.for="board of boards">
-            <strong>${board.path ?? board.raw ?? 'unknown'}</strong>
-            <span if.bind="board.description"> — ${board.description}</span>
-            <span if.bind="board.vid"> [VID:${board.vid} PID:${board.pid}]</span>
-            <span if.bind="board.info"> (${board.info})</span>
-            <span if.bind="board.error" style="color:red"> error: ${board.error}</span>
-        </li>
-    </ul>
-    <p else>No boards detected.</p>
-</section>
-
-<section>
-    <h2>Connected Devices</h2>
-    <device-list></device-list>
-</section>
-
-<button ref="primaryButton" id="primarybtn">Primary</button>
+<div class="h-screen w-screen flex flex-col bg-gray-50">
+    <au-viewport></au-viewport>
+</div>

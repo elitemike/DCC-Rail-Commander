@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
-import { pythonRunner } from '../index'
-import type { PythonJobOptions } from '../python-runner'
+import type { PythonRunner, PythonJobOptions } from '../python-runner'
 
 /**
  * IPC handlers for Python sub-process management.
@@ -16,7 +15,7 @@ import type { PythonJobOptions } from '../python-runner'
  *  python:error   { jobId, message }
  *  python:done    PythonJobResult
  */
-export function registerPythonIpcHandlers(): void {
+export function registerPythonIpcHandlers(pythonRunner: PythonRunner): void {
     ipcMain.handle('python:run', async (_event, options: PythonJobOptions) => {
         return pythonRunner.run(options)
     })

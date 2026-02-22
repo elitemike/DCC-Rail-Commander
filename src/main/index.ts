@@ -4,6 +4,10 @@ import { config } from './config'
 import { registerAllIpcHandlers } from './ipc'
 import { UsbManager } from './usb-manager'
 import { PythonRunner } from './python-runner'
+import { ArduinoCliService } from './arduino-cli'
+import { GitService } from './git-client'
+import { FileService } from './file-manager'
+import { PreferencesService } from './preferences'
 
 if (config.disableHardwareAcceleration) app.disableHardwareAcceleration()
 
@@ -23,6 +27,10 @@ if (process.env['ELECTRON_RENDERER_URL']) {
 // ── Singletons shared between IPC handlers ──────────────────────────────────
 export const usbManager = new UsbManager()
 export const pythonRunner = new PythonRunner()
+export const arduinoCliService = new ArduinoCliService()
+export const gitService = new GitService()
+export const fileService = new FileService()
+export const preferencesService = new PreferencesService()
 
 // ── Window factory ───────────────────────────────────────────────────────────
 function createWindow(): BrowserWindow {
@@ -76,7 +84,14 @@ function createWindow(): BrowserWindow {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-    registerAllIpcHandlers()
+    registerAllIpcHandlers({
+        usbManager,
+        pythonRunner,
+        arduinoCliService,
+        gitService,
+        fileService,
+        preferencesService,
+    })
     createWindow()
 
     app.on('activate', () => {

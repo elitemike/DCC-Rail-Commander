@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { usbManager } from '../index'
+import type { UsbManager } from '../usb-manager'
 
 /**
  * IPC handlers for USB / serial-port operations.
@@ -19,7 +19,7 @@ import { usbManager } from '../index'
  *  usb:attached  { vendorId, productId }
  *  usb:detached  { vendorId, productId }
  */
-export function registerUsbIpcHandlers(): void {
+export function registerUsbIpcHandlers(usbManager: UsbManager): void {
     ipcMain.handle('usb:list-serial-ports', async () => {
         return usbManager.listSerialPorts()
     })

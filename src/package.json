@@ -14,16 +14,21 @@
         "lint": "eslint src --ext .ts,.html"
     },
     "dependencies": {
+        "@aurelia/router": "2.0.0-rc.0",
         "@aurelia/vite-plugin": "^2.0.0-rc.0",
         "@syncfusion/ej2": "^32.1.24",
         "aurelia": "^2.0.0-rc.0",
+        "electron-store": "^11.0.2",
         "python-shell": "^5.0.0",
         "serialport": "^12.0.0",
+        "simple-git": "^3.32.1",
+        "tar": "^7.5.9",
         "usb": "^2.13.0"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.2.0",
         "@types/node": "^24.10.13",
+        "@types/tar": "^7.0.87",
         "electron": "^40.6.0",
         "electron-vite": "^5.0.0",
         "tailwindcss": "^4.2.0",
