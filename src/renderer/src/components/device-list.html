@@ -1,0 +1,27 @@
+<div class="device-list">
+    <div class="toolbar">
+        <h3>Serial Ports</h3>
+        <button click.trigger="refresh()">Refresh</button>
+    </div>
+
+    <ul if.bind="serialPorts.length > 0">
+        <li repeat.for="port of serialPorts">
+            <span class="port-path">${port.path}</span>
+            <span class="port-meta" if.bind="port.manufacturer"> — ${port.manufacturer}</span>
+            <span class="port-ids" if.bind="port.vendorId">
+                VID:${port.vendorId} PID:${port.productId}
+            </span>
+            <div class="port-actions">
+                <button click.trigger="openPort(port.path)">Open</button>
+                <button click.trigger="closePort(port.path)">Close</button>
+            </div>
+        </li>
+    </ul>
+
+    <p else>No serial ports detected.</p>
+
+    <div class="log" if.bind="log.length > 0">
+        <h4>Activity Log</h4>
+        <pre repeat.for="entry of log">${entry}</pre>
+    </div>
+</div>
