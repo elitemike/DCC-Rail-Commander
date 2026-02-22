@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import aurelia from '@aurelia/vite-plugin'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
     // ── Main process ──────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export default defineConfig({
     renderer: {
         root: resolve(__dirname, 'renderer'),
         plugins: [
+            tailwindcss(),
             aurelia({
                 // Match files under renderer/src so the plugin filter resolves
                 // correctly relative to process.cwd() (which is src/).

@@ -10,7 +10,10 @@ importers:
     dependencies:
       '@aurelia/vite-plugin':
         specifier: ^2.0.0-rc.0
-        version: 2.0.0-rc.0(@types/node@24.10.13)
+        version: 2.0.0-rc.0(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)
+      '@syncfusion/ej2':
+        specifier: ^32.1.24
+        version: 32.2.5
       aurelia:
         specifier: ^2.0.0-rc.0
         version: 2.0.0-rc.0
@@ -24,6 +27,9 @@ importers:
         specifier: ^2.13.0
         version: 2.17.0
     devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.2.0
+        version: 4.2.0(vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1))
       '@types/node':
         specifier: ^24.10.13
         version: 24.10.13
@@ -32,13 +38,16 @@ importers:
         version: 40.6.0
       electron-vite:
         specifier: ^5.0.0
-        version: 5.0.0(vite@7.3.1(@types/node@24.10.13))
+        version: 5.0.0(vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1))
+      tailwindcss:
+        specifier: ^4.2.0
+        version: 4.2.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
       vite:
         specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.10.13)
+        version: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)
 
 packages:
 
@@ -710,9 +719,260 @@ packages:
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
 
+  '@syncfusion/ej2-barcode-generator@32.2.3':
+    resolution: {integrity: sha512-g6EW4W2kkGA5Adc80R/zCY5pHp98zUcf45b9XPDyTdbMqeV8KLZ6Omr4WAUXvPwtw2X7uqL445KhePlJ3r/FEg==}
+
+  '@syncfusion/ej2-base@32.2.6':
+    resolution: {integrity: sha512-H7L8WT0+o5oSo+CTGjSWj5H+UFkQSEgkC5YpLMZJ+/LkdVTrTnw+iuwdWwd8miNEualm12QmZf8RnXccHPfg9w==}
+    hasBin: true
+
+  '@syncfusion/ej2-blockeditor@32.2.5':
+    resolution: {integrity: sha512-5aHYfyGyhPYHXL66ZXujtORifWDgQzYs9LUr46TDRjc9V48JnHuO0ePyQSFatFS7AAT/WKrQkdlhR2rBaJuDMw==}
+
+  '@syncfusion/ej2-buttons@32.2.3':
+    resolution: {integrity: sha512-irIq12umrbJPQA5oZAr1slZ6yOq2sULkVQLFxYHSushFITsRISVP8O5ncvYBIgq0dB1JCKwlGAojEY5d/j0HuA==}
+
+  '@syncfusion/ej2-calendars@32.2.6':
+    resolution: {integrity: sha512-wxMoK9RjGInQMKnKmcFqBkjEaAgNxiArWxx5Ii9wPhiCvPa8B41CelII2052/VYzqqA3WAJtzegk4TaiQ6oPxw==}
+
+  '@syncfusion/ej2-charts@32.2.5':
+    resolution: {integrity: sha512-ikbFo1b3KuteeNMTQ00HAkVo+TVnM8GfWz/wh5ivMRjLdbegh36v3d5WU7zuJe7rtlVlQylvC1bzfWUv/gG9Kg==}
+
+  '@syncfusion/ej2-circulargauge@32.2.3':
+    resolution: {integrity: sha512-mwNJPmjI9EmTZ/ZUWoDA12+rcocSej9g8Va7w1p8uM7nbG/J/PbQxWZ8gJYjoHq1fU13pJNKSdjZYPN+k4qQkQ==}
+
+  '@syncfusion/ej2-compression@32.2.3':
+    resolution: {integrity: sha512-VYSaHfinIoGgiG5EUuWrhh5n/Nw+n19cy1J/dcqVyIXxTSOrS2SOAiMUmyzNg3ZBcPNREJ2xd+xGfHo8i8BpsQ==}
+
+  '@syncfusion/ej2-data@32.2.3':
+    resolution: {integrity: sha512-5m/8v7MLl2m63QNj++oVh/It82pGdB1mL3M8rxTnKni3w5L4tWb78s5LNKEzvz4x8/lcaC3Kg5vnS8ZJqNOI2g==}
+
+  '@syncfusion/ej2-diagrams@32.2.4':
+    resolution: {integrity: sha512-pHzt2IJ7CFZOioprjJE0hFaKA9DpiIGq+P9kbm6ROrXl0JUCClP2VIK3T0YwKdG5QhAvS/y6WdTCQaj65aCL2Q==}
+
+  '@syncfusion/ej2-documenteditor@32.2.5':
+    resolution: {integrity: sha512-A6vkrVujYrtkSkLG0d/TOgvZiSUCP9HwKHe89aO+kxyg8R/Cp0Os3KZNFeC7zWuaJsvAh9Vj9Q7TiuDF5Lo6eg==}
+
+  '@syncfusion/ej2-drawings@32.2.5':
+    resolution: {integrity: sha512-NMLM3s52YDbqcJLXgDVlpnU+yEhBPKXvoozBiFE6d8jJoDfBYRfk+zNl9aCSgSUd19Q72oCTTBjevBU9YfQ+Gw==}
+
+  '@syncfusion/ej2-dropdowns@32.2.6':
+    resolution: {integrity: sha512-G2Qu//cFIC43mTfZ7dDY8sqmQG/4HMxpsvAiwg67nH0uhAXcTSrKqTGsS2fszrdwhoDMHwy5ewMGMTx6sCzynQ==}
+
+  '@syncfusion/ej2-excel-export@32.2.3':
+    resolution: {integrity: sha512-UwqXX1vxr1pSaCgwr93TEuujJt65nUUOolo7uAux9xfay1eT6X1Do77yxlqdpFXHbnmXoVmPsYDw4tFGpnFAWA==}
+
+  '@syncfusion/ej2-file-utils@32.2.3':
+    resolution: {integrity: sha512-hxySQtoRAZXxqEYEYc6DeOJyxFxvV3em4o9ss3/o3YZLx6ymDwOS7oyaSCRkVHJF5tHsISB1ULrDSj2dTwhOEw==}
+
+  '@syncfusion/ej2-filemanager@32.2.3':
+    resolution: {integrity: sha512-nZanv1D+aJLGKTfHxv+JtwdHl+G9za+VJd6jIDMEdY74jWWOmhzpdDmfCsrEz+IVFegW6212uMqV5c3U+3BYvg==}
+
+  '@syncfusion/ej2-gantt@32.2.5':
+    resolution: {integrity: sha512-AMYCD4eFr4s7ZyoY2hi9a0o9eZE1x2bDbvjJBa0GbvVgop9/e/INU9doMKahwKy2MctF2gKPoa5P448yNoNFRA==}
+
+  '@syncfusion/ej2-grid-chart@32.2.3':
+    resolution: {integrity: sha512-N3Eoi3Xra3F2UsimOOTT3mc7ABXxSeBOTvqYw1OUo1EnKtfn+ku5pFsgFM8YJWCosqrq4pHKqNicFND3UoayAQ==}
+
+  '@syncfusion/ej2-grids@32.2.6':
+    resolution: {integrity: sha512-Pz4SDoQT4Ivq2FWmWoRFz9HazHd/413cAwugtk6cogcLEd8b4BsRTwxUjO8p34JUIeW5xie6QEKx5Bq77+oPpw==}
+
+  '@syncfusion/ej2-heatmap@32.2.3':
+    resolution: {integrity: sha512-glqvskw2WylaZ24bbAaKWn/xL44CDnNsqucEUHirqasGEFqxA/Jv8IeG5t3Y1UNWGIl+pe3lJdx+Ls5A4VxTyw==}
+
+  '@syncfusion/ej2-icons@32.2.3':
+    resolution: {integrity: sha512-bZn+4SWasVNRLB0C1Gt6Z4NAM1MDYIqU/uRlhAPJK9itPAvxo3buQAcrokm+3te6k39vxwFuNlMn0dFoI1zWuw==}
+
+  '@syncfusion/ej2-image-editor@32.2.3':
+    resolution: {integrity: sha512-JPB0/TTGxh2Q0cm5d8gGQGvt1qBKEuLN/mUWAB0HD2f83gxdbfV5QbRWJIBPBLvgLFqfDLIgc1vabcMy99Zw3g==}
+
+  '@syncfusion/ej2-inplace-editor@32.2.3':
+    resolution: {integrity: sha512-Y4kHxaW+YmeEOX/6vSUzJKUKfttTu+NBbt17HlvkX7BvVGK0nAzFK3JY4N8J6nThVS5aWr652eWaZr6q+U+cMw==}
+
+  '@syncfusion/ej2-inputs@32.2.5':
+    resolution: {integrity: sha512-iS2fzJKcF4mkjuggb2A8irWYM+B+hESppIJJ0zUyr3aFDm4AajFJQW4ZVm/X05A5Pok/qkhff1WLDzr44u+jUg==}
+
+  '@syncfusion/ej2-interactive-chat@32.2.5':
+    resolution: {integrity: sha512-l6jaHleg1726e43Ky6MGMXfgoiTgHDyxUd+E/L972/GW03FDE94taPUH82VxD1mwOewzKy4XDRcd2exay1fzEw==}
+
+  '@syncfusion/ej2-kanban@32.2.5':
+    resolution: {integrity: sha512-VpGU+fEKRHGuPT8ofIWnLxJLkYbLqpVOlC4QqDcSkSsKhK/cLgLpUuoOJucDuMDfhJzu1X+b5S5B6OgOenqDWw==}
+
+  '@syncfusion/ej2-layouts@32.2.3':
+    resolution: {integrity: sha512-j0R+OlyzYpwhlXQCgILWRqelc0TF5Ha1HyLDvYbyI/vLyelFR83NG83xeOHv+QtZFwJtCuyTn7ILfdlLdFiqEA==}
+
+  '@syncfusion/ej2-lineargauge@32.2.3':
+    resolution: {integrity: sha512-T9rR6JbnhCO90Pz7uzO0S1kj0Y9G4UnwCKtWOlvTGPDgN3ao8Q0wA2R1PwAmpRByxchVPHnw1rVn6DBdm2dHaA==}
+
+  '@syncfusion/ej2-lists@32.2.6':
+    resolution: {integrity: sha512-fIS2P9bEcv9IuKC0ebgGD5D+n/obaZNFOLa1Q1+bB1UG/9OSCZQRa3drBedLKy8xX6nrGtuWnNw9M839JWZ7NQ==}
+
+  '@syncfusion/ej2-maps@32.2.4':
+    resolution: {integrity: sha512-8ZJFsOacJUr38GBkKxb6qP2VYalA4cvD15q4DXWXNlT1b+T1t6DzP6eqk/kegvz4IeqQgT6UZkbRG/vqNAXCJw==}
+
+  '@syncfusion/ej2-markdown-converter@32.2.5':
+    resolution: {integrity: sha512-g6kUR1hiacrp2LTbeH2vMluG01xkyGBzSgN+0DAibgcqblTVfOWxoBcb0CsgAPHAaQCAmBs+ddjKqRlb1xn6Zw==}
+
+  '@syncfusion/ej2-multicolumn-combobox@32.2.3':
+    resolution: {integrity: sha512-/Bb/2q+SMhmxxyevUzq80VK0/vYEpO310uYc9YAGeCZ4RD8I7FVc0+cppiGtnnI/bazzPZ0M4iD/NQWvSnGVCA==}
+
+  '@syncfusion/ej2-navigations@32.2.6':
+    resolution: {integrity: sha512-lR3Tif7ApENh59Gkkq/RajyuKKE8V64IWJ208TBP+f8i2UV/Umx6MOrUoqmEThNH0kUgODDm+X7GbCyy+vnLGQ==}
+
+  '@syncfusion/ej2-notifications@32.2.3':
+    resolution: {integrity: sha512-+9RT5ml9JGCcnZ5grbyC6skwL9lIahedDUnS7kcHIiqHNoyJ+SJnp8qzilI4K7AjvdLvnme7LEd5wN4eZVh8UA==}
+
+  '@syncfusion/ej2-office-chart@32.2.3':
+    resolution: {integrity: sha512-EuNOxydemf98/8We9m/rTITqcFT7perBhZpWEqZse1Ox2sypubBAKgGb5uhIWHx8QTz5S3VZlV5rGzY3SCfo1w==}
+
+  '@syncfusion/ej2-pdf-data-extract@32.2.5':
+    resolution: {integrity: sha512-bvWYBLzvLDpb3bX+4tWVUDcAP0w+DsYvCcljtKJ+5YpKJzzBV7yq2s0fdYOV1HHB1hFkWYZcdkdQAeEv8LSAKw==}
+
+  '@syncfusion/ej2-pdf-export@32.2.3':
+    resolution: {integrity: sha512-ognKqb7jSUGn9O6+tL9D9ONs7I4ThJYFyqzuU0pYR3ESX7siKuSf7YjV+YdLOxJ7aE9r2TLZYEUARLxUeh6ALg==}
+
+  '@syncfusion/ej2-pdf@32.2.5':
+    resolution: {integrity: sha512-eZioUHVqlTOGQsdE2TPTQgEQqHZgdMqgaR40r8v/R5BCVtdTLwynICW6ICql2t0wY3VBtRczwrdvwScAxw/AOA==}
+
+  '@syncfusion/ej2-pdfviewer@32.2.5':
+    resolution: {integrity: sha512-MfO/cQ7NSIuTAA248oG4g0NkUhZMKS6tuvyadpBomEHa3IO623QVMa7lMfHDderrbvGaNqv9yhzgZfNAOPVPYQ==}
+
+  '@syncfusion/ej2-pivotview@32.2.6':
+    resolution: {integrity: sha512-+nQf7tW5yIJ914gzaqXkrnMbzoBeBMvni2piRM/bJhFrnuUirFja2X+f5jzNuXi0VxuZFLDSQqIuW8A3AfSiaw==}
+
+  '@syncfusion/ej2-popups@32.2.6':
+    resolution: {integrity: sha512-u932WXoyY0AqCRWWS7s02pHL4qTFwCm2YuMlFzfENfBxdwijt4GXrrkBfx21o0t+QQdcW+4vGWOrTYdfbj+mDw==}
+
+  '@syncfusion/ej2-progressbar@32.2.3':
+    resolution: {integrity: sha512-vB2f6VlBQz5TTzhDOgpT0qCATZvoMixBfRgu/sUKfIHoJrts2n1UxIzKZ2jF/0EWd0Mbciw0J1h5KJBdPf7FnA==}
+
+  '@syncfusion/ej2-querybuilder@32.2.4':
+    resolution: {integrity: sha512-gHO6H8LW59Frns5fnDzL4jn5m3zahGeDm5S532vu2zsrtLLF3QyeaCsZ+nRgjuQu/lhjWY5A4pYTfmLpUu76Tg==}
+
+  '@syncfusion/ej2-ribbon@32.2.3':
+    resolution: {integrity: sha512-8hgPNQropyEfQcyT8s2ASfaHyK0qEHqcXr3G4FEVuihe9c6Cs2H+QX5+U79jaBQTuMqFlK4DsNrmgKD7ra88JQ==}
+
+  '@syncfusion/ej2-richtexteditor@32.2.5':
+    resolution: {integrity: sha512-KnR8P1Qn7oWMJGe5fcce0wWPTV8AE5Wt6i+ftdldN6QbaW/QF9ut0Jh/S1ucHkIyG2ivdcjk/SfW1FaxJCuaOA==}
+
+  '@syncfusion/ej2-schedule@32.2.3':
+    resolution: {integrity: sha512-dsCuo5vLBn1xTASg5EYZfkNaKQhqP9eXFB6bqOJY3Oktti85YtpaDYVnDuiVXtLCTorvJ2NScD5TsiFCHg7iZA==}
+
+  '@syncfusion/ej2-splitbuttons@32.2.3':
+    resolution: {integrity: sha512-u/9Lb/QBxqlNvVa+7U3lThKI9y1Frsdah1e2oEeoAcfVD5Y3henhuH4xvBg6U1kt4RMwwTZSS7RXDQtKJq4hig==}
+
+  '@syncfusion/ej2-spreadsheet@32.2.5':
+    resolution: {integrity: sha512-8a+D8aHnbRjCfkj4B9Cw9XSOtQMnJJO6lPQENy/2xruWJjW8vayVcUu7rgQ/BkybjyLIjzferCMO9Re8v991MQ==}
+
+  '@syncfusion/ej2-svg-base@32.2.3':
+    resolution: {integrity: sha512-3x8AR5I6jORGQyg+fEOwTunkdHc3alPt2nQGXoddqJ71ZgYTag+1PAo176LVJ8a/3cWkIBIEUeEcR/epE+HnrQ==}
+
+  '@syncfusion/ej2-treegrid@32.2.4':
+    resolution: {integrity: sha512-BatWADazL6F+zhV3Ahxo4gk4fV0NZJKwwXrg9gFMwqfIAodXjOr3e5Q3wtGWdQXS8g/AveRlHNGkb+yUyZuI/A==}
+
+  '@syncfusion/ej2-treemap@32.2.3':
+    resolution: {integrity: sha512-CazIt/qqof5Cgt5H6TbUgWPeFU00fpW8Ttfx4CXABFIJ779079yzm2gyaDXXMKClmHT398jFnJFpu2+NNST32w==}
+
+  '@syncfusion/ej2@32.2.5':
+    resolution: {integrity: sha512-bveZpNjMekjHgoS9go+CMevbfmsUbZG6CVCwhay4/Q/JK8jRdrOA4SCwbiF0cQXmgyKPYJnbZ2VEw27clLxoJg==}
+
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
+
+  '@tailwindcss/node@4.2.0':
+    resolution: {integrity: sha512-Yv+fn/o2OmL5fh/Ir62VXItdShnUxfpkMA4Y7jdeC8O81WPB8Kf6TT6GSHvnqgSwDzlB5iT7kDpeXxLsUS0T6Q==}
+
+  '@tailwindcss/oxide-android-arm64@4.2.0':
+    resolution: {integrity: sha512-F0QkHAVaW/JNBWl4CEKWdZ9PMb0khw5DCELAOnu+RtjAfx5Zgw+gqCHFvqg3AirU1IAd181fwOtJQ5I8Yx5wtw==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [android]
+
+  '@tailwindcss/oxide-darwin-arm64@4.2.0':
+    resolution: {integrity: sha512-I0QylkXsBsJMZ4nkUNSR04p6+UptjcwhcVo3Zu828ikiEqHjVmQL9RuQ6uT/cVIiKpvtVA25msu/eRV97JeNSA==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tailwindcss/oxide-darwin-x64@4.2.0':
+    resolution: {integrity: sha512-6TmQIn4p09PBrmnkvbYQ0wbZhLtbaksCDx7Y7R3FYYx0yxNA7xg5KP7dowmQ3d2JVdabIHvs3Hx4K3d5uCf8xg==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@tailwindcss/oxide-freebsd-x64@4.2.0':
+    resolution: {integrity: sha512-qBudxDvAa2QwGlq9y7VIzhTvp2mLJ6nD/G8/tI70DCDoneaUeLWBJaPcbfzqRIWraj+o969aDQKvKW9dvkUizw==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@tailwindcss/oxide-linux-arm-gnueabihf@4.2.0':
+    resolution: {integrity: sha512-7XKkitpy5NIjFZNUQPeUyNJNJn1CJeV7rmMR+exHfTuOsg8rxIO9eNV5TSEnqRcaOK77zQpsyUkBWmPy8FgdSg==}
+    engines: {node: '>= 20'}
+    cpu: [arm]
+    os: [linux]
+
+  '@tailwindcss/oxide-linux-arm64-gnu@4.2.0':
+    resolution: {integrity: sha512-Mff5a5Q3WoQR01pGU1gr29hHM1N93xYrKkGXfPw/aRtK4bOc331Ho4Tgfsm5WDGvpevqMpdlkCojT3qlCQbCpA==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tailwindcss/oxide-linux-arm64-musl@4.2.0':
+    resolution: {integrity: sha512-XKcSStleEVnbH6W/9DHzZv1YhjE4eSS6zOu2eRtYAIh7aV4o3vIBs+t/B15xlqoxt6ef/0uiqJVB6hkHjWD/0A==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@tailwindcss/oxide-linux-x64-gnu@4.2.0':
+    resolution: {integrity: sha512-/hlXCBqn9K6fi7eAM0RsobHwJYa5V/xzWspVTzxnX+Ft9v6n+30Pz8+RxCn7sQL/vRHHLS30iQPrHQunu6/vJA==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tailwindcss/oxide-linux-x64-musl@4.2.0':
+    resolution: {integrity: sha512-lKUaygq4G7sWkhQbfdRRBkaq4LY39IriqBQ+Gk6l5nKq6Ay2M2ZZb1tlIyRNgZKS8cbErTwuYSor0IIULC0SHw==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@tailwindcss/oxide-wasm32-wasi@4.2.0':
+    resolution: {integrity: sha512-xuDjhAsFdUuFP5W9Ze4k/o4AskUtI8bcAGU4puTYprr89QaYFmhYOPfP+d1pH+k9ets6RoE23BXZM1X1jJqoyw==}
+    engines: {node: '>=14.0.0'}
+    cpu: [wasm32]
+    bundledDependencies:
+      - '@napi-rs/wasm-runtime'
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+      - '@tybys/wasm-util'
+      - '@emnapi/wasi-threads'
+      - tslib
+
+  '@tailwindcss/oxide-win32-arm64-msvc@4.2.0':
+    resolution: {integrity: sha512-2UU/15y1sWDEDNJXxEIrfWKC2Yb4YgIW5Xz2fKFqGzFWfoMHWFlfa1EJlGO2Xzjkq/tvSarh9ZTjvbxqWvLLXA==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@tailwindcss/oxide-win32-x64-msvc@4.2.0':
+    resolution: {integrity: sha512-CrFadmFoc+z76EV6LPG1jx6XceDsaCG3lFhyLNo/bV9ByPrE+FnBPckXQVP4XRkN76h3Fjt/a+5Er/oA/nCBvQ==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [win32]
+
+  '@tailwindcss/oxide@4.2.0':
+    resolution: {integrity: sha512-AZqQzADaj742oqn2xjl5JbIOzZB/DGCYF/7bpvhA8KvjUj9HJkag6bBuwZvH1ps6dfgxNHyuJVlzSr2VpMgdTQ==}
+    engines: {node: '>= 20'}
+
+  '@tailwindcss/vite@4.2.0':
+    resolution: {integrity: sha512-da9mFCaHpoOgtQiWtDGIikTrSpUFBtIZCG3jy/u2BGV+l/X1/pbxzmIUxNt6JWm19N3WtGi4KlJdSH/Si83WOA==}
+    peerDependencies:
+      vite: ^5.2.0 || ^6 || ^7
 
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha512-IQ3EbTzGxIigb1I3qPZc1rWJnH0BmSKv5QYTalEwweFvyBDLSAe24zP0le/hyi7ecGfZVlIVAg4BZqb8WBwKqw==}
@@ -817,6 +1077,10 @@ packages:
     resolution: {integrity: sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg==}
     engines: {node: '>= 0.4'}
 
+  detect-libc@2.1.2:
+    resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
+    engines: {node: '>=8'}
+
   detect-node@2.1.0:
     resolution: {integrity: sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==}
 
@@ -845,6 +1109,10 @@ packages:
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
+
+  enhanced-resolve@5.19.0:
+    resolution: {integrity: sha512-phv3E1Xl4tQOShqSte26C7Fl84EwUdZsyOuSSk9qtAGyyQs2s3jJzComh+Abf4g187lUUAvH+H26omrqia2aGg==}
+    engines: {node: '>=10.13.0'}
 
   entities@6.0.1:
     resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
@@ -949,6 +1217,10 @@ packages:
     resolution: {integrity: sha512-V+23sDMr12Wnz7iTcDeJr3O6AIxlnvT/bmaAAAP/Xda35C90p9599p0F1eHR/N1KILWSoWVAiOMFjBBXaXSMxg==}
     engines: {node: '>=10.19.0'}
 
+  jiti@2.6.1:
+    resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
+    hasBin: true
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -973,6 +1245,80 @@ packages:
 
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
+
+  lightningcss-android-arm64@1.31.1:
+    resolution: {integrity: sha512-HXJF3x8w9nQ4jbXRiNppBCqeZPIAfUo8zE/kOEGbW5NZvGc/K7nMxbhIr+YlFlHW5mpbg/YFPdbnCh1wAXCKFg==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [android]
+
+  lightningcss-darwin-arm64@1.31.1:
+    resolution: {integrity: sha512-02uTEqf3vIfNMq3h/z2cJfcOXnQ0GRwQrkmPafhueLb2h7mqEidiCzkE4gBMEH65abHRiQvhdcQ+aP0D0g67sg==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  lightningcss-darwin-x64@1.31.1:
+    resolution: {integrity: sha512-1ObhyoCY+tGxtsz1lSx5NXCj3nirk0Y0kB/g8B8DT+sSx4G9djitg9ejFnjb3gJNWo7qXH4DIy2SUHvpoFwfTA==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  lightningcss-freebsd-x64@1.31.1:
+    resolution: {integrity: sha512-1RINmQKAItO6ISxYgPwszQE1BrsVU5aB45ho6O42mu96UiZBxEXsuQ7cJW4zs4CEodPUioj/QrXW1r9pLUM74A==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [freebsd]
+
+  lightningcss-linux-arm-gnueabihf@1.31.1:
+    resolution: {integrity: sha512-OOCm2//MZJ87CdDK62rZIu+aw9gBv4azMJuA8/KB74wmfS3lnC4yoPHm0uXZ/dvNNHmnZnB8XLAZzObeG0nS1g==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm]
+    os: [linux]
+
+  lightningcss-linux-arm64-gnu@1.31.1:
+    resolution: {integrity: sha512-WKyLWztD71rTnou4xAD5kQT+982wvca7E6QoLpoawZ1gP9JM0GJj4Tp5jMUh9B3AitHbRZ2/H3W5xQmdEOUlLg==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  lightningcss-linux-arm64-musl@1.31.1:
+    resolution: {integrity: sha512-mVZ7Pg2zIbe3XlNbZJdjs86YViQFoJSpc41CbVmKBPiGmC4YrfeOyz65ms2qpAobVd7WQsbW4PdsSJEMymyIMg==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  lightningcss-linux-x64-gnu@1.31.1:
+    resolution: {integrity: sha512-xGlFWRMl+0KvUhgySdIaReQdB4FNudfUTARn7q0hh/V67PVGCs3ADFjw+6++kG1RNd0zdGRlEKa+T13/tQjPMA==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  lightningcss-linux-x64-musl@1.31.1:
+    resolution: {integrity: sha512-eowF8PrKHw9LpoZii5tdZwnBcYDxRw2rRCyvAXLi34iyeYfqCQNA9rmUM0ce62NlPhCvof1+9ivRaTY6pSKDaA==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  lightningcss-win32-arm64-msvc@1.31.1:
+    resolution: {integrity: sha512-aJReEbSEQzx1uBlQizAOBSjcmr9dCdL3XuC/6HLXAxmtErsj2ICo5yYggg1qOODQMtnjNQv2UHb9NpOuFtYe4w==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  lightningcss-win32-x64-msvc@1.31.1:
+    resolution: {integrity: sha512-I9aiFrbd7oYHwlnQDqr1Roz+fTz61oDDJX7n9tYF9FJymH1cIN1DtKw3iYt6b8WZgEjoNwVSncwF4wx/ZedMhw==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [win32]
+
+  lightningcss@1.31.1:
+    resolution: {integrity: sha512-l51N2r93WmGUye3WuFoN5k10zyvrVs0qfKBhyC5ogUQ6Ew6JUSswh78mbSO+IU3nTWsyOArqPCcShdQSadghBQ==}
+    engines: {node: '>= 12.0.0'}
 
   loader-utils@2.0.4:
     resolution: {integrity: sha512-xXqpXoINfFhgua9xiqD8fPFHgkoq1mmmpE92WlDbm9rNRd/EbRb+Gqf908T2DMfuHjjJlksiK2RbHVOdD/MqSw==}
@@ -1133,6 +1479,13 @@ packages:
     resolution: {integrity: sha512-MvjXzkz/BOfyVDkG0oFOtBxHX2u3gKbMHIF/dXblZsgD3BWOFLmHovIpZY7BykJdAjcqRCBi1WYBNdEC9yI7vg==}
     engines: {node: '>= 8.0'}
 
+  tailwindcss@4.2.0:
+    resolution: {integrity: sha512-yYzTZ4++b7fNYxFfpnberEEKu43w44aqDMNM9MHMmcKuCH7lL8jJ4yJ7LGHv7rSwiqM0nkiobF9I6cLlpS2P7Q==}
+
+  tapable@2.3.0:
+    resolution: {integrity: sha512-g9ljZiwki/LfxmQADO3dEY1CbpmXT5Hm2fJ+QaGKwSXUylMybePR7/67YW7jOrrvjEgL1Fmz5kzyAjWVWLlucg==}
+    engines: {node: '>=6'}
+
   tinyglobby@0.2.15:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
     engines: {node: '>=12.0.0'}
@@ -1272,7 +1625,7 @@ snapshots:
       '@aurelia/kernel': 2.0.0-rc.0
       '@aurelia/metadata': 2.0.0-rc.0
 
-  '@aurelia/vite-plugin@2.0.0-rc.0(@types/node@24.10.13)':
+  '@aurelia/vite-plugin@2.0.0-rc.0(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)':
     dependencies:
       '@aurelia/kernel': 2.0.0-rc.0
       '@aurelia/metadata': 2.0.0-rc.0
@@ -1281,7 +1634,7 @@ snapshots:
       '@aurelia/runtime': 2.0.0-rc.0
       '@rollup/pluginutils': 5.0.2
       loader-utils: 2.0.4
-      vite: 7.3.1(@types/node@24.10.13)
+      vite: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -1729,9 +2082,555 @@ snapshots:
 
   '@sindresorhus/is@4.6.0': {}
 
+  '@syncfusion/ej2-barcode-generator@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+
+  '@syncfusion/ej2-base@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-icons': 32.2.3
+
+  '@syncfusion/ej2-blockeditor@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-buttons@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+
+  '@syncfusion/ej2-calendars@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-charts@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-excel-export': 32.2.3
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-circulargauge@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-compression@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-file-utils': 32.2.3
+
+  '@syncfusion/ej2-data@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+
+  '@syncfusion/ej2-diagrams@32.2.4':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-documenteditor@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-office-chart': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-ribbon': 32.2.3
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-drawings@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+
+  '@syncfusion/ej2-dropdowns@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-excel-export@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+
+  '@syncfusion/ej2-file-utils@32.2.3': {}
+
+  '@syncfusion/ej2-filemanager@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-layouts': 32.2.3
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-gantt@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-layouts': 32.2.3
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-richtexteditor': 32.2.5
+      '@syncfusion/ej2-svg-base': 32.2.3
+      '@syncfusion/ej2-treegrid': 32.2.4
+
+  '@syncfusion/ej2-grid-chart@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-charts': 32.2.5
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-grids@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-excel-export': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-heatmap@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-icons@32.2.3': {}
+
+  '@syncfusion/ej2-image-editor@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-inplace-editor@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-richtexteditor': 32.2.5
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-inputs@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-interactive-chat@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-kanban@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-layouts': 32.2.3
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-layouts@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+
+  '@syncfusion/ej2-lineargauge@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-lists@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-maps@32.2.4':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-markdown-converter@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+
+  '@syncfusion/ej2-multicolumn-combobox@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-grids': 32.2.6
+
+  '@syncfusion/ej2-navigations@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-notifications@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-office-chart@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-charts': 32.2.5
+
+  '@syncfusion/ej2-pdf-data-extract@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-pdf': 32.2.5
+
+  '@syncfusion/ej2-pdf-export@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-compression': 32.2.3
+
+  '@syncfusion/ej2-pdf@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+
+  '@syncfusion/ej2-pdfviewer@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-drawings': 32.2.5
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inplace-editor': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-pdf': 32.2.5
+      '@syncfusion/ej2-pdf-data-extract': 32.2.5
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-pivotview@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-charts': 32.2.5
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-excel-export': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-popups@32.2.6':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+
+  '@syncfusion/ej2-progressbar@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2-querybuilder@32.2.4':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-ribbon@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-richtexteditor@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-filemanager': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-interactive-chat': 32.2.5
+      '@syncfusion/ej2-markdown-converter': 32.2.5
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+
+  '@syncfusion/ej2-schedule@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-excel-export': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-splitbuttons@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-spreadsheet@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-charts': 32.2.5
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-navigations': 32.2.6
+
+  '@syncfusion/ej2-svg-base@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+
+  '@syncfusion/ej2-treegrid@32.2.4':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+
+  '@syncfusion/ej2-treemap@32.2.3':
+    dependencies:
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-svg-base': 32.2.3
+
+  '@syncfusion/ej2@32.2.5':
+    dependencies:
+      '@syncfusion/ej2-barcode-generator': 32.2.3
+      '@syncfusion/ej2-base': 32.2.6
+      '@syncfusion/ej2-blockeditor': 32.2.5
+      '@syncfusion/ej2-buttons': 32.2.3
+      '@syncfusion/ej2-calendars': 32.2.6
+      '@syncfusion/ej2-charts': 32.2.5
+      '@syncfusion/ej2-circulargauge': 32.2.3
+      '@syncfusion/ej2-compression': 32.2.3
+      '@syncfusion/ej2-data': 32.2.3
+      '@syncfusion/ej2-diagrams': 32.2.4
+      '@syncfusion/ej2-documenteditor': 32.2.5
+      '@syncfusion/ej2-drawings': 32.2.5
+      '@syncfusion/ej2-dropdowns': 32.2.6
+      '@syncfusion/ej2-excel-export': 32.2.3
+      '@syncfusion/ej2-file-utils': 32.2.3
+      '@syncfusion/ej2-filemanager': 32.2.3
+      '@syncfusion/ej2-gantt': 32.2.5
+      '@syncfusion/ej2-grid-chart': 32.2.3
+      '@syncfusion/ej2-grids': 32.2.6
+      '@syncfusion/ej2-heatmap': 32.2.3
+      '@syncfusion/ej2-icons': 32.2.3
+      '@syncfusion/ej2-image-editor': 32.2.3
+      '@syncfusion/ej2-inplace-editor': 32.2.3
+      '@syncfusion/ej2-inputs': 32.2.5
+      '@syncfusion/ej2-interactive-chat': 32.2.5
+      '@syncfusion/ej2-kanban': 32.2.5
+      '@syncfusion/ej2-layouts': 32.2.3
+      '@syncfusion/ej2-lineargauge': 32.2.3
+      '@syncfusion/ej2-lists': 32.2.6
+      '@syncfusion/ej2-maps': 32.2.4
+      '@syncfusion/ej2-markdown-converter': 32.2.5
+      '@syncfusion/ej2-multicolumn-combobox': 32.2.3
+      '@syncfusion/ej2-navigations': 32.2.6
+      '@syncfusion/ej2-notifications': 32.2.3
+      '@syncfusion/ej2-office-chart': 32.2.3
+      '@syncfusion/ej2-pdf': 32.2.5
+      '@syncfusion/ej2-pdf-data-extract': 32.2.5
+      '@syncfusion/ej2-pdf-export': 32.2.3
+      '@syncfusion/ej2-pdfviewer': 32.2.5
+      '@syncfusion/ej2-pivotview': 32.2.6
+      '@syncfusion/ej2-popups': 32.2.6
+      '@syncfusion/ej2-progressbar': 32.2.3
+      '@syncfusion/ej2-querybuilder': 32.2.4
+      '@syncfusion/ej2-ribbon': 32.2.3
+      '@syncfusion/ej2-richtexteditor': 32.2.5
+      '@syncfusion/ej2-schedule': 32.2.3
+      '@syncfusion/ej2-splitbuttons': 32.2.3
+      '@syncfusion/ej2-spreadsheet': 32.2.5
+      '@syncfusion/ej2-svg-base': 32.2.3
+      '@syncfusion/ej2-treegrid': 32.2.4
+      '@syncfusion/ej2-treemap': 32.2.3
+
   '@szmarczak/http-timer@4.0.6':
     dependencies:
       defer-to-connect: 2.0.1
+
+  '@tailwindcss/node@4.2.0':
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      enhanced-resolve: 5.19.0
+      jiti: 2.6.1
+      lightningcss: 1.31.1
+      magic-string: 0.30.21
+      source-map-js: 1.2.1
+      tailwindcss: 4.2.0
+
+  '@tailwindcss/oxide-android-arm64@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-darwin-arm64@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-darwin-x64@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-freebsd-x64@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-linux-arm-gnueabihf@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-linux-arm64-gnu@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-linux-arm64-musl@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-linux-x64-gnu@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-linux-x64-musl@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-wasm32-wasi@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-win32-arm64-msvc@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide-win32-x64-msvc@4.2.0':
+    optional: true
+
+  '@tailwindcss/oxide@4.2.0':
+    optionalDependencies:
+      '@tailwindcss/oxide-android-arm64': 4.2.0
+      '@tailwindcss/oxide-darwin-arm64': 4.2.0
+      '@tailwindcss/oxide-darwin-x64': 4.2.0
+      '@tailwindcss/oxide-freebsd-x64': 4.2.0
+      '@tailwindcss/oxide-linux-arm-gnueabihf': 4.2.0
+      '@tailwindcss/oxide-linux-arm64-gnu': 4.2.0
+      '@tailwindcss/oxide-linux-arm64-musl': 4.2.0
+      '@tailwindcss/oxide-linux-x64-gnu': 4.2.0
+      '@tailwindcss/oxide-linux-x64-musl': 4.2.0
+      '@tailwindcss/oxide-wasm32-wasi': 4.2.0
+      '@tailwindcss/oxide-win32-arm64-msvc': 4.2.0
+      '@tailwindcss/oxide-win32-x64-msvc': 4.2.0
+
+  '@tailwindcss/vite@4.2.0(vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1))':
+    dependencies:
+      '@tailwindcss/node': 4.2.0
+      '@tailwindcss/oxide': 4.2.0
+      tailwindcss: 4.2.0
+      vite: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)
 
   '@types/cacheable-request@6.0.3':
     dependencies:
@@ -1842,12 +2741,14 @@ snapshots:
       object-keys: 1.1.1
     optional: true
 
+  detect-libc@2.1.2: {}
+
   detect-node@2.1.0:
     optional: true
 
   electron-to-chromium@1.5.302: {}
 
-  electron-vite@5.0.0(vite@7.3.1(@types/node@24.10.13)):
+  electron-vite@5.0.0(vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)):
     dependencies:
       '@babel/core': 7.29.0
       '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.29.0)
@@ -1855,7 +2756,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.21
       picocolors: 1.1.1
-      vite: 7.3.1(@types/node@24.10.13)
+      vite: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -1872,6 +2773,11 @@ snapshots:
   end-of-stream@1.4.5:
     dependencies:
       once: 1.4.0
+
+  enhanced-resolve@5.19.0:
+    dependencies:
+      graceful-fs: 4.2.11
+      tapable: 2.3.0
 
   entities@6.0.1: {}
 
@@ -2031,6 +2937,8 @@ snapshots:
       quick-lru: 5.1.1
       resolve-alpn: 1.2.1
 
+  jiti@2.6.1: {}
+
   js-tokens@4.0.0: {}
 
   jsesc@3.1.0: {}
@@ -2049,6 +2957,55 @@ snapshots:
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
+
+  lightningcss-android-arm64@1.31.1:
+    optional: true
+
+  lightningcss-darwin-arm64@1.31.1:
+    optional: true
+
+  lightningcss-darwin-x64@1.31.1:
+    optional: true
+
+  lightningcss-freebsd-x64@1.31.1:
+    optional: true
+
+  lightningcss-linux-arm-gnueabihf@1.31.1:
+    optional: true
+
+  lightningcss-linux-arm64-gnu@1.31.1:
+    optional: true
+
+  lightningcss-linux-arm64-musl@1.31.1:
+    optional: true
+
+  lightningcss-linux-x64-gnu@1.31.1:
+    optional: true
+
+  lightningcss-linux-x64-musl@1.31.1:
+    optional: true
+
+  lightningcss-win32-arm64-msvc@1.31.1:
+    optional: true
+
+  lightningcss-win32-x64-msvc@1.31.1:
+    optional: true
+
+  lightningcss@1.31.1:
+    dependencies:
+      detect-libc: 2.1.2
+    optionalDependencies:
+      lightningcss-android-arm64: 1.31.1
+      lightningcss-darwin-arm64: 1.31.1
+      lightningcss-darwin-x64: 1.31.1
+      lightningcss-freebsd-x64: 1.31.1
+      lightningcss-linux-arm-gnueabihf: 1.31.1
+      lightningcss-linux-arm64-gnu: 1.31.1
+      lightningcss-linux-arm64-musl: 1.31.1
+      lightningcss-linux-x64-gnu: 1.31.1
+      lightningcss-linux-x64-musl: 1.31.1
+      lightningcss-win32-arm64-msvc: 1.31.1
+      lightningcss-win32-x64-msvc: 1.31.1
 
   loader-utils@2.0.4:
     dependencies:
@@ -2227,6 +3184,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  tailwindcss@4.2.0: {}
+
+  tapable@2.3.0: {}
+
   tinyglobby@0.2.15:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.3)
@@ -2253,7 +3214,7 @@ snapshots:
       node-addon-api: 8.5.0
       node-gyp-build: 4.8.4
 
-  vite@7.3.1(@types/node@24.10.13):
+  vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.31.1):
     dependencies:
       esbuild: 0.27.3
       fdir: 6.5.0(picomatch@4.0.3)
@@ -2264,6 +3225,8 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.10.13
       fsevents: 2.3.3
+      jiti: 2.6.1
+      lightningcss: 1.31.1
 
   wrappy@1.0.2: {}
 
