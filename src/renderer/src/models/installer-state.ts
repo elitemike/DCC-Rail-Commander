@@ -1,5 +1,6 @@
 import { DI } from 'aurelia'
 import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { SavedConfiguration } from './saved-configuration'
 
 export const IInstallerState = DI.createInterface<InstallerState>('IInstallerState')
 
@@ -23,8 +24,11 @@ export class InstallerState {
     /** Selected version tag (e.g. 'v5.2.80-Prod') */
     selectedVersion: string | null = null
 
-    /** Path to the cloned repo on disk */
+    /** Path to the cloned repo on disk (git source) */
     repoPath: string | null = null
+
+    /** Path to the per-device scratch/build directory */
+    scratchPath: string | null = null
 
     /** Whether to use existing config files from disk */
     useExistingConfig = false
@@ -41,16 +45,25 @@ export class InstallerState {
     /** All detected boards from the last scan */
     detectedBoards: ArduinoCliBoardInfo[] = []
 
+    /** Persisted device configurations shown on the home screen */
+    savedConfigurations: SavedConfiguration[] = []
+
+    /** ID of the configuration currently loaded in the workspace */
+    activeConfigId: string | null = null
+
     reset(): void {
         this.cliReady = false
         this.selectedDevice = null
         this.selectedProduct = null
         this.selectedVersion = null
         this.repoPath = null
+        this.scratchPath = null
         this.useExistingConfig = false
         this.advancedConfig = false
         this.configFiles = []
         this.lastError = null
         this.detectedBoards = []
+        this.activeConfigId = null
+        // NOTE: savedConfigurations is intentionally NOT reset — it persists across wizard runs
     }
 }

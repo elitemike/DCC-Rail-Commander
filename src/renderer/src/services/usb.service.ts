@@ -18,13 +18,13 @@ export class UsbService {
     private initialized = false
 
     async initialize(): Promise<void> {
-        if (this.initialized || !window.usb) return
+        if (this.initialized) return
         this.initialized = true
 
-        // Initial device scan
         await this.refresh()
 
-        // Subscribe to hot-plug events pushed from the main process
+        if (!window.usb) return
+
         this.unsubscribers.push(
             window.usb.onAttached(({ vendorId, productId }) => {
                 this.log.push(`[USB attached] VID:${vendorId.toString(16)} PID:${productId.toString(16)}`)

@@ -8,6 +8,7 @@ export interface CommandStationConfigOptions {
     display: string
     enableWifi: boolean
     wifiMode: string // 'ap' | 'sta'
+    wifiHostname: string
     wifiSsid: string
     wifiPassword: string
     wifiChannel: number
@@ -28,6 +29,11 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
         '',
     ]
 
+    // Always-required defaults (matches Python default_config_options)
+    lines.push('#define IP_PORT 2560')
+    lines.push('#define SCROLLMODE 1')
+    lines.push('')
+
     // Motor driver
     lines.push(`#define MOTOR_SHIELD_TYPE ${opts.motorDriver}`)
 
@@ -37,6 +43,8 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
             lines.push('#define OLED_DRIVER 128,32')
         } else if (opts.display === 'OLED_128x64') {
             lines.push('#define OLED_DRIVER 128,64')
+        } else if (opts.display === 'OLED_132x64') {
+            lines.push('#define OLED_DRIVER 132,64')
         } else if (opts.display === 'LCD_16x2') {
             lines.push('#define LCD_DRIVER 0x27,16,2')
         } else if (opts.display === 'LCD_20x4') {
@@ -46,7 +54,7 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
 
     // WiFi
     if (opts.enableWifi) {
-        lines.push('#define ENABLE_WIFI true')
+        lines.push(`#define WIFI_HOSTNAME "${opts.wifiHostname || 'dccex'}"`)
         if (opts.wifiMode === 'ap') {
             lines.push('#define WIFI_SSID "Your network name"')
             if (opts.wifiPassword) {
@@ -63,6 +71,7 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
                 lines.push(`#define WIFI_PASSWORD "${opts.wifiPassword}"`)
             }
         }
+        lines.push('#define ENABLE_WIFI true')
         lines.push(`#define WIFI_CHANNEL ${opts.wifiChannel}`)
     }
 

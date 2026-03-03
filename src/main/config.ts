@@ -35,6 +35,8 @@ export interface AppConfig {
         height: number
         minWidth: number
         minHeight: number
+        resizable: boolean
+        maximizable: boolean
     }
 }
 
@@ -48,9 +50,11 @@ export const config: AppConfig = {
     disableDBus: bool(process.env['DISABLE_DBUS'], process.platform === 'linux'),
     disableMediaSession: bool(process.env['DISABLE_MEDIA_SESSION'], process.platform === 'linux'),
     window: {
-        width: 1200,
-        height: 800,
+        width: 1920,
+        height: 1080,
         minWidth: 900,
         minHeight: 600,
+        resizable: true,
+        maximizable: true,
     },
 }

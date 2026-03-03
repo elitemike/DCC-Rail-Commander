@@ -2,11 +2,7 @@ import { DI } from 'aurelia'
 
 export const IGitService = DI.createInterface<GitService>('IGitService')
 
-/**
- * GitService
- *
- * Wraps window.git (contextBridge API) for the renderer.
- */
+/** Wraps window.git (contextBridge API) for the renderer. */
 export class GitService {
     async clone(url: string, dest: string, branch?: string): Promise<{ success: boolean; error?: string }> {
         return window.git.clone(url, dest, branch)

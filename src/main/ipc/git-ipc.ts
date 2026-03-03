@@ -2,8 +2,8 @@ import { ipcMain } from 'electron'
 import type { GitService } from '../git-client'
 
 export function registerGitIpcHandlers(gitService: GitService): void {
-    ipcMain.handle('git:clone', async (_event, url: string, dest: string, branch?: string) => {
-        return gitService.clone(url, dest, branch)
+    ipcMain.handle('git:clone', async (_event, url: string, dest: string, _branch?: string) => {
+        return gitService.clone(url, dest, _branch)
     })
 
     ipcMain.handle('git:pull', async (_event, repoPath: string) => {

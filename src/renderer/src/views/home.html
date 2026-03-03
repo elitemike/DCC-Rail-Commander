@@ -1,0 +1,108 @@
+<template>
+    <div
+        class="min-h-screen bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 flex flex-col items-center justify-center p-8">
+
+        <!-- Logo / title -->
+        <div class="text-center mb-12">
+            <div class="flex items-center justify-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">EX-Installer</h1>
+            </div>
+            <p class="text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
+        </div>
+
+        <!-- ── No saved configs: onboarding ── -->
+        <div if.bind="state.savedConfigurations.length === 0" class="flex flex-col sm:flex-row gap-5">
+
+            <button click.trigger="openNewDevice()"
+                class="group bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-400/60 rounded-2xl p-8 w-60 flex flex-col items-center gap-4 transition-all cursor-pointer text-left">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-blue-600/30 group-hover:bg-blue-500/40 flex items-center justify-center transition-colors">
+                    <svg class="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-white font-semibold text-base">New Device</p>
+                    <p class="text-blue-300/70 text-sm mt-1 leading-relaxed">Connect and configure a new
+                        Arduino-compatible board</p>
+                </div>
+            </button>
+
+            <button click.trigger="loadFromFolder()"
+                class="group bg-white/5 hover:bg-white/10 border border-white/10 hover:border-green-400/60 rounded-2xl p-8 w-60 flex flex-col items-center gap-4 transition-all cursor-pointer text-left">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-green-600/30 group-hover:bg-green-500/40 flex items-center justify-center transition-colors">
+                    <svg class="w-7 h-7 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-white font-semibold text-base">Load from Folder</p>
+                    <p class="text-green-300/70 text-sm mt-1 leading-relaxed">Open an existing configuration directory
+                    </p>
+                </div>
+            </button>
+        </div>
+
+        <!-- ── With saved configs: recent items ── -->
+        <div if.bind="state.savedConfigurations.length > 0" class="w-full max-w-3xl">
+
+            <!-- Toolbar -->
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-white text-lg font-semibold">Recent Devices</h2>
+                <div class="flex gap-3">
+                    <button click.trigger="loadFromFolder()"
+                        class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-sm transition-colors">
+                        Load from Folder
+                    </button>
+                    <button click.trigger="openNewDevice()"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-sm font-semibold transition-colors">
+                        + New Device
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grid of saved configs -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div repeat.for="config of state.savedConfigurations" click.trigger="loadConfig(config)"
+                    class="group relative text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-400/40 rounded-xl p-5 transition-all cursor-pointer">
+
+                    <!-- Delete button -->
+                    <button click.trigger="deleteConfig(config, $event)"
+                        class="absolute top-3 right-3 w-6 h-6 rounded text-gray-600 hover:text-red-400 hover:bg-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+
+                    <div class="flex items-start gap-3 pr-6">
+                        <div class="w-9 h-9 rounded-lg bg-blue-600/30 flex items-center justify-center shrink-0">
+                            <svg class="w-4.5 h-4.5 text-blue-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4M9 3l6 6M9 3v6h6" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-white font-medium text-sm truncate">${config.name}</p>
+                            <p class="text-blue-300 text-xs mt-0.5">${config.deviceName} · ${config.productName}</p>
+                            <p class="text-gray-500 text-xs mt-1">${config.version} &middot; ${config.devicePort}</p>
+                            <p class="text-gray-600 text-xs mt-0.5">${formatDate(config.lastModified)}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dialog is opened programmatically via IDialogService — no inline embed needed -->
+
+    </div>
+</template>

@@ -1,3 +1,27 @@
 @import "tailwindcss";
 @import "@syncfusion/ej2-base/styles/tailwind.css";
 @import "@syncfusion/ej2-buttons/styles/tailwind.css";
+@import "@syncfusion/ej2-navigations/styles/tailwind.css";
+@import "@syncfusion/ej2-navigations/styles/stepper/tailwind.css";
+
+
+/* ── @aurelia/dialog native <dialog> reset ─────────────────────────────── */
+/* Strip browser chrome but preserve margin:auto so showModal() centers it */
+dialog {
+    border: none;
+    padding: 0;
+    margin: auto;
+    background: transparent;
+    color: inherit;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    outline: none;
+}
+
+/* Backdrop: dark blur overlay behind the native dialog */
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}

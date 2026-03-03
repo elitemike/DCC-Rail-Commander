@@ -9,11 +9,7 @@ import type {
 
 export const IArduinoCliService = DI.createInterface<ArduinoCliService>('IArduinoCliService')
 
-/**
- * ArduinoCliService
- *
- * Wraps window.arduinoCli (contextBridge API) for the renderer.
- */
+/** Wraps window.arduinoCli (contextBridge API) for the renderer. */
 export class ArduinoCliService {
     progressLog: Array<{ phase: string; message: string }> = []
     private readonly unsubscribers: Array<() => void> = []
@@ -74,6 +70,42 @@ export class ArduinoCliService {
 
     async updateIndex(): Promise<{ success: boolean; error?: string }> {
         return window.arduinoCli.updateIndex()
+    }
+
+    async getBundledVersion(): Promise<string> {
+        return window.arduinoCli.getBundledVersion()
+    }
+
+    async browseBinary(): Promise<string | null> {
+        return window.arduinoCli.browseBinary()
+    }
+
+    async browsePlatformArchive(): Promise<string | null> {
+        return window.arduinoCli.browsePlatformArchive()
+    }
+
+    async validateBinary(binaryPath: string): Promise<{ success: boolean; version?: string; error?: string }> {
+        return window.arduinoCli.validateBinary(binaryPath)
+    }
+
+    async setCustomPath(binaryPath: string): Promise<{ success: boolean }> {
+        return window.arduinoCli.setCustomPath(binaryPath)
+    }
+
+    async installFromArchive(archivePath: string): Promise<{ success: boolean; error?: string }> {
+        return window.arduinoCli.installFromArchive(archivePath)
+    }
+
+    async checkPlatform(platformId: string): Promise<{ installed: boolean; version: string | null }> {
+        return window.arduinoCli.checkPlatform(platformId)
+    }
+
+    async installPlatformFromArchive(
+        archivePath: string,
+        platformId: string,
+        version: string,
+    ): Promise<{ success: boolean; error?: string }> {
+        return window.arduinoCli.installPlatformFromArchive(archivePath, platformId, version)
     }
 
     dispose(): void {

@@ -9,6 +9,16 @@ import { GitService } from './git-client'
 import { FileService } from './file-manager'
 import { PreferencesService } from './preferences'
 
+// ── Mock mode flag ──────────────────────────────────────────────────────────
+/**
+ * Runtime mock mode flag.
+ *
+ * Works for both `electron-vite dev -- --mock` and packaged executables
+ * launched with `./EX-Installer --mock`.
+ */
+export const IS_DEV_MOCK =
+    app.commandLine.hasSwitch('mock') || process.argv.includes('--mock')
+
 if (config.disableHardwareAcceleration) app.disableHardwareAcceleration()
 
 if (config.disableDBus && process.platform === 'linux') {
@@ -39,6 +49,8 @@ function createWindow(): BrowserWindow {
         height: config.window.height,
         minWidth: config.window.minWidth,
         minHeight: config.window.minHeight,
+        resizable: config.window.resizable,
+        maximizable: config.window.maximizable,
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
@@ -52,17 +64,23 @@ function createWindow(): BrowserWindow {
     win.on('ready-to-show', () => {
         win.show()
         if (process.env['ELECTRON_RENDERER_URL']) {
-            win.webContents.openDevTools()
+            //win.webContents.openDevTools()
         }
     })
 
     // F5 or Ctrl+R / Cmd+R → reload the renderer
+    // F12 or Ctrl+Shift+I / Cmd+Option+I → toggle DevTools
     win.webContents.on('before-input-event', (_event, input) => {
+        if (input.type !== 'keyDown') return
         const reload =
-            input.type === 'keyDown' &&
-            (input.key === 'F5' ||
-                ((input.control || input.meta) && input.key === 'r'))
-        if (reload) win.webContents.reload()
+            input.key === 'F5' ||
+            ((input.control || input.meta) && input.key === 'r')
+        if (reload) { win.webContents.reload(); return }
+
+        const devtools =
+            input.key === 'F12' ||
+            ((input.control || input.meta) && input.shift && input.key === 'I')
+        if (devtools) win.webContents.toggleDevTools()
     })
 
     // Open external links in the OS browser, not in Electron

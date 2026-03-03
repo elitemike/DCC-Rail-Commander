@@ -18,11 +18,19 @@ export class GitService {
 
     async clone(url: string, dest: string, branch?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const options = branch ? ['--branch', branch] : []
-            await this.getGit().clone(url, dest, options)
-            return { success: true }
+            // Always do a full, recursive clone (no --depth, include submodules)
+            const options = [];
+            if (branch) {
+                options.push('--branch', branch);
+            }
+            options.push('--recurse-submodules');
+            await this.getGit().clone(url, dest, options);
+            // Also update/init submodules just in case
+            const git = this.getGit(dest);
+            await git.submoduleUpdate(['--init', '--recursive']);
+            return { success: true };
         } catch (err) {
-            return { success: false, error: (err as Error).message }
+            return { success: false, error: (err as Error).message };
         }
     }
 

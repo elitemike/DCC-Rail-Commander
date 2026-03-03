@@ -1,5 +1,6 @@
 import Aurelia, { Registration } from 'aurelia'
 import { RouterConfiguration } from '@aurelia/router'
+import { DialogConfigurationStandard } from '@aurelia/dialog'
 import { App } from './app'
 import '../../types/ipc' // Window.python / Window.usb type augmentation
 import { registerLicense } from '@syncfusion/ej2/base'
@@ -22,6 +23,9 @@ registerLicense(syncfusionLicense)
 new Aurelia()
     .register(
         RouterConfiguration.customize({ useUrlFragmentHash: true }),
+        DialogConfigurationStandard.customize((settings) => {
+            settings.options.modal = true
+        }),
         // Register services as singletons
         Registration.singleton(ArduinoCliService, ArduinoCliService),
         Registration.singleton(GitService, GitService),
