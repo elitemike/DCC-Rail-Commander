@@ -65,8 +65,9 @@ export function deriveDefineGroups(roster: Roster[]): { groups: DefineGroup[]; u
 
 export type TurnoutProfile = 'Instant' | 'Fast' | 'Medium' | 'Slow' | 'Bounce';
 export type TurnoutType = 'SERVO' | 'DCC' | 'PIN';
+export type TurnoutDefaultState = 'NORMAL' | 'THROWN';
 
-interface TurnoutBase { id: number; description: string; comment?: string; }
+interface TurnoutBase { id: number; description: string; comment?: string; defaultState: TurnoutDefaultState; }
 
 /** SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile[, "desc"]) */
 export interface ServoTurnout extends TurnoutBase {
@@ -534,6 +535,7 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
             profile: VALID_TURNOUT_PROFILES.includes(profile) ? profile : 'Slow',
             description: m[6] || '',
             comment: m[7] ? m[7].trim() : '',
+            defaultState: 'NORMAL',
         });
     }
 
@@ -547,6 +549,7 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
             subAddr: parseInt(m[3], 10),
             description: m[4] || '',
             comment: m[5] ? m[5].trim() : '',
+            defaultState: 'NORMAL',
         });
     }
 
@@ -559,6 +562,7 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
             pin: parseInt(m[2], 10),
             description: m[3] || '',
             comment: m[4] ? m[4].trim() : '',
+            defaultState: 'NORMAL',
         });
     }
 
@@ -587,6 +591,27 @@ export function serializeTurnoutToFile(turnouts: Turnout[]): string {
         lines.push(line);
     }
     return lines.join('\n');
+}
+
+/**
+ * Extracts turnout IDs that are set to thrown at startup via AUTOSTART THROW(id)
+ * statements in myAutomation.h.
+ */
+export function parseDefaultThrownTurnoutIdsFromAutomation(fileContent: string): Set<number> {
+    const thrownIds = new Set<number>();
+    const autostartRe = /AUTOSTART\s*\n([\s\S]*?)\nDONE/g;
+    let blockMatch: RegExpExecArray | null;
+
+    while ((blockMatch = autostartRe.exec(fileContent)) !== null) {
+        const block = blockMatch[1] ?? '';
+        const throwRe = /THROW\s*\(\s*(\d+)\s*\)/g;
+        let throwMatch: RegExpExecArray | null;
+        while ((throwMatch = throwRe.exec(block)) !== null) {
+            thrownIds.add(parseInt(throwMatch[1], 10));
+        }
+    }
+
+    return thrownIds;
 }
 
 // ─── Combined automation file ────────────────────────────────────────────────
@@ -692,8 +717,8 @@ ROSTER(301, "Amtrak Charger #301", "Headlights/Bell/Horn/*Short Horn/Whoosh/Trai
 
 export function loadDemoTurnouts(): Turnout[] {
     return [
-        { type: 'SERVO', id: 200, pin: 101, activeAngle: 450, inactiveAngle: 110, profile: 'Slow', description: 'Example slow turnout', comment: '' },
-        { type: 'SERVO', id: 201, pin: 102, activeAngle: 400, inactiveAngle: 100, profile: 'Medium', description: 'Yard ladder switch 1', comment: 'Main yard' },
-        { type: 'SERVO', id: 202, pin: 103, activeAngle: 410, inactiveAngle: 90, profile: 'Fast', description: 'Main line crossover', comment: '' },
+        { type: 'SERVO', id: 200, pin: 101, activeAngle: 450, inactiveAngle: 110, profile: 'Slow', description: 'Example slow turnout', comment: '', defaultState: 'NORMAL' },
+        { type: 'SERVO', id: 201, pin: 102, activeAngle: 400, inactiveAngle: 100, profile: 'Medium', description: 'Yard ladder switch 1', comment: 'Main yard', defaultState: 'NORMAL' },
+        { type: 'SERVO', id: 202, pin: 103, activeAngle: 410, inactiveAngle: 90, profile: 'Fast', description: 'Main line crossover', comment: '', defaultState: 'NORMAL' },
     ];
 }

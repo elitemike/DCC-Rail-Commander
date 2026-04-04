@@ -146,3 +146,31 @@ describe('TurnoutEditorCustomElement._processRawLeave', () => {
         })
     })
 })
+
+describe('TurnoutEditorCustomElement default state', () => {
+    it('commits defaultState changes to turnout entries', () => {
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        const updateTurnoutEntry = vi.fn()
+        Object.assign(editor, {
+            state: { updateTurnoutEntry },
+            editBufferIndex: 0,
+            editBuffer: {
+                type: 'SERVO',
+                id: 200,
+                pin: 25,
+                activeAngle: 410,
+                inactiveAngle: 205,
+                profile: 'Slow',
+                description: 'Main Line Junction',
+                comment: '',
+                defaultState: 'NORMAL',
+            },
+        })
+
+        editor.updateDefaultState('THROWN')
+
+        expect(updateTurnoutEntry).toHaveBeenCalledOnce()
+        const [, updated] = updateTurnoutEntry.mock.calls[0]
+        expect(updated.defaultState).toBe('THROWN')
+    })
+})

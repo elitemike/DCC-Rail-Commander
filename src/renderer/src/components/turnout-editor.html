@@ -124,6 +124,19 @@
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
                                 </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                        State</label>
+                                    <select
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.defaultState"
+                                        change.trigger="updateDefaultState(editBuffer.defaultState)">
+                                        <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
+                                    </select>
+                                    <p class="text-[11px] text-gray-500">When set to THROWN, EX-Installer emits
+                                        THROW(${editBuffer.id}) in an AUTOSTART block in myAutomation.h.</p>
+                                </div>
                             </div>
                         </div>
 
@@ -171,6 +184,18 @@
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
                                 </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                        State</label>
+                                    <select
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.defaultState"
+                                        change.trigger="updateDefaultState(editBuffer.defaultState)">
+                                        <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
+                                    </select>
+                                    <p class="text-[11px] text-gray-500">When set to THROWN, EX-Installer emits
+                                        THROW(${editBuffer.id}) in an AUTOSTART block in myAutomation.h.</p>
+                                </div>
                             </div>
                         </div>
 
@@ -210,6 +235,18 @@
                                         value.bind="editBuffer.comment"
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                        State</label>
+                                    <select
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.defaultState"
+                                        change.trigger="updateDefaultState(editBuffer.defaultState)">
+                                        <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
+                                    </select>
+                                    <p class="text-[11px] text-gray-500">When set to THROWN, EX-Installer emits
+                                        THROW(${editBuffer.id}) in an AUTOSTART block in myAutomation.h.</p>
                                 </div>
                             </div>
                         </div>

@@ -29,6 +29,12 @@ async function switchToVisual(page: import('@playwright/test').Page) {
     await expect(page.locator('nav[aria-label="Turnouts"]')).toBeVisible()
 }
 
+async function openAutomationEditor(page: import('@playwright/test').Page) {
+    await page.getByText('Automation', { exact: true }).first().click()
+    await expect(page.locator('file-editor-panel div.monaco-editor')).toBeVisible()
+    await page.waitForTimeout(400)
+}
+
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
         const editorEl = document.querySelector('div.monaco-editor')
@@ -103,6 +109,34 @@ test.describe('Turnout Editor', () => {
         await switchToRaw(page)
         await expect(page.locator('div.monaco-editor')).toContainText('Goods Yard Switch')
         await expect(page.locator('div.monaco-editor')).toContainText('SERVO_TURNOUT(')
+    })
+
+    test('setting default state to THROWN generates AUTOSTART THROW in myAutomation.h', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const defaultStateSelect = page.locator('#turnout-splitter').getByRole('combobox').nth(1)
+        await defaultStateSelect.selectOption('THROWN')
+
+        await openAutomationEditor(page)
+
+        await expect(page.locator('file-editor-panel div.monaco-editor')).toContainText('AUTOSTART')
+        await expect(page.locator('file-editor-panel div.monaco-editor')).toContainText('THROW(200)')
+    })
+
+    test('setting default state back to NORMAL removes THROW from myAutomation.h', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const defaultStateSelect = page.locator('#turnout-splitter').getByRole('combobox').nth(1)
+        await defaultStateSelect.selectOption('THROWN')
+        await defaultStateSelect.selectOption('NORMAL')
+
+        await openAutomationEditor(page)
+
+        await expect(page.locator('file-editor-panel div.monaco-editor')).not.toContainText('THROW(200)')
     })
 
     test('removing entry via visual disappears from raw tab', async ({ workspacePage: page }) => {

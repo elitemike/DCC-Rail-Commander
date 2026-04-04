@@ -26,6 +26,7 @@ import {
     serializeSequencesToFile,
     parseAliasesFromFile,
     serializeAliasesToFile,
+    parseDefaultThrownTurnoutIdsFromAutomation,
 } from '../utils/myAutomationParser'
 
 /**
@@ -35,6 +36,7 @@ import {
  */
 export const MANAGED_INCLUDES_TAG = '// ==== EX-Installer Required Includes ===='
 export const MANAGED_TRACK_MANAGER_TAG = '// ==== EX-Installer TrackManager ===='
+export const MANAGED_TURNOUT_DEFAULTS_TAG = '// ==== EX-Installer Turnout Defaults ===='
 
 /**
  * Strips the managed-includes block (and any bare myRoster/myTurnouts includes
@@ -61,6 +63,16 @@ export function extractAutomationCustomContent(content: string): string {
         if (tmCloseIdx !== -1) {
             const afterClose = tmCloseIdx + MANAGED_TRACK_MANAGER_TAG.length
             text = text.slice(0, tmOpenIdx) + text.slice(afterClose)
+        }
+    }
+
+    // Remove the managed turnout-defaults block (open tag … close tag, inclusive)
+    const tdOpenIdx = text.indexOf(MANAGED_TURNOUT_DEFAULTS_TAG)
+    if (tdOpenIdx !== -1) {
+        const tdCloseIdx = text.indexOf(MANAGED_TURNOUT_DEFAULTS_TAG, tdOpenIdx + MANAGED_TURNOUT_DEFAULTS_TAG.length)
+        if (tdCloseIdx !== -1) {
+            const afterClose = tdCloseIdx + MANAGED_TURNOUT_DEFAULTS_TAG.length
+            text = text.slice(0, tdOpenIdx) + text.slice(afterClose)
         }
     }
 
@@ -239,6 +251,7 @@ export class ConfigEditorState {
     setTurnoutsFromRaw(text: string): void {
         try {
             this.turnouts = parseTurnoutFromFile(text)
+            this._syncGeneratedTurnoutDefaultsContent()
             this.hasChanges = true
         } catch {
             // keep existing turnouts if parse fails
@@ -248,18 +261,21 @@ export class ConfigEditorState {
 
     updateTurnoutEntry(index: number, entry: Turnout): void {
         this.turnouts = this.turnouts.map((t, i) => (i === index ? { ...entry } : t))
+        this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
     }
 
     addTurnoutEntry(entry: Turnout): void {
         this.turnouts = [...this.turnouts, entry]
+        this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
     }
 
     removeTurnoutEntry(index: number): void {
         this.turnouts = this.turnouts.filter((_, i) => i !== index)
+        this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
     }
@@ -365,6 +381,9 @@ export class ConfigEditorState {
     // ── Generated track manager AUTOSTART section ────────────────────────────
     generatedTrackManagerContent = ''
 
+    // ── Generated turnout defaults AUTOSTART section ─────────────────────────
+    generatedTurnoutDefaultsContent = ''
+
     /** Names of the four built-in managed files — never auto-included */
     private static readonly BUILTIN = new Set([
         'config.h',
@@ -429,6 +448,15 @@ export class ConfigEditorState {
             sections.push(MANAGED_TRACK_MANAGER_TAG)
         }
 
+        if (this.generatedTurnoutDefaultsContent.trim()) {
+            if (sections.length > 0) sections.push('')
+            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
+            sections.push('// This turnout-defaults block is managed by EX-Installer.')
+            sections.push('// Do not edit inside this block manually.')
+            sections.push(this.generatedTurnoutDefaultsContent.trim())
+            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
+        }
+
         if (this.preservedAutomationContent.trim()) {
             if (sections.length > 0) sections.push('')
             sections.push(this.preservedAutomationContent.trim())
@@ -463,6 +491,7 @@ export class ConfigEditorState {
     // ── Initialise from InstallerState.configFiles ────────────────────────────
     loadFromInstallerState(): void {
         const files = this.installerState.configFiles
+        let automationContent = ''
         for (const f of files) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
                 this.configHContent = f.content
@@ -471,11 +500,24 @@ export class ConfigEditorState {
             } else if (f.name === 'myTurnouts.h') {
                 this.turnouts = parseTurnoutFromFile(f.content)
             } else if (f.name === 'myAutomation.h') {
+                automationContent = f.content
                 // Strip managed includes block; preserve the user's custom code
                 // so it survives every subsequent auto-regeneration.
                 this.preservedAutomationContent = extractAutomationCustomContent(f.content)
             }
         }
+
+        if (automationContent) {
+            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(automationContent)
+            if (defaultThrownIds.size > 0) {
+                this.turnouts = this.turnouts.map(t => ({
+                    ...t,
+                    defaultState: defaultThrownIds.has(t.id) ? 'THROWN' : 'NORMAL',
+                }))
+            }
+        }
+
+        this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = false
         // Ensure myRoster.h + myTurnouts.h always appear in the file list
         // so their visual editors are reachable from the sidebar.
@@ -575,6 +617,25 @@ export class ConfigEditorState {
         this.generatedTrackManagerContent = normalized
         this.hasChanges = true
         this._ensureAutomationFile()
+    }
+
+    private _syncGeneratedTurnoutDefaultsContent(): void {
+        const thrownIds = Array.from(new Set(
+            this.turnouts
+                .filter(t => t.defaultState === 'THROWN')
+                .map(t => t.id),
+        )).sort((a, b) => a - b)
+
+        if (thrownIds.length === 0) {
+            this.generatedTurnoutDefaultsContent = ''
+            return
+        }
+
+        this.generatedTurnoutDefaultsContent = [
+            'AUTOSTART',
+            ...thrownIds.map(id => `  THROW(${id})`),
+            'DONE',
+        ].join('\n')
     }
 
     /**

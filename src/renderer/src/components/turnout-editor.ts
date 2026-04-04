@@ -2,7 +2,7 @@ import { queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../models/config-editor-state'
-import type { Turnout, ServoTurnout, TurnoutProfile } from '../utils/myAutomationParser'
+import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../utils/myAutomationParser'
 import { commentInvalidTurnoutLines } from '../utils/myAutomationParser'
 import { ToastService } from '../services/toast.service'
 
@@ -15,6 +15,7 @@ export class TurnoutEditorCustomElement {
     private splitterObj: Splitter | null = null
 
     readonly profiles: TurnoutProfile[] = ['Instant', 'Fast', 'Medium', 'Slow', 'Bounce']
+    readonly defaultStates: TurnoutDefaultState[] = ['NORMAL', 'THROWN']
 
     // ── View tabs ─────────────────────────────────────────────────────────────
     activeTab: ViewTab = 'visual'
@@ -167,6 +168,12 @@ export class TurnoutEditorCustomElement {
         this.commitBuffer()
     }
 
+    updateDefaultState(defaultState: TurnoutDefaultState): void {
+        if (!this.editBuffer) return
+        this.editBuffer.defaultState = defaultState
+        this.commitBuffer()
+    }
+
     // ── Add / remove entries ──────────────────────────────────────────────────
     addEntry(): void {
         if (this.editBuffer !== null) this.commitBuffer()
@@ -183,6 +190,7 @@ export class TurnoutEditorCustomElement {
             profile: 'Slow',
             description: 'New Turnout',
             comment: '',
+            defaultState: 'NORMAL',
         }
         this.state.addTurnoutEntry(newEntry)
         const idx = this.state.turnouts.length - 1

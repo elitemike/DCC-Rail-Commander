@@ -19,6 +19,7 @@ import {
     GENERATOR_HEADER_MARKER,
     parseRosterFromFile,
     parseTurnoutFromFile,
+    parseDefaultThrownTurnoutIdsFromAutomation,
     serializeRosterToFile,
     serializeTurnoutToFile,
 } from '../../src/renderer/src/utils/myAutomationParser'
@@ -26,6 +27,7 @@ import {
     extractAutomationCustomContent,
     MANAGED_INCLUDES_TAG,
     MANAGED_TRACK_MANAGER_TAG,
+    MANAGED_TURNOUT_DEFAULTS_TAG,
 } from '../../src/renderer/src/models/config-editor-state'
 
 // ── hasGeneratorHeader ────────────────────────────────────────────────────────
@@ -138,6 +140,19 @@ describe('header round-trip with roster data', () => {
         const turnouts = parseTurnoutFromFile(full)
         expect(turnouts).toHaveLength(1)
         expect(turnouts[0].id).toBe(200)
+        expect(turnouts[0].defaultState).toBe('NORMAL')
+    })
+
+    it('extracts default thrown turnout IDs from AUTOSTART THROW lines', () => {
+        const automation = [
+            'AUTOSTART',
+            '  THROW(200)',
+            '  THROW(204)',
+            'DONE',
+        ].join('\n')
+
+        const ids = parseDefaultThrownTurnoutIdsFromAutomation(automation)
+        expect(Array.from(ids).sort((a, b) => a - b)).toEqual([200, 204])
     })
 
     it('serializeRosterToFile output with header still parses cleanly', () => {
@@ -524,6 +539,22 @@ describe('extractAutomationCustomContent', () => {
         )
         const second = extractAutomationCustomContent(first)
         expect(first).toBe(second)
+    })
+
+    it('strips managed turnout-defaults AUTOSTART block while preserving custom code', () => {
+        const custom = 'SEQUENCE(100)\nDONE'
+        const input = [
+            MANAGED_TURNOUT_DEFAULTS_TAG,
+            '// This turnout-defaults block is managed by EX-Installer.',
+            'AUTOSTART',
+            '  THROW(200)',
+            'DONE',
+            MANAGED_TURNOUT_DEFAULTS_TAG,
+            '',
+            custom,
+        ].join('\n')
+
+        expect(extractAutomationCustomContent(input)).toBe(custom)
     })
 
     // ── Legacy AUTOSTART block stripping (migration) ──────────────────────────
