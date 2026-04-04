@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import type { ArduinoCliService } from '../arduino-cli'
-import { IS_DEV_MOCK } from '../index'
+import { IS_MOCK_DEVICE, IS_MOCK_COMPILE } from '../index'
 import { MOCK_SERIAL_PORTS } from '../dev-mock'
 
 /** VID:PID → board name + FQBN (used for mock board identification). */
@@ -53,7 +53,7 @@ export function registerArduinoCliIpcHandlers(arduinoCliService: ArduinoCliServi
     })
 
     ipcMain.handle('arduino-cli:list-boards', async () => {
-        if (IS_DEV_MOCK) {
+        if (IS_MOCK_DEVICE) {
             return MOCK_SERIAL_PORTS.map((sp) => {
                 const vid = sp.vendorId?.toLowerCase() ?? ''
                 const pid = sp.productId?.toLowerCase() ?? ''
@@ -71,11 +71,39 @@ export function registerArduinoCliIpcHandlers(arduinoCliService: ArduinoCliServi
     })
 
     ipcMain.handle('arduino-cli:compile', async (_event, sketchPath: string, fqbn: string) => {
-        return arduinoCliService.compile(sketchPath, fqbn)
+        console.debug('[ipc] compile request', { sketchPath, fqbn, IS_MOCK_COMPILE })
+        if (IS_MOCK_COMPILE) {
+            await new Promise(r => setTimeout(r, 800))
+            const mockResult = {
+                success: true,
+                output: [
+                    `Compiling for ${fqbn} (mock)...`,
+                    `Sketch uses 12345 bytes (4%) of program storage space. Maximum is 253952 bytes.`,
+                    `Global variables use 2300 bytes (28%) of dynamic memory, leaving 5892 bytes for local variables.`,
+                ].join('\n'),
+            }
+            console.debug('[ipc] compile mock result', mockResult)
+            return mockResult
+        }
+        const result = await arduinoCliService.compile(sketchPath, fqbn)
+        console.debug('[ipc] compile result', result)
+        return result
     })
 
     ipcMain.handle('arduino-cli:upload', async (_event, sketchPath: string, fqbn: string, port: string) => {
-        return arduinoCliService.upload(sketchPath, fqbn, port)
+        console.debug('[ipc] upload request', { sketchPath, fqbn, port, IS_MOCK_COMPILE })
+        if (IS_MOCK_COMPILE) {
+            await new Promise(r => setTimeout(r, 600))
+            const mockResult = {
+                success: true,
+                output: `Uploading to ${port} for ${fqbn} (mock)...\nFlash written successfully.`,
+            }
+            console.debug('[ipc] upload mock result', mockResult)
+            return mockResult
+        }
+        const result = await arduinoCliService.upload(sketchPath, fqbn, port)
+        console.debug('[ipc] upload result', result)
+        return result
     })
 
     ipcMain.handle('arduino-cli:init-config', async () => {

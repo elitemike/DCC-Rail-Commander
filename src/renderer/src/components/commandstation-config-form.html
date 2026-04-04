@@ -1,0 +1,206 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <!-- ── Inner tab bar: General | WiFi | TrackManager ─────────────────── -->
+        <div class="flex items-center shrink-0 border-b border-white/10 bg-gray-900/40 px-3">
+            <button click.trigger="setConfigTab('general')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
+                class.bind="activeConfigTab === 'general' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                General
+            </button>
+            <button click.trigger="setConfigTab('wifi')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
+                class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'"
+                disabled.bind="!opts.enableWifi">
+                WiFi
+                <span if.bind="!opts.enableWifi" class="ml-1 text-gray-700">(disabled)</span>
+            </button>
+            <button click.trigger="setConfigTab('trackmanager')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeConfigTab === 'trackmanager' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                TrackManager
+            </button>
+            <span if.bind="isCsb1"
+                class="ml-auto px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                EX-CSB1
+            </span>
+        </div>
+
+        <!-- ── Scrollable form body ──────────────────────────────────────────── -->
+        <div class="flex-1 overflow-y-auto p-4 min-h-0">
+
+            <!-- ── GENERAL tab ───────────────────────────────────────────────── -->
+            <div if.bind="activeConfigTab === 'general'" class="flex flex-col gap-4 max-w-2xl">
+
+                <!-- Motor driver -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Motor Driver</label>
+                    <select value.bind="opts.motorDriver" change.trigger="onFieldChange()"
+                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                        <option repeat.for="d of motorDrivers" value.bind="d">${d}</option>
+                    </select>
+                </div>
+
+                <!-- Display -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Display</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label repeat.for="d of displays"
+                            class="flex items-center gap-2.5 px-3 py-2 rounded bg-gray-900/50 border border-white/5 cursor-pointer hover:border-white/15 transition-colors">
+                            <input type="radio" name="display" value.bind="d.value" checked.bind="opts.display"
+                                change.trigger="onFieldChange()" class="accent-blue-500" />
+                            <span class="text-sm text-gray-200">${d.label}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Options toggles -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Options</span>
+
+                    <!-- WiFi -->
+                    <label class="flex items-center justify-between gap-4 cursor-pointer"
+                        class.bind="isEsp32 ? 'opacity-60 cursor-not-allowed' : ''">
+                        <div>
+                            <span class="text-sm text-gray-200">Enable WiFi</span>
+                            <span if.bind="isEsp32" class="ml-2 text-xs text-blue-400">(required for ESP32)</span>
+                        </div>
+                        <input type="checkbox" checked.bind="opts.enableWifi" change.trigger="onWifiToggle()"
+                            disabled.bind="isEsp32" class="w-4 h-4 accent-blue-500" />
+                    </label>
+
+                    <!-- Ethernet (only shown when not ESP32) -->
+                    <label if.bind="!isEsp32" class="flex items-center justify-between gap-4 cursor-pointer">
+                        <span class="text-sm text-gray-200">Enable Ethernet</span>
+                        <input type="checkbox" checked.bind="opts.enableEthernet" change.trigger="onEthernetToggle()"
+                            class="w-4 h-4 accent-blue-500" />
+                    </label>
+
+                    <!-- Power on start -->
+                    <label class="flex items-center justify-between gap-4 cursor-pointer">
+                        <span class="text-sm text-gray-200">Start with power on</span>
+                        <input type="checkbox" checked.bind="opts.enablePowerOnStart" change.trigger="onFieldChange()"
+                            class="w-4 h-4 accent-blue-500" />
+                    </label>
+
+                    <!-- Disable EEPROM -->
+                    <label class="flex items-center justify-between gap-4 cursor-pointer"
+                        class.bind="isEsp32 ? 'opacity-60 cursor-not-allowed' : ''">
+                        <div>
+                            <span class="text-sm text-gray-200">Disable EEPROM support</span>
+                            <span if.bind="isEsp32" class="ml-2 text-xs text-blue-400">(N/A on ESP32)</span>
+                        </div>
+                        <input type="checkbox" checked.bind="opts.disableEeprom" change.trigger="onFieldChange()"
+                            disabled.bind="isEsp32" class="w-4 h-4 accent-blue-500" />
+                    </label>
+
+                    <!-- Disable PROG -->
+                    <label class="flex items-center justify-between gap-4 cursor-pointer">
+                        <span class="text-sm text-gray-200">Disable programming track support</span>
+                        <input type="checkbox" checked.bind="opts.disableProg" change.trigger="onFieldChange()"
+                            class="w-4 h-4 accent-blue-500" />
+                    </label>
+                </div>
+            </div>
+
+            <!-- ── WIFI tab ───────────────────────────────────────────────────── -->
+            <div if.bind="activeConfigTab === 'wifi'" class="flex flex-col gap-4 max-w-2xl">
+
+                <div if.bind="!opts.enableWifi"
+                    class="px-4 py-3 bg-yellow-950/40 border border-yellow-500/30 rounded-lg text-yellow-300 text-sm">
+                    WiFi is disabled. Enable it on the General tab first.
+                </div>
+
+                <div if.bind="opts.enableWifi" class="flex flex-col gap-4">
+                    <!-- Mode -->
+                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mode</span>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="wifiMode" value="ap" checked.bind="opts.wifiMode"
+                                    change.trigger="onFieldChange()" class="accent-blue-500" />
+                                <span class="text-sm text-gray-200">Access Point (create network)</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="wifiMode" value="sta" checked.bind="opts.wifiMode"
+                                    change.trigger="onFieldChange()" class="accent-blue-500" />
+                                <span class="text-sm text-gray-200">Station (join existing network)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Credentials -->
+                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Credentials</span>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs text-gray-400">Hostname</label>
+                            <input type="text" value.bind="opts.wifiHostname" blur.trigger="onFieldChange()"
+                                placeholder="dccex"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+
+                        <div class="flex flex-col gap-1.5" if.bind="opts.wifiMode === 'sta'">
+                            <label class="text-xs text-gray-400">SSID (network name)</label>
+                            <input type="text" value.bind="opts.wifiSsid" blur.trigger="onFieldChange()"
+                                placeholder="Your network name"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs text-gray-400">Password</label>
+                            <input type="password" value.bind="opts.wifiPassword" blur.trigger="onFieldChange()"
+                                placeholder="Network password"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <label class="text-xs text-gray-400 w-20 shrink-0">Channel (1–11)</label>
+                            <input type="number" min="1" max="11" value.bind="opts.wifiChannel"
+                                change.trigger="onFieldChange()"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── TRACKMANAGER tab ───────────────────────────────────────────── -->
+            <div if.bind="activeConfigTab === 'trackmanager'" class="flex flex-col gap-4 max-w-2xl">
+
+                <!-- Track A -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track A</span>
+                    <div class="flex items-center gap-4">
+                        <select value.bind="opts.trackAMode" change.trigger="onFieldChange()"
+                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option repeat.for="m of trackModes" value.bind="m">${m}</option>
+                        </select>
+                        <div if.bind="trackAIsDc" class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <input type="number" min="1" value.bind="opts.trackALocoId" change.trigger="onFieldChange()"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track B -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track B</span>
+                    <div class="flex items-center gap-4">
+                        <select value.bind="opts.trackBMode" change.trigger="onFieldChange()"
+                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option repeat.for="m of trackModes" value.bind="m">${m}</option>
+                        </select>
+                        <div if.bind="trackBIsDc" class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <input type="number" min="1" value.bind="opts.trackBLocoId" change.trigger="onFieldChange()"
+                                class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div><!-- end scrollable body -->
+    </div>
+</template>

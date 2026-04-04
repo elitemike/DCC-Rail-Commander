@@ -35,17 +35,29 @@ A small amber **DEV MOCK** badge is shown in the wizard header and the workspace
 
 ## Controlling mock mode
 
-Mock mode is controlled via the `--mock` command-line flag in the main process (`src/main/index.ts`):
+Two independent flags control mocking. They are separate so developers can use
+device mocking without bypassing the real compiler:
 
-| Launch command | Mock mode |
+| Flag | Controls |
 |---|---|
-| `pnpm dev` | **OFF** |
-| `pnpm dev -- --mock` | **ON** |
-| `electron . --mock` | **ON** (explicit flag) |
-| `./EX-Installer --mock` (packaged executable) | **ON** (explicit flag) |
-| `pnpm build` (packaged) | **OFF** |
+| `--mock-device` | USB/device scanning (virtual boards, no real hardware needed) |
+| `--mock-compile` | arduino-cli compile & upload responses (fast fake responses) |
 
-Mock mode is enabled only when `--mock` is provided.
+| Launch command | Device mock | Compile mock |
+|---|---|---|
+| `pnpm dev` | **OFF** | **OFF** |
+| `pnpm dev:mock` | **ON** | **ON** |
+| `pnpm dev -- --mock-device` | **ON** | **OFF** |
+| `pnpm dev -- --mock-device --mock-compile` | **ON** | **ON** |
+| `pnpm build` (packaged) | **OFF** | **OFF** |
+
+Flags are independent — for example, `--mock-device` lets you use virtual boards
+while still running a real arduino-cli compile against the sketch.
+
+E2E tests (Playwright) pass both `--mock-device` and `--mock-compile` by default
+via the shared `launchApp(true)` helper in `tests/e2e/fixtures.ts`. Real-compiler
+e2e tests use `workspacePageNative` (which calls `launchApp(false)`) and are
+gated behind `COMPILE_E2E=1`.
 
 ---
 
@@ -91,10 +103,11 @@ Common VID:PID values (full list in `arduino-cli-ipc.ts`):
 ```
 src/
 ├── main/
-│   ├── index.ts              ← IS_DEV_MOCK flag detection (command-line args)
+│   ├── index.ts              ← IS_MOCK_DEVICE + IS_MOCK_COMPILE flag detection
 │   ├── dev-mock.ts           ← MOCK_SERIAL_PORTS, mock data
 │   └── ipc/
-│       ├── arduino-cli-ipc.ts  ← list-boards mocked; all other CLI calls are real
+│       ├── arduino-cli-ipc.ts  ← list-boards mocked by IS_MOCK_DEVICE;
+│       │                          compile/upload mocked by IS_MOCK_COMPILE
 │       ├── git-ipc.ts          ← all real (no mock guards)
-│       └── usb-ipc.ts          ← list + watch mocked
+│       └── usb-ipc.ts          ← list + watch mocked by IS_MOCK_DEVICE
 ```

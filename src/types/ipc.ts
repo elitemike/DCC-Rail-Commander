@@ -176,6 +176,16 @@ export interface PreferencesElectronApi {
 
 export interface ConfigElectronApi {
     getMock: () => Promise<boolean>
+    getSkipStartup: () => Promise<boolean>
+}
+
+// ── Window ───────────────────────────────────────────────────────────────────
+
+export interface WindowElectronApi {
+    /** Subscribe to a close-requested event pushed from the main process. */
+    onCloseRequested: (cb: () => void) => () => void
+    /** Tell the main process to forcefully destroy the window. */
+    forceClose: () => Promise<void>
 }
 
 declare global {
@@ -187,5 +197,6 @@ declare global {
         files: FileElectronApi
         preferences: PreferencesElectronApi
         config: ConfigElectronApi
+        electronWindow: WindowElectronApi
     }
 }

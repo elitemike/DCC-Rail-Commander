@@ -18,7 +18,7 @@
             "type": "shell",
             "command": "pnpm build",
             "options": {
-                "cwd": "${workspaceFolder}/src"
+                "cwd": "${workspaceFolder}"
             },
             "group": "build",
             "presentation": {
@@ -31,11 +31,41 @@
         {
             "label": "electron-vite: dev (mock)",
             "type": "shell",
-            "command": "pnpm exec electron-vite dev -- --mock",
+            "command": "pnpm exec electron-vite dev -- --mock-device",
             "options": {
-                "cwd": "${workspaceFolder}/src"
+                "cwd": "${workspaceFolder}"
             },
             "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        // ── Test (unit) ───────────────────────────────────────────────────────
+        {
+            "label": "vitest: run",
+            "type": "shell",
+            "command": "pnpm test",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        // ── Test (e2e) ────────────────────────────────────────────────────────
+        {
+            "label": "playwright: test",
+            "type": "shell",
+            "command": "pnpm test:e2e",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
             "presentation": {
                 "reveal": "always",
                 "panel": "shared"

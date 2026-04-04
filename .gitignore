@@ -170,3 +170,14 @@ file_version.txt
 dist/EX-Installer-macOS.app/
 .DS_Store
 src/bin
+
+# Node / Electron build outputs
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# Test outputs
+tests/e2e/playwright-report/
+tests/e2e/test-results/
+tests/e2e/playwright-report/index.html

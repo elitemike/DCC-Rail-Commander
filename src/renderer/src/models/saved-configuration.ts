@@ -26,4 +26,10 @@ export interface SavedConfiguration {
     configFiles: Array<{ name: string; content: string }>
     /** ISO 8601 date string of when this config was last modified */
     lastModified: string
+    /**
+     * Original user folder path when loaded via "Load from Folder" without a .ino file.
+     * When set, config files are written back to this folder on every Save so the
+     * user's source folder stays in sync with edits made in the workspace.
+     */
+    sourceFolder?: string
 }

@@ -1,0 +1,47 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
+            <button click.trigger="setTab('visual')"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'visual' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Visual
+            </button>
+            <button click.trigger="setTab('raw')"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'raw' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Raw
+            </button>
+            <span class="ml-auto flex items-baseline gap-1.5 px-3 py-2">
+                <span class="text-xs text-gray-400">${state.routes.length} entries</span>
+                <span class="text-xs text-gray-600 font-mono">myRoutes.h</span>
+            </span>
+        </div>
+
+        <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
+            style="flex:1;min-height:0;overflow:hidden;">
+            <div class="p-3 overflow-auto flex-1">
+                <div class="flex items-center justify-between mb-3">
+                    <div></div>
+                    <button class="btn" click.trigger="addRoute()">Add Route</button>
+                </div>
+                <div repeat.for="r of state.routes" class="mb-2 p-2 border rounded bg-gray-800">
+                    <div class="flex gap-2 items-start">
+                        <div class="w-20">ID: ${r.id}</div>
+                        <input value.two-way="r.description" placeholder="description" class="flex-1" />
+                        <button class="btn ml-2" click.trigger="removeRoute($index)">Delete</button>
+                    </div>
+                    <textarea value.two-way="r.body" class="w-full mt-2 h-24"></textarea>
+                </div>
+                <div if.bind="state.routes.length === 0" class="text-xs text-gray-500 p-3">No routes. Click Add Route.
+                </div>
+            </div>
+        </div>
+
+        <div class.bind="activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'">
+            <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myRoutes.h"
+                on-text-change.bind="onRawChange"></monaco-editor>
+        </div>
+
+    </div>
+</template>

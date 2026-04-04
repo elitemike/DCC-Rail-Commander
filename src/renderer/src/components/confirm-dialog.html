@@ -1,0 +1,21 @@
+<template>
+    <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div class="bg-gray-900 border border-white/15 rounded-xl shadow-2xl max-w-sm w-full mx-4">
+            <div class="p-5">
+                <h2 class="text-base font-semibold text-white mb-2">${title}</h2>
+                <p class="text-sm text-gray-400">${message}</p>
+                <p if.bind="detail" class="text-xs text-gray-500 mt-1.5">${detail}</p>
+            </div>
+            <div class="flex justify-end gap-2 px-5 py-4 border-t border-white/10">
+                <button click.trigger="cancel()"
+                    class="px-4 py-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors">
+                    ${cancelLabel}
+                </button>
+                <button click.trigger="ok()"
+                    class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${confirmClass}">
+                    ${confirmLabel}
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

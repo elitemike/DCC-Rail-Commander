@@ -1,0 +1,50 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <!-- ── Tab bar: Visual | Raw ─────────────────────────────────────────── -->
+        <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
+            <button click.trigger="setTab('visual')" class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'visual' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Visual
+            </button>
+            <button click.trigger="setTab('raw')" class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'raw' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Raw
+            </button>
+            <span class="ml-auto flex items-baseline gap-1.5 px-3 py-2">
+                <span class="text-xs text-gray-600 font-mono" if.bind="productId === 'ex_ioexpander'">myConfig.h</span>
+                <span class="text-xs text-gray-600 font-mono" if.bind="productId !== 'ex_ioexpander'">config.h</span>
+            </span>
+        </div>
+
+        <!-- ── Visual tab ────────────────────────────────────────────────────── -->
+        <div if.bind="activeTab === 'visual'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+            <!-- CommandStation visual form -->
+            <commandstation-config-form if.bind="productId === 'ex_commandstation'">
+            </commandstation-config-form>
+
+            <!-- IOExpander visual form -->
+            <ioexpander-config-form if.bind="productId === 'ex_ioexpander'">
+            </ioexpander-config-form>
+
+            <!-- No visual editor for this product -->
+            <div if.bind="!hasVisualEditor"
+                class="flex-1 flex flex-col items-center justify-center gap-3 text-gray-600">
+                <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-sm">No visual editor for this product. Use the Raw tab to edit directly.</p>
+            </div>
+        </div>
+
+        <!-- ── Raw tab ───────────────────────────────────────────────────────── -->
+        <div if.bind="activeTab === 'raw'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <monaco-editor value.to-view="content" language="cpp"
+                filename.bind="productId === 'ex_ioexpander' ? 'myConfig.h' : 'config.h'"
+                on-text-change.bind="onRawChange"></monaco-editor>
+        </div>
+
+    </div>
+</template>

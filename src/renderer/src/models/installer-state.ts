@@ -30,6 +30,12 @@ export class InstallerState {
     /** Path to the per-device scratch/build directory */
     scratchPath: string | null = null
 
+    /**
+     * Original user folder path when loaded via "Load from Folder" without a .ino.
+     * When set, saveFiles() in the workspace also writes config files back here.
+     */
+    sourceFolder: string | null = null
+
     /** Whether to use existing config files from disk */
     useExistingConfig = false
 
@@ -58,6 +64,7 @@ export class InstallerState {
         this.selectedVersion = null
         this.repoPath = null
         this.scratchPath = null
+        this.sourceFolder = null
         this.useExistingConfig = false
         this.advancedConfig = false
         this.configFiles = []

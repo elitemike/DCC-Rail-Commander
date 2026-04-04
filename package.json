@@ -1,0 +1,93 @@
+{
+    "name": "ex-installer-electron",
+    "version": "0.1.0",
+    "description": "EX-Installer - Electron/Aurelia 2 frontend",
+    "private": true,
+    "main": "out/main/index.js",
+    "scripts": {
+        "dev": "electron-vite dev",
+        "dev:mock": "electron-vite dev -- --mock-device",
+        "debug": "electron-vite dev --inspect=9229",
+        "build": "electron-vite build",
+        "preview": "electron-vite preview",
+        "start": "electron-vite dev",
+        "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+        "lint": "eslint src --ext .ts,.html",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:e2e": "pnpm build && playwright test",
+        "test:all": "pnpm test && pnpm test:e2e",
+        "clean": "rimraf out src/out release dist",
+        "clean:all": "pnpm run clean && rimraf node_modules src/node_modules"
+    },
+    "dependencies": {
+        "@aurelia/dialog": "2.0.0-rc.0",
+        "@aurelia/router": "2.0.0-rc.0",
+        "@aurelia/vite-plugin": "^2.0.0-rc.0",
+        "@fontsource/roboto": "^5.2.10",
+        "@syncfusion/ej2": "^32.1.24",
+        "aurelia": "^2.0.0-rc.0",
+        "electron-store": "^11.0.2",
+        "monaco-editor": "^0.55.1",
+        "python-shell": "^5.0.0",
+        "serialport": "^12.0.0",
+        "simple-git": "^3.32.1",
+        "tar": "^7.5.9",
+        "usb": "^2.13.0"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.58.2",
+        "@tailwindcss/vite": "^4.2.0",
+        "@types/node": "^24.10.13",
+        "@types/tar": "^7.0.87",
+        "electron": "^40.6.0",
+        "electron-vite": "^5.0.0",
+        "postcss-import": "^16.1.1",
+        "tailwindcss": "^4.2.0",
+        "typescript": "^5.7.0",
+        "vite": "^7.3.1",
+        "vite-plugin-monaco-editor": "^1.1.0",
+        "rimraf": "^5.0.1",
+        "vitest": "^4.0.18"
+    },
+    "engines": {
+        "node": ">=24.0.0",
+        "pnpm": ">=10.0.0"
+    },
+    "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be",
+    "build": {
+        "appId": "org.dcc-ex.installer",
+        "productName": "EX-Installer",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "out/**/*",
+            "!node_modules/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "src/python",
+                "to": "python"
+            }
+        ],
+        "nativeRebuilder": "prebuild-install",
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Utility"
+        },
+        "win": {
+            "target": [
+                "nsis"
+            ]
+        },
+        "mac": {
+            "target": [
+                "dmg"
+            ]
+        }
+    }
+}

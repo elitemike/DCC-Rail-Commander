@@ -1,17 +1,12 @@
 {
     "python-envs.pythonProjects": [],
-    "python.testing.unittestArgs": [
-        "-v",
-        "-s",
-        "./tests",
-        "-p",
-        "*test.py"
-    ],
     "python.testing.pytestEnabled": false,
-    "python.testing.unittestEnabled": true,
+    "python.testing.unittestEnabled": false,
     "cSpell.words": [
+        "commandstation",
         "DBUS",
         "fqbn",
+        "ioexpander",
         "maximizable"
     ]
 }

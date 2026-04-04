@@ -1,9 +1,59 @@
+@import "@fontsource/roboto/300.css";
+@import "@fontsource/roboto/400.css";
+@import "@fontsource/roboto/500.css";
+@import "@fontsource/roboto/700.css";
 @import "tailwindcss";
-@import "@syncfusion/ej2-base/styles/tailwind.css";
-@import "@syncfusion/ej2-buttons/styles/tailwind.css";
-@import "@syncfusion/ej2-navigations/styles/tailwind.css";
-@import "@syncfusion/ej2-navigations/styles/stepper/tailwind.css";
+@import "@syncfusion/ej2-base/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-buttons/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-inputs/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-dropdowns/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-layouts/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-navigations/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-navigations/styles/stepper/tailwind-dark.css";
+@import "@syncfusion/ej2-notifications/styles/tailwind-dark.css";
 
+/* ── Set Roboto as the global font ────────────────────────────────────── */
+@theme {
+    --font-sans: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+}
+
+body,
+* {
+    font-family: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Electron app — suppress browser default focus rings on buttons */
+button:focus,
+button:focus-visible {
+    outline: none;
+}
+
+/* ── Custom element host sizing ───────────────────────────────────────── */
+/* Aurelia renders custom elements as inline by default; make them fill   */
+/* their flex parent so height cascades correctly down to Monaco.          */
+file-editor-panel,
+roster-editor,
+turnout-editor,
+config-h-editor,
+monaco-editor,
+sensors-editor,
+signals-editor,
+routes-editor,
+sequences-editor,
+aliases-editor {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+    position: relative;
+}
+
+compile-progress {
+    display: block;
+    width: 100%;
+}
 
 /* ── @aurelia/dialog native <dialog> reset ─────────────────────────────── */
 /* Strip browser chrome but preserve margin:auto so showModal() centers it */
@@ -24,4 +74,199 @@ dialog::backdrop {
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Monaco squiggles — VS Code-style wavy underlines ───────────────────── */
+/* Percent-encoded SVG in url() gets decoded back to raw < > by Vite's CSS  */
+/* minifier, breaking the url() parser silently. Use base64 instead — it is */
+/* completely opaque to any CSS processor.                                   */
+div.monaco-editor .squiggly-error {
+    border-bottom: none !important;
+    background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2IDMnIGhlaWdodD0nMycgd2lkdGg9JzYnPjxnIGZpbGw9JyNmMTRjNGMnPjxwb2x5Z29uIHBvaW50cz0nNS41LDAgMi41LDMgMS4xLDMgNC4xLDAnLz48cG9seWdvbiBwb2ludHM9JzQsMCA2LDIgNiwwLjYgNS40LDAnLz48cG9seWdvbiBwb2ludHM9JzAsMiAxLDMgMi40LDMgMCwwLjYnLz48L2c+PC9zdmc+") repeat-x bottom left !important;
+    background-size: auto 3px !important;
+}
+
+div.monaco-editor .squiggly-warning {
+    border-bottom: none !important;
+    background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2IDMnIGhlaWdodD0nMycgd2lkdGg9JzYnPjxnIGZpbGw9JyNjY2E3MDAnPjxwb2x5Z29uIHBvaW50cz0nNS41LDAgMi41LDMgMS4xLDMgNC4xLDAnLz48cG9seWdvbiBwb2ludHM9JzQsMCA2LDIgNiwwLjYgNS40LDAnLz48cG9seWdvbiBwb2ludHM9JzAsMiAxLDMgMi40LDMgMCwwLjYnLz48L2c+PC9zdmc+") repeat-x bottom left !important;
+    background-size: auto 3px !important;
+}
+
+div.monaco-editor .squiggly-info {
+    border-bottom: none !important;
+    background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2IDMnIGhlaWdodD0nMycgd2lkdGg9JzYnPjxnIGZpbGw9JyM3NWJlZmYnPjxwb2x5Z29uIHBvaW50cz0nNS41LDAgMi41LDMgMS4xLDMgNC4xLDAnLz48cG9seWdvbiBwb2ludHM9JzQsMCA2LDIgNiwwLjYgNS40LDAnLz48cG9seWdvbiBwb2ludHM9JzAsMiAxLDMgMi40LDMgMCwwLjYnLz48L2c+PC9zdmc+") repeat-x bottom left !important;
+    background-size: auto 3px !important;
+}
+
+div.monaco-editor .squiggly-hint {
+    border-bottom: none !important;
+    background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMiAzJyBoZWlnaHQ9JzMnIHdpZHRoPScxMic+PGcgZmlsbD0nI2VlZWVlNCc+PGNpcmNsZSBjeD0nMScgY3k9JzInIHI9JzEnLz48Y2lyY2xlIGN4PSc1JyBjeT0nMicgcj0nMScvPjxjaXJjbGUgY3g9JzknIGN5PScyJyByPScxJy8+PC9nPjwvc3ZnPg==") repeat-x bottom left !important;
+    background-size: auto 3px !important;
+}
+
+/* ── App toast notifications ────────────────────────────────────────────── */
+.e-toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 400px;
+}
+
+.e-toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #1e2535;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.e-toast-message {
+    flex: 1;
+    min-width: 0;
+}
+
+.e-toast-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: #f1f5f9;
+}
+
+.e-toast-content {
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.e-toast-close-icon {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0 0 0 4px;
+    margin-top: -1px;
+}
+
+.e-toast-close-icon:hover {
+    color: #e2e8f0;
+}
+
+/* Type variants */
+.e-toast.e-toast-warning {
+    border-left: 3px solid #f59e0b;
+}
+
+.e-toast.e-toast-success {
+    border-left: 3px solid #22c55e;
+}
+
+.e-toast.e-toast-danger {
+    border-left: 3px solid #ef4444;
+}
+
+.e-toast.e-toast-info {
+    border-left: 3px solid #60a5fa;
+}
+
+/* ── Railroad compile progress bar ─────────────────────────────────────── */
+
+/* Outer wrapper — the full-width strip shown while compiling/uploading */
+.rr-wrapper {
+    position: relative;
+    height: 40px;
+    overflow: hidden;
+    background-color: #0f172a;
+    /* slate-950 — dark rail bed */
+}
+
+/* Cross-ties (sleepers): vertical brown bands repeating along the track */
+.rr-ties {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: repeating-linear-gradient(to right,
+            #1c1917 0px,
+            #1c1917 15px,
+            #292524 15px,
+            #292524 20px);
+}
+
+/* Steel rails — two thin metallic lines that always sit on top */
+.rr-rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(to right, #52525b, #a1a1aa 20%, #a1a1aa 80%, #52525b);
+    box-shadow: 0 0 6px rgba(161, 161, 170, 0.35);
+    z-index: 3;
+}
+
+.rr-rail-top {
+    top: 9px;
+}
+
+.rr-rail-bottom {
+    bottom: 9px;
+}
+
+/* Syncfusion ProgressBar container — fills the area between the rails */
+.rr-track-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 11px;
+    /* just below the top rail */
+    bottom: 11px;
+    /* just above the bottom rail */
+    z-index: 2;
+    overflow: hidden;
+}
+
+/* Amber sweep: a glowing band that slides left-to-right continuously */
+.rr-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 35%;
+    background: linear-gradient(to right,
+            transparent 0%,
+            #f59e0b 40%,
+            #fbbf24 50%,
+            #f59e0b 60%,
+            transparent 100%);
+    animation: rr-sweep 1.8s ease-in-out infinite;
+}
+
+@keyframes rr-sweep {
+    0% {
+        left: -35%;
+    }
+
+    100% {
+        left: 100%;
+    }
 }

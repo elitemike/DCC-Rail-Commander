@@ -18,7 +18,14 @@ export class FileService {
     }
 
     async writeFile(filePath: string, content: string): Promise<void> {
-        await writeFile(filePath, content, 'utf-8')
+        try {
+            console.debug(`[files.write] -> ${filePath} (${content.length} bytes)`)
+            await writeFile(filePath, content, 'utf-8')
+            console.debug(`[files.write] OK -> ${filePath}`)
+        } catch (err) {
+            console.error(`[files.write] ERR -> ${filePath}`, err)
+            throw err
+        }
     }
 
     async listDir(dirPath: string): Promise<string[]> {
@@ -43,7 +50,14 @@ export class FileService {
     }
 
     async copyFiles(src: string, dest: string): Promise<void> {
-        await cp(src, dest, { recursive: true })
+        try {
+            console.debug(`[files.copy] ${src} -> ${dest}`)
+            await cp(src, dest, { recursive: true })
+            console.debug(`[files.copy] OK ${src} -> ${dest}`)
+        } catch (err) {
+            console.error(`[files.copy] ERR ${src} -> ${dest}`, err)
+            throw err
+        }
     }
 
     async deleteFiles(filePath: string): Promise<void> {

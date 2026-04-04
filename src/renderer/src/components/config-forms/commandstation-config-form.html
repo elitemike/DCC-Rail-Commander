@@ -1,0 +1,303 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <!-- ── Inner tab bar: General | WiFi | TrackManager ─────────────────── -->
+        <div class="flex items-center shrink-0 border-b border-white/10 bg-gray-900/40 px-3">
+            <button click.trigger="setConfigTab('general')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
+                class.bind="activeConfigTab === 'general' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                General
+            </button>
+            <button click.trigger="setConfigTab('wifi')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
+                class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                WiFi
+            </button>
+            <button click.trigger="setConfigTab('trackmanager')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeConfigTab === 'trackmanager' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                TrackManager
+            </button>
+            <span if.bind="isCsb1"
+                class="ml-auto px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                EX-CSB1
+            </span>
+        </div>
+
+        <!-- ── Scrollable form body ──────────────────────────────────────────── -->
+        <div class="flex-1 overflow-y-auto p-4 min-h-0">
+
+            <!-- ── GENERAL tab ───────────────────────────────────────────────── -->
+            <div class="${activeConfigTab === 'general' ? 'flex flex-col gap-4 max-w-2xl' : 'hidden'}">
+
+                <!-- Motor driver -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Motor Driver</label>
+                    <input ref="motorDriverEl" type="text" />
+                </div>
+
+                <!-- Display -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Display</label>
+                    <input ref="displayEl" type="text" />
+
+                    <!-- Scroll mode — only when a display is selected -->
+                    <div
+                        class="${opts.display !== 'NONE' ? 'flex flex-col gap-2 pt-2 border-t border-white/10' : 'hidden'}">
+                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Scroll mode</label>
+                        <input ref="scrollModeEl" type="text" />
+                    </div>
+                </div>
+
+                <!-- Options toggles -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Options</span>
+
+                    <!-- WiFi — hidden for CSB1 (always on) -->
+                    <div if.bind="!isCsb1">
+                        <input ref="enableWifiEl" type="checkbox" />
+                    </div>
+
+                    <!-- Ethernet (only shown when not ESP32) -->
+                    <div if.bind="!isEsp32">
+                        <input ref="enableEthernetEl" type="checkbox" />
+                    </div>
+
+                    <!-- Power on start -->
+                    <input ref="enablePowerOnStartEl" type="checkbox" />
+
+                    <!-- Disable EEPROM — hidden for CSB1 (N/A on ESP32) -->
+                    <div if.bind="!isCsb1">
+                        <input ref="disableEepromEl" type="checkbox" />
+                    </div>
+
+                    <!-- Disable PROG -->
+                    <input ref="disableProgEl" type="checkbox" />
+                </div>
+            </div>
+
+            <!-- ── WIFI tab ───────────────────────────────────────────────────── -->
+            <div class="${activeConfigTab === 'wifi' ? 'flex flex-col gap-4 max-w-2xl' : 'hidden'}">
+
+                <!-- WiFi disabled warning -->
+                <div
+                    class="${!opts.enableWifi && !isCsb1 ? 'px-4 py-3 bg-yellow-950/40 border border-yellow-500/30 rounded-lg text-yellow-300 text-sm' : 'hidden'}">
+                    WiFi is disabled. Enable it on the General tab first.
+                </div>
+
+                <div class="${opts.enableWifi || isCsb1 ? 'flex flex-col gap-4' : 'hidden'}">
+
+                    <!-- Mode -->
+                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mode</span>
+                        <div class="flex gap-6">
+                            <input ref="wifiModeApEl" type="radio" />
+                            <input ref="wifiModeStaEl" type="radio" />
+                        </div>
+                    </div>
+
+                    <!-- AP mode info box -->
+                    <div
+                        class="${opts.wifiMode === 'ap' ? 'px-4 py-3 bg-blue-950/40 border border-blue-500/30 rounded-lg text-sm text-blue-200 leading-relaxed' : 'hidden'}">
+                        <p class="font-medium text-blue-300 mb-1">Access Point mode</p>
+                        <p>The command station creates its own WiFi network. Nearby devices connect directly to it —
+                            no existing router needed.</p>
+                        <p class="mt-1 text-blue-300/80">By default the firmware sets the network name to <span
+                                class="font-mono">DCCEX</span> and the password to <span class="font-mono">PASS</span>.
+                            You can override these below, or click <span class="italic">Reset to defaults</span> to use
+                            the firmware values.</p>
+                    </div>
+
+                    <!-- Common network fields -->
+                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs text-gray-400">Hostname</label>
+                            <input ref="wifiHostnameEl" type="text" />
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs text-gray-400">
+                                ${opts.wifiMode === 'ap' ? 'Custom network name' : 'Network SSID'}
+                                <span if.bind="opts.wifiMode === 'ap'" class="text-gray-600"> (optional — overrides
+                                    firmware default)</span>
+                                <span if.bind="opts.wifiMode !== 'ap'" class="text-red-400"> *</span>
+                            </label>
+                            <input ref="wifiSsidEl" type="text" />
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-xs text-gray-400">
+                                ${opts.wifiMode === 'ap' ? 'Custom password' : 'Password'}
+                                <span if.bind="opts.wifiMode === 'ap'" class="text-gray-600"> (optional — overrides
+                                    firmware default)</span>
+                            </label>
+                            <input ref="wifiPasswordEl" type="password" />
+                        </div>
+
+                        <!-- Channel — AP mode only -->
+                        <div class="${opts.wifiMode === 'ap' ? 'flex items-center gap-3' : 'hidden'}">
+                            <label class="text-xs text-gray-400 w-24 shrink-0">Channel (1–11)</label>
+                            <div class="w-28">
+                                <input ref="wifiChannelEl" type="text" />
+                            </div>
+                        </div>
+
+                        <!-- Reset button — AP mode only -->
+                        <div class="${opts.wifiMode === 'ap' ? '' : 'hidden'}">
+                            <button ref="resetWifiBtnEl" type="button"></button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── TRACKMANAGER tab ───────────────────────────────────────────── -->
+            <div class="${activeConfigTab === 'trackmanager' ? 'flex flex-col gap-4 max-w-2xl' : 'hidden'}">
+
+                <!-- Stacked motor shield option (CSB1 only) -->
+                <div if.bind="isCsb1" class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Motor Shield
+                        Configuration</span>
+                    <input ref="hasStackedMotorShieldEl" type="checkbox" />
+                </div>
+
+                <!-- Track manager mode selector -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track Configuration</span>
+                    <div class="flex gap-6">
+                        <input ref="trackManagerModeDccOnlyEl" type="radio" />
+                        <input ref="trackManagerModeDcOnlyEl" type="radio" />
+                        <input ref="trackManagerModeMixedEl" type="radio" />
+                    </div>
+                    <div class="flex items-center gap-3 pt-2 border-t border-white/10">
+                        <label class="text-xs text-gray-400 shrink-0">Startup power</label>
+                        <div class="w-64">
+                            <input ref="startupPowerModeEl" type="text" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track A -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track A</span>
+                    <div class="flex items-center gap-4">
+                        <!-- Type selector (mixed mode only) -->
+                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
+                            <div class="flex items-center gap-3">
+                                <input ref="trackATypeDccEl" type="radio" />
+                                <input ref="trackATypeDcEl" type="radio" />
+                            </div>
+                            <div class="w-px h-6 bg-white/10"></div>
+                        </div>
+                        <!-- Mode dropdown -->
+                        <div class="w-36">
+                            <input ref="trackAModeEl" type="text" />
+                        </div>
+                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
+                            <input ref="trackAPowerEl" type="text" />
+                        </div>
+                        <!-- Loco ID (DC mode only) -->
+                        <div class="${trackAIsDc ? 'flex items-center gap-2' : 'hidden'}">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <div class="w-24">
+                                <input ref="trackALocoIdEl" type="text" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track B -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track B</span>
+                    <div class="flex items-center gap-4">
+                        <!-- Type selector (mixed mode only) -->
+                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
+                            <div class="flex items-center gap-3">
+                                <input ref="trackBTypeDccEl" type="radio" />
+                                <input ref="trackBTypeDcEl" type="radio" />
+                            </div>
+                            <div class="w-px h-6 bg-white/10"></div>
+                        </div>
+                        <!-- Mode dropdown -->
+                        <div class="w-36">
+                            <input ref="trackBModeEl" type="text" />
+                        </div>
+                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
+                            <input ref="trackBPowerEl" type="text" />
+                        </div>
+                        <!-- Loco ID (DC mode only) -->
+                        <div class="${trackBIsDc ? 'flex items-center gap-2' : 'hidden'}">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <div class="w-24">
+                                <input ref="trackBLocoIdEl" type="text" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track C (only with stacked motor shield) -->
+                <div
+                    class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track C</span>
+                    <div class="flex items-center gap-4">
+                        <!-- Type selector (mixed mode only) -->
+                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
+                            <div class="flex items-center gap-3">
+                                <input ref="trackCTypeDccEl" type="radio" />
+                                <input ref="trackCTypeDcEl" type="radio" />
+                            </div>
+                            <div class="w-px h-6 bg-white/10"></div>
+                        </div>
+                        <!-- Mode dropdown -->
+                        <div class="w-36">
+                            <input ref="trackCModeEl" type="text" />
+                        </div>
+                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
+                            <input ref="trackCPowerEl" type="text" />
+                        </div>
+                        <!-- Loco ID (DC mode only) -->
+                        <div class="${trackCIsDc ? 'flex items-center gap-2' : 'hidden'}">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <div class="w-24">
+                                <input ref="trackCLocoIdEl" type="text" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track D (only with stacked motor shield) -->
+                <div
+                    class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track D</span>
+                    <div class="flex items-center gap-4">
+                        <!-- Type selector (mixed mode only) -->
+                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
+                            <div class="flex items-center gap-3">
+                                <input ref="trackDTypeDccEl" type="radio" />
+                                <input ref="trackDTypeDcEl" type="radio" />
+                            </div>
+                            <div class="w-px h-6 bg-white/10"></div>
+                        </div>
+                        <!-- Mode dropdown -->
+                        <div class="w-36">
+                            <input ref="trackDModeEl" type="text" />
+                        </div>
+                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
+                            <input ref="trackDPowerEl" type="text" />
+                        </div>
+                        <!-- Loco ID (DC mode only) -->
+                        <div class="${trackDIsDc ? 'flex items-center gap-2' : 'hidden'}">
+                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                            <div class="w-24">
+                                <input ref="trackDLocoIdEl" type="text" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div><!-- end scrollable body -->
+    </div>
+</template>

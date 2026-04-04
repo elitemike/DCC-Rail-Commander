@@ -1,23 +1,83 @@
 /**
- * EX-CommandStation config.h and myAutomation.h generators
+ * EX-CommandStation config.h and myAutomation.h generators + parser
  * Ported from ex_installer/ex_commandstation.py
  */
 
 export interface CommandStationConfigOptions {
     motorDriver: string
     display: string
+    scrollMode: number // 0=continuous, 1=by page, 2=by row
     enableWifi: boolean
     wifiMode: string // 'ap' | 'sta'
     wifiHostname: string
     wifiSsid: string
     wifiPassword: string
     wifiChannel: number
+    // Track manager configuration
+    hasStackedMotorShield: boolean // For CSB1 only
+    trackManagerMode: 'mixed' | 'dcc-only' | 'dc-only'
+    // Track A
     trackAMode: string
-    trackBMode: string
+    trackAType: 'dcc' | 'dc'
     trackALocoId: number
+    // Track B
+    trackBMode: string
+    trackBType: 'dcc' | 'dc'
     trackBLocoId: number
+    // Track C (only available with stacked motor shield)
+    trackCMode: string
+    trackCType: 'dcc' | 'dc'
+    trackCLocoId: number
+    // Track D (only available with stacked motor shield)
+    trackDMode: string
+    trackDType: 'dcc' | 'dc'
+    trackDLocoId: number
+    startupPowerMode: 'all' | 'individual'
+    trackAPower: 'ON' | 'OFF'
+    trackBPower: 'ON' | 'OFF'
+    trackCPower: 'ON' | 'OFF'
+    trackDPower: 'ON' | 'OFF'
     enablePowerOnStart: boolean
     disableEeprom: boolean
+    enableEthernet: boolean
+    disableProg: boolean
+}
+
+export function defaultCommandStationConfig(): CommandStationConfigOptions {
+    return {
+        motorDriver: 'STANDARD_MOTOR_SHIELD',
+        display: 'NONE',
+        scrollMode: 1,
+        enableWifi: false,
+        wifiMode: 'ap',
+        wifiHostname: 'dccex',
+        wifiSsid: '',
+        wifiPassword: '',
+        wifiChannel: 1,
+        hasStackedMotorShield: false,
+        trackManagerMode: 'dcc-only',
+        trackAMode: 'MAIN',
+        trackAType: 'dcc',
+        trackALocoId: 0,
+        trackBMode: 'PROG',
+        trackBType: 'dcc',
+        trackBLocoId: 0,
+        trackCMode: 'MAIN',
+        trackCType: 'dcc',
+        trackCLocoId: 0,
+        trackDMode: 'MAIN',
+        trackDType: 'dcc',
+        trackDLocoId: 0,
+        startupPowerMode: 'all',
+        trackAPower: 'ON',
+        trackBPower: 'ON',
+        trackCPower: 'ON',
+        trackDPower: 'ON',
+        enablePowerOnStart: false,
+        disableEeprom: false,
+        enableEthernet: false,
+        disableProg: false,
+    }
 }
 
 /**
@@ -29,15 +89,14 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
         '',
     ]
 
-    // Always-required defaults (matches Python default_config_options)
+    // Always-required defaults
     lines.push('#define IP_PORT 2560')
-    lines.push('#define SCROLLMODE 1')
     lines.push('')
 
     // Motor driver
     lines.push(`#define MOTOR_SHIELD_TYPE ${opts.motorDriver}`)
 
-    // Display
+    // Display + scroll mode
     if (opts.display !== 'NONE') {
         if (opts.display === 'OLED_128x32') {
             lines.push('#define OLED_DRIVER 128,32')
@@ -50,29 +109,38 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
         } else if (opts.display === 'LCD_20x4') {
             lines.push('#define LCD_DRIVER 0x27,20,4')
         }
+        lines.push(`#define SCROLLMODE ${opts.scrollMode}`)
     }
 
-    // WiFi
+    // WiFi (mutually exclusive with Ethernet)
     if (opts.enableWifi) {
         lines.push(`#define WIFI_HOSTNAME "${opts.wifiHostname || 'dccex'}"`)
         if (opts.wifiMode === 'ap') {
-            lines.push('#define WIFI_SSID "Your network name"')
-            if (opts.wifiPassword) {
-                lines.push(`#define WIFI_PASSWORD "${opts.wifiPassword}"`)
-            } else {
-                lines.push('#define WIFI_PASSWORD "Your network passwd"')
-            }
-        } else {
-            // Station mode
+            // Access Point mode — WIFI_FORCE_AP is required; SSID/password are optional AP overrides
+            lines.push('#define WIFI_FORCE_AP true')
             if (opts.wifiSsid) {
                 lines.push(`#define WIFI_SSID "${opts.wifiSsid}"`)
             }
             if (opts.wifiPassword) {
                 lines.push(`#define WIFI_PASSWORD "${opts.wifiPassword}"`)
             }
+            lines.push('#define ENABLE_WIFI true')
+            lines.push(`#define WIFI_CHANNEL ${opts.wifiChannel}`)
+        } else {
+            // Station mode — join existing network; channel is ignored
+            if (opts.wifiSsid) {
+                lines.push(`#define WIFI_SSID "${opts.wifiSsid}"`)
+            }
+            if (opts.wifiPassword) {
+                lines.push(`#define WIFI_PASSWORD "${opts.wifiPassword}"`)
+            }
+            lines.push('#define ENABLE_WIFI true')
         }
-        lines.push('#define ENABLE_WIFI true')
-        lines.push(`#define WIFI_CHANNEL ${opts.wifiChannel}`)
+    }
+
+    // Ethernet (mutually exclusive with WiFi)
+    if (opts.enableEthernet && !opts.enableWifi) {
+        lines.push('#define ENABLE_ETHERNET true')
     }
 
     // Disable EEPROM
@@ -80,16 +148,183 @@ export function generateCommandStationConfig(opts: CommandStationConfigOptions):
         lines.push('#define DISABLE_EEPROM')
     }
 
+    // Disable programming track
+    if (opts.disableProg) {
+        lines.push('#define DISABLE_PROG')
+    }
+
     lines.push('')
     return lines.join('\n') + '\n'
 }
 
+/**
+ * Determine if a track mode is DC-type or DCC-type
+ */
+function isTrackModeDC(mode: string): boolean {
+    return mode.startsWith('DC')
+}
+
+/**
+ * Parse myAutomation.h AUTOSTART section to extract track manager options.
+ * Returns a partial MyAutomationOptions object with extracted values.
+ */
+export function parseMyAutomationTrackManager(content: string): Partial<MyAutomationOptions> {
+    const opts: Partial<MyAutomationOptions> = {}
+
+    // Find AUTOSTART...DONE block
+    const autoStartMatch = content.match(/AUTOSTART\s*\n([\s\S]*?)\nDONE/m)
+    if (!autoStartMatch) return opts
+
+    const autoStartBlock = autoStartMatch[1]
+
+    // Extract SET_TRACK calls for each track
+    const setTrackPattern = /SET_TRACK\(([A-D]),(\w+)\)/g
+    let match: RegExpExecArray | null
+    while ((match = setTrackPattern.exec(autoStartBlock)) !== null) {
+        const track = match[1]
+        const mode = match[2]
+        if (track === 'A') opts.trackAMode = mode
+        else if (track === 'B') opts.trackBMode = mode
+        else if (track === 'C') opts.trackCMode = mode
+        else if (track === 'D') opts.trackDMode = mode
+    }
+
+    // Extract SETLOCO loco IDs for each track
+    const setLocoPattern = /SETLOCO\((\d+)\)\s+SET_TRACK\(([A-D]),\w+\)/g
+    while ((match = setLocoPattern.exec(autoStartBlock)) !== null) {
+        const locoId = parseInt(match[1], 10)
+        const track = match[2]
+        if (track === 'A') opts.trackALocoId = locoId
+        else if (track === 'B') opts.trackBLocoId = locoId
+        else if (track === 'C') opts.trackCLocoId = locoId
+        else if (track === 'D') opts.trackDLocoId = locoId
+    }
+
+    // Check for stacked motor shield (presence of Track C or D)
+    if (opts.trackCMode || opts.trackDMode) {
+        opts.hasStackedMotorShield = true
+    }
+
+    // Check for power on start
+    if (/POWERON/m.test(autoStartBlock)) {
+        opts.enablePowerOnStart = true
+        opts.startupPowerMode = 'all'
+    }
+
+    // Parse per-track power settings
+    const setPowerPattern = /SET_POWER\(([A-D]),(ON|OFF)\)/g
+    let hasIndividualPower = false
+    while ((match = setPowerPattern.exec(autoStartBlock)) !== null) {
+        hasIndividualPower = true
+        const track = match[1]
+        const power = match[2] as 'ON' | 'OFF'
+        if (track === 'A') opts.trackAPower = power
+        else if (track === 'B') opts.trackBPower = power
+        else if (track === 'C') opts.trackCPower = power
+        else if (track === 'D') opts.trackDPower = power
+    }
+
+    if (hasIndividualPower) {
+        opts.enablePowerOnStart = true
+        opts.startupPowerMode = 'individual'
+    }
+
+    return opts
+}
+
+/**
+ * Parse an existing config.h back into CommandStationConfigOptions.
+ * Returns defaults for any unrecognised or missing values.
+ */
+export function parseCommandStationConfig(content: string): CommandStationConfigOptions {
+    const opts = defaultCommandStationConfig()
+
+    const def = (key: string): string | undefined => {
+        const m = content.match(new RegExp(`^#define\\s+${key}\\s+(.+)$`, 'm'))
+        return m?.[1]?.trim()
+    }
+    const has = (key: string): boolean =>
+        new RegExp(`^#define\\s+${key}(?:\\s|$)`, 'm').test(content)
+
+    const motorDriver = def('MOTOR_SHIELD_TYPE')
+    if (motorDriver) {
+        opts.motorDriver = motorDriver
+        if (motorDriver.toUpperCase() === 'EXCSB1_WITH_EX8874') {
+            opts.hasStackedMotorShield = true
+        }
+    }
+
+    if (has('OLED_DRIVER')) {
+        const v = def('OLED_DRIVER')
+        if (v === '128,32') opts.display = 'OLED_128x32'
+        else if (v === '128,64') opts.display = 'OLED_128x64'
+        else if (v === '132,64') opts.display = 'OLED_132x64'
+    } else if (has('LCD_DRIVER')) {
+        const v = def('LCD_DRIVER')
+        if (v?.startsWith('0x27,16,2')) opts.display = 'LCD_16x2'
+        else if (v?.startsWith('0x27,20,4')) opts.display = 'LCD_20x4'
+    }
+
+    const scrollMode = def('SCROLLMODE')
+    if (scrollMode !== undefined) {
+        const n = parseInt(scrollMode, 10)
+        if (n === 0 || n === 1 || n === 2) opts.scrollMode = n
+    }
+
+    if (has('ENABLE_WIFI')) opts.enableWifi = true
+    if (has('ENABLE_ETHERNET')) opts.enableEthernet = true
+    if (has('DISABLE_EEPROM')) opts.disableEeprom = true
+    if (has('DISABLE_PROG')) opts.disableProg = true
+
+    const hostname = def('WIFI_HOSTNAME')
+    if (hostname) opts.wifiHostname = hostname.replace(/^"|"$/g, '')
+
+    // WIFI_FORCE_AP explicitly means AP mode; otherwise a real SSID implies station mode
+    if (has('WIFI_FORCE_AP')) {
+        opts.wifiMode = 'ap'
+    }
+
+    const ssid = def('WIFI_SSID')
+    if (ssid) {
+        const unquoted = ssid.replace(/^"|"$/g, '')
+        opts.wifiSsid = unquoted
+        // A real (non-placeholder) SSID without WIFI_FORCE_AP means station mode
+        if (!has('WIFI_FORCE_AP') && unquoted !== 'Your network name' && unquoted.trim() !== '') {
+            opts.wifiMode = 'sta'
+        }
+    }
+
+    const password = def('WIFI_PASSWORD')
+    if (password) opts.wifiPassword = password.replace(/^"|"$/g, '')
+
+    const channel = def('WIFI_CHANNEL')
+    if (channel) opts.wifiChannel = parseInt(channel, 10) || 1
+
+    // Infer track types from modes
+    opts.trackAType = isTrackModeDC(opts.trackAMode) ? 'dc' : 'dcc'
+    opts.trackBType = isTrackModeDC(opts.trackBMode) ? 'dc' : 'dcc'
+    opts.trackCType = isTrackModeDC(opts.trackCMode) ? 'dc' : 'dcc'
+    opts.trackDType = isTrackModeDC(opts.trackDMode) ? 'dc' : 'dcc'
+
+    return opts
+}
+
 export interface MyAutomationOptions {
     enablePowerOnStart: boolean
+    hasStackedMotorShield: boolean
+    startupPowerMode: 'all' | 'individual'
     trackAMode: string
-    trackBMode: string
     trackALocoId: number
+    trackAPower: 'ON' | 'OFF'
+    trackBMode: string
     trackBLocoId: number
+    trackBPower: 'ON' | 'OFF'
+    trackCMode: string
+    trackCLocoId: number
+    trackCPower: 'ON' | 'OFF'
+    trackDMode: string
+    trackDLocoId: number
+    trackDPower: 'ON' | 'OFF'
 }
 
 /**
@@ -101,42 +336,77 @@ export function generateMyAutomation(opts: MyAutomationOptions): string {
         '',
     ]
 
-    const hasTrackManager = opts.trackAMode !== 'MAIN' || opts.trackBMode !== 'PROG'
+    // When stacked shield is enabled we must always emit SET_TRACK lines,
+    // because CSB1 defaults only initialize tracks A/B.
+    const hasTrackManager =
+        opts.hasStackedMotorShield ||
+        opts.trackAMode !== 'MAIN' ||
+        opts.trackBMode !== 'PROG' ||
+        (opts.hasStackedMotorShield && (opts.trackCMode !== 'MAIN' || opts.trackDMode !== 'MAIN'))
+
     const needsAutostart = opts.enablePowerOnStart || hasTrackManager
 
     if (needsAutostart) {
         lines.push('AUTOSTART')
 
-        if (opts.enablePowerOnStart) {
-            lines.push('POWERON')
-        }
-
         if (hasTrackManager) {
-            // Track A
             if (opts.trackAMode.startsWith('DC')) {
                 lines.push(`SETLOCO(${opts.trackALocoId}) SET_TRACK(A,${opts.trackAMode})`)
             } else {
                 lines.push(`SET_TRACK(A,${opts.trackAMode})`)
             }
 
-            // Track B
             if (opts.trackBMode.startsWith('DC')) {
                 lines.push(`SETLOCO(${opts.trackBLocoId}) SET_TRACK(B,${opts.trackBMode})`)
             } else {
                 lines.push(`SET_TRACK(B,${opts.trackBMode})`)
+            }
+
+            if (opts.hasStackedMotorShield) {
+                if (opts.trackCMode.startsWith('DC')) {
+                    lines.push(`SETLOCO(${opts.trackCLocoId}) SET_TRACK(C,${opts.trackCMode})`)
+                } else {
+                    lines.push(`SET_TRACK(C,${opts.trackCMode})`)
+                }
+
+                if (opts.trackDMode.startsWith('DC')) {
+                    lines.push(`SETLOCO(${opts.trackDLocoId}) SET_TRACK(D,${opts.trackDMode})`)
+                } else {
+                    lines.push(`SET_TRACK(D,${opts.trackDMode})`)
+                }
+            }
+        }
+
+        if (opts.enablePowerOnStart) {
+            if (opts.startupPowerMode === 'all') {
+                lines.push('POWERON')
+            } else {
+                lines.push(`SET_POWER(A,${opts.trackAPower})`)
+                lines.push(`SET_POWER(B,${opts.trackBPower})`)
+                if (opts.hasStackedMotorShield) {
+                    lines.push(`SET_POWER(C,${opts.trackCPower})`)
+                    lines.push(`SET_POWER(D,${opts.trackDPower})`)
+                }
             }
         }
 
         lines.push('DONE')
         lines.push('')
 
-        // Roster entries for DC tracks
         if (hasTrackManager) {
             if (opts.trackAMode.startsWith('DC')) {
                 lines.push(`ROSTER(${opts.trackALocoId},"DC TRACK A","/* /")`)
             }
             if (opts.trackBMode.startsWith('DC')) {
                 lines.push(`ROSTER(${opts.trackBLocoId},"DC TRACK B","/* /")`)
+            }
+            if (opts.hasStackedMotorShield) {
+                if (opts.trackCMode.startsWith('DC')) {
+                    lines.push(`ROSTER(${opts.trackCLocoId},"DC TRACK C","/* /")`)
+                }
+                if (opts.trackDMode.startsWith('DC')) {
+                    lines.push(`ROSTER(${opts.trackDLocoId},"DC TRACK D","/* /")`)
+                }
             }
         }
     }

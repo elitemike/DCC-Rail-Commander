@@ -1,5 +1,5 @@
 /**
- * EX-IOExpander myConfig.h generator
+ * EX-IOExpander myConfig.h generator + parser
  * Ported from ex_installer/ex_ioexpander.py
  */
 
@@ -7,6 +7,18 @@ export interface IOExpanderConfigOptions {
     i2cAddress: number
     disablePullups: boolean
     testMode: string | null // 'ANALOGUE_TEST' | 'INPUT_TEST' | 'OUTPUT_TEST' | 'PULLUP_TEST' | null
+    enableDiag: boolean
+    diagConfigDelay: number
+}
+
+export function defaultIOExpanderConfig(): IOExpanderConfigOptions {
+    return {
+        i2cAddress: 0x65,
+        disablePullups: false,
+        testMode: null,
+        enableDiag: false,
+        diagConfigDelay: 5,
+    }
 }
 
 /**
@@ -18,11 +30,14 @@ export function generateIOExpanderConfig(opts: IOExpanderConfigOptions): string 
         '',
     ]
 
-    // I2C address (stored as decimal in the field, output as hex)
+    // I2C address (stored as decimal, output as hex)
     lines.push(`#define I2C_ADDRESS 0x${opts.i2cAddress.toString(16).toUpperCase()}`)
 
-    // Diagnostics config delay default
-    lines.push('#define DIAG_CONFIG_DELAY 5')
+    // Diagnostics
+    if (opts.enableDiag) {
+        lines.push('#define DIAG')
+    }
+    lines.push(`#define DIAG_CONFIG_DELAY ${opts.diagConfigDelay}`)
 
     // Test mode
     if (opts.testMode) {
@@ -36,4 +51,38 @@ export function generateIOExpanderConfig(opts: IOExpanderConfigOptions): string 
 
     lines.push('')
     return lines.join('\n') + '\n'
+}
+
+/**
+ * Parse an existing myConfig.h back into IOExpanderConfigOptions.
+ * Returns defaults for any unrecognised or missing values.
+ */
+export function parseIOExpanderConfig(content: string): IOExpanderConfigOptions {
+    const opts = defaultIOExpanderConfig()
+
+    const def = (key: string): string | undefined => {
+        const m = content.match(new RegExp(`^#define\\s+${key}\\s+(.+)$`, 'm'))
+        return m?.[1]?.trim()
+    }
+    const has = (key: string): boolean =>
+        new RegExp(`^#define\\s+${key}(?:\\s|$)`, 'm').test(content)
+
+    const addr = def('I2C_ADDRESS')
+    if (addr) {
+        const n = parseInt(addr, 16)
+        if (!isNaN(n)) opts.i2cAddress = n
+    }
+
+    if (has('DIAG')) opts.enableDiag = true
+    if (has('DISABLE_I2C_PULLUPS')) opts.disablePullups = true
+
+    const delay = def('DIAG_CONFIG_DELAY')
+    if (delay) opts.diagConfigDelay = parseInt(delay, 10) || 5
+
+    const testMode = def('TEST_MODE')
+    if (testMode && ['ANALOGUE_TEST', 'INPUT_TEST', 'OUTPUT_TEST', 'PULLUP_TEST'].includes(testMode)) {
+        opts.testMode = testMode
+    }
+
+    return opts
 }

@@ -3,6 +3,7 @@ import { Router } from '@aurelia/router'
 import { InstallerState } from '../models/installer-state'
 import { ArduinoCliService } from '../services/arduino-cli.service'
 import { extraPlatforms } from '../models/product-details'
+import { ConfigService } from '../services/config.service'
 
 type SetupPhase =
     | 'splash'
@@ -19,6 +20,7 @@ export class Startup {
     private readonly router = resolve(Router)
     private readonly state = resolve(InstallerState)
     private readonly cli = resolve(ArduinoCliService)
+    private readonly config = resolve(ConfigService)
 
     phase: SetupPhase = 'splash'
     statusMessage = 'Checking Arduino CLI...'
@@ -41,6 +43,11 @@ export class Startup {
     }
 
     async attached(): Promise<void> {
+        await this.config.ready
+        if (this.config.skipStartup) {
+            this.markReady()
+            return
+        }
         await this.checkAndSetup()
     }
 

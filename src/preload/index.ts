@@ -241,6 +241,23 @@ contextBridge.exposeInMainWorld('preferences', preferencesApi)
 const configApi = {
     getMock: (): Promise<boolean> =>
         ipcRenderer.invoke('config:get-mock'),
+
+    getSkipStartup: (): Promise<boolean> =>
+        ipcRenderer.invoke('config:get-skip-startup'),
 }
 
 contextBridge.exposeInMainWorld('config', configApi)
+
+// ── Window API ───────────────────────────────────────────────────────────────
+const windowApi = {
+    onCloseRequested: (cb: () => void) => {
+        const handler = () => cb()
+        ipcRenderer.on('window:close-requested', handler)
+        return () => ipcRenderer.off('window:close-requested', handler)
+    },
+
+    forceClose: (): Promise<void> =>
+        ipcRenderer.invoke('window:force-close'),
+}
+
+contextBridge.exposeInMainWorld('electronWindow', windowApi)

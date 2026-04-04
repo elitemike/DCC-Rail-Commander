@@ -1,0 +1,66 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-4 min-h-0">
+            <div class="flex flex-col gap-4 max-w-xl">
+
+                <!-- I2C Address -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        I2C Address
+                    </label>
+                    <p class="text-xs text-gray-500">Valid range: 0x08 – 0x77. Default: 0x65.</p>
+                    <input type="text" value.bind="i2cHex" blur.trigger="onI2cAddressChange($event.target.value)"
+                        placeholder="0x65"
+                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                </div>
+
+                <!-- Pullups -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Hardware</span>
+                    <label class="flex items-center justify-between gap-4 cursor-pointer">
+                        <div>
+                            <span class="text-sm text-gray-200">Disable internal I2C pullups</span>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                Enable when external pullup resistors are already fitted.
+                            </p>
+                        </div>
+                        <input type="checkbox" checked.bind="opts.disablePullups" change.trigger="onFieldChange()"
+                            class="w-4 h-4 accent-blue-500 shrink-0" />
+                    </label>
+                </div>
+
+                <!-- Diagnostics -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Diagnostics</span>
+
+                    <label class="flex items-center justify-between gap-4 cursor-pointer">
+                        <span class="text-sm text-gray-200">Enable diagnostic output</span>
+                        <input type="checkbox" checked.bind="opts.enableDiag" change.trigger="onFieldChange()"
+                            class="w-4 h-4 accent-blue-500" />
+                    </label>
+
+                    <div if.bind="opts.enableDiag" class="flex items-center gap-3">
+                        <label class="text-xs text-gray-400 shrink-0">Display frequency (seconds)</label>
+                        <input type="number" min="1" value.bind="opts.diagConfigDelay" change.trigger="onFieldChange()"
+                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-20 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                    </div>
+                </div>
+
+                <!-- Test mode -->
+                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Test Mode</span>
+                    <p class="text-xs text-gray-500">Select a test mode to enable pin testing during startup.</p>
+                    <div class="flex flex-col gap-2 mt-1">
+                        <label repeat.for="tm of testModes"
+                            class="flex items-center gap-2.5 px-3 py-2 rounded bg-gray-900/50 border border-white/5 cursor-pointer hover:border-white/15 transition-colors">
+                            <input type="radio" name="testMode" model.bind="tm.value" checked.bind="opts.testMode"
+                                change.trigger="onFieldChange()" class="accent-blue-500" />
+                            <span class="text-sm text-gray-200">${tm.label}</span>
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</template>

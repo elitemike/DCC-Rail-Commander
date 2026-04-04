@@ -156,6 +156,17 @@
                         </p>
                     </div>
 
+                    <div if.bind="showStackedMotorShieldOption"
+                        class="bg-gray-800/50 border border-white/10 rounded-xl p-3.5">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input checked.bind="hasStackedMotorShield" type="checkbox" class="mt-0.5" />
+                            <span class="text-sm text-gray-200">
+                                This EX-CSB1 has a stacked motor shield (use <span
+                                    class="font-mono">EXCSB1_WITH_EX8874</span>)
+                            </span>
+                        </label>
+                    </div>
+
                     <div if.bind="finishError"
                         class="bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-red-300 text-sm">
                         Setup failed: ${finishError}

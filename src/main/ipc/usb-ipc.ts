@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import type { UsbManager } from '../usb-manager'
-import { IS_DEV_MOCK } from '../index'
+import { IS_MOCK_DEVICE } from '../index'
 import { MOCK_SERIAL_PORTS } from '../dev-mock'
 
 /**
@@ -23,12 +23,12 @@ import { MOCK_SERIAL_PORTS } from '../dev-mock'
  */
 export function registerUsbIpcHandlers(usbManager: UsbManager): void {
     ipcMain.handle('usb:list-serial-ports', async () => {
-        if (IS_DEV_MOCK) return MOCK_SERIAL_PORTS
+        if (IS_MOCK_DEVICE) return MOCK_SERIAL_PORTS
         return usbManager.listSerialPorts()
     })
 
     ipcMain.handle('usb:list-usb-devices', () => {
-        if (IS_DEV_MOCK) return []
+        if (IS_MOCK_DEVICE) return []
         return usbManager.listUsbDevices()
     })
 

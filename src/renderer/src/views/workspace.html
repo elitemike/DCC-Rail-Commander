@@ -131,57 +131,58 @@
         </div>
 
         <!-- ── Progress bar ──────────────────────────────────────────────── -->
-        <div if.bind="isCompiling" class="h-1 bg-gray-800">
-            <div class="h-full bg-green-500 transition-all" css="width: ${progressPercent}%"></div>
-        </div>
+        <compile-progress if.bind="isCompiling"></compile-progress>
 
         <!-- ── Main workspace: tabs + editor ────────────────────────────── -->
         <div class="flex flex-1 overflow-hidden">
 
             <!-- File tabs (left strip if many files; top tab bar for few) -->
             <div class="flex flex-col bg-gray-900/60 border-r border-white/10 min-w-40 overflow-y-auto">
-                <div class="px-3 pt-3 pb-1">
-                    <p class="text-gray-500 text-xs uppercase tracking-wider font-semibold">Config Files</p>
+                <div class="flex items-center px-3 pt-3 pb-1">
+                    <p class="text-gray-500 text-xs uppercase tracking-wider font-semibold flex-1">Configuration</p>
+                    <button click.trigger="startNewFile()" title="New custom file"
+                        class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-white/10 transition-colors text-base leading-none font-bold">+</button>
                 </div>
-                <button repeat.for="file of state.configFiles" click.trigger="setActiveFile($index)"
-                    class="flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors border-l-2" class.bind="activeFileIndex === $index
-                        ? 'border-blue-500 bg-blue-950/40 text-white'
-                        : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'">
-                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
-                    </svg>
-                    <span class="truncate">${file.name}</span>
-                </button>
-            </div>
 
-            <!-- Editor pane -->
-            <div class="flex flex-col flex-1 overflow-hidden">
-
-                <!-- Editor tab strip -->
-                <div if.bind="activeFile"
-                    class="flex items-center gap-0 bg-gray-900/50 border-b border-white/10 px-2 pt-1">
-                    <div
-                        class="flex items-center gap-2 px-4 py-2 bg-gray-950 border-b-2 border-blue-500 text-white text-sm rounded-t">
-                        <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
-                        </svg>
-                        ${activeFile.name}
+                <!-- New file inline input -->
+                <div if.bind="showNewFileInput" class="px-2 pb-2 flex flex-col gap-1">
+                    <input type="text" value.bind="newFileName" keydown.trigger="handleNewFileKeydown($event)"
+                        placeholder="filename.h" autofocus
+                        class="w-full bg-gray-800 border border-blue-500/60 text-gray-100 rounded px-2 py-1 text-xs outline-none focus:border-blue-400 transition-colors" />
+                    <div if.bind="newFileError" class="text-red-400 text-xs px-1">${newFileError}</div>
+                    <div class="flex gap-1">
+                        <button click.trigger="confirmNewFile()"
+                            class="flex-1 px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors">Create</button>
+                        <button click.trigger="cancelNewFile()"
+                            class="px-2 py-1 text-xs rounded bg-white/5 hover:bg-white/10 text-gray-400 transition-colors">Cancel</button>
                     </div>
                 </div>
 
-                <!-- Textarea editor -->
-                <div if.bind="activeFile" class="flex-1 overflow-hidden">
-                    <textarea value.bind="state.configFiles[activeFileIndex].content"
-                        class="w-full h-full bg-gray-950 text-gray-100 font-mono text-sm p-4 resize-none outline-none border-none leading-relaxed"
-                        spellcheck="false" autocomplete="off"></textarea>
+                <div repeat.for="file of state.configFiles" click.trigger="setActiveFile($index)"
+                    class="group flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
+                    class.bind="activeFileIndex === $index
+                        ? 'border-blue-500 bg-blue-950/40 text-white'
+                        : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'">
+                    <svg class="w-3.5 h-3.5 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="flex flex-col min-w-0 flex-1">
+                        <span class="truncate">${friendlyName(file.name)}</span>
+                        <span class="truncate text-xs opacity-40 font-mono"
+                            if.bind="friendlyName(file.name) !== file.name">${file.name}</span>
+                    </span>
+                    <!-- Delete button: only shown on custom (user-created) files -->
+                    <button if.bind="configEditorState.isCustomFile(file.name)"
+                        click.trigger="removeCustomFile($index, $event)" title="Delete ${file.name}"
+                        class="shrink-0 w-4 h-4 flex items-center justify-center rounded text-gray-600 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all">×</button>
                 </div>
+            </div>
 
-                <div if.bind="!activeFile" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
-                    No configuration files loaded.
-                </div>
-
+            <!-- Editor pane -->
+            <div class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
+                <file-editor-panel active-file-index.bind="activeFileIndex"
+                    class="flex flex-col flex-1"></file-editor-panel>
             </div>
         </div>
 
@@ -211,4 +212,7 @@
 
     <!-- Overlay to close device menu when clicking outside -->
     <div if.bind="showDeviceMenu" click.trigger="showDeviceMenu = false" class="fixed inset-0 z-40"></div>
+
+    <!-- Toast anchor — Syncfusion Toast is appended here at runtime -->
+    <div id="workspace-toast"></div>
 </template>

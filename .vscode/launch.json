@@ -10,12 +10,12 @@
             "name": "Main Process",
             "type": "node",
             "request": "launch",
-            "runtimeExecutable": "${workspaceFolder}/src/node_modules/.bin/electron-vite",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-vite",
             "runtimeArgs": [
                 "dev",
                 "--inspect=9229"
             ],
-            "cwd": "${workspaceFolder}/src",
+            "cwd": "${workspaceFolder}",
             "outputCapture": "std",
             "console": "integratedTerminal",
             // Don't inject VS Code's own inspector into electron-vite.
@@ -23,53 +23,53 @@
             "attachSimplePort": 9229,
             "sourceMaps": true,
             "outFiles": [
-                "${workspaceFolder}/src/out/main/**/*.js",
-                "${workspaceFolder}/src/out/preload/**/*.js"
+                "${workspaceFolder}/out/main/**/*.js",
+                "${workspaceFolder}/out/preload/**/*.js"
             ],
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/src/**",
+                "${workspaceFolder}/**",
                 "!**/node_modules/**"
             ],
             "sourceMapPathOverrides": {
-                "../../main/*": "${workspaceFolder}/src/main/*",
-                "../../preload/*": "${workspaceFolder}/src/preload/*"
+                "../../src/main/*": "${workspaceFolder}/src/main/*",
+                "../../src/preload/*": "${workspaceFolder}/src/preload/*"
             },
             "skipFiles": [
                 "<node_internals>/**",
-                "${workspaceFolder}/src/node_modules/**"
+                "${workspaceFolder}/node_modules/**"
             ]
         },
         {
             "name": "Main Process (Mock)",
             "type": "node",
             "request": "launch",
-            "runtimeExecutable": "${workspaceFolder}/src/node_modules/.bin/electron-vite",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-vite",
             "runtimeArgs": [
                 "dev",
                 "--inspect=9229",
                 "--",
-                "--mock"
+                "--mock-device"
             ],
-            "cwd": "${workspaceFolder}/src",
+            "cwd": "${workspaceFolder}",
             "outputCapture": "std",
             "console": "integratedTerminal",
             "attachSimplePort": 9229,
             "sourceMaps": true,
             "outFiles": [
-                "${workspaceFolder}/src/out/main/**/*.js",
-                "${workspaceFolder}/src/out/preload/**/*.js"
+                "${workspaceFolder}/out/main/**/*.js",
+                "${workspaceFolder}/out/preload/**/*.js"
             ],
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/src/**",
+                "${workspaceFolder}/**",
                 "!**/node_modules/**"
             ],
             "sourceMapPathOverrides": {
-                "../../main/*": "${workspaceFolder}/src/main/*",
-                "../../preload/*": "${workspaceFolder}/src/preload/*"
+                "../../src/main/*": "${workspaceFolder}/src/main/*",
+                "../../src/preload/*": "${workspaceFolder}/src/preload/*"
             },
             "skipFiles": [
                 "<node_internals>/**",
-                "${workspaceFolder}/src/node_modules/**"
+                "${workspaceFolder}/node_modules/**"
             ]
         },
         // ── Renderer process (Chromium) ───────────────────────────────────────
@@ -84,11 +84,11 @@
             "webRoot": "${workspaceFolder}/src/renderer/src",
             "sourceMaps": true,
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/src/**",
+                "${workspaceFolder}/**",
                 "!**/node_modules/**"
             ],
             "skipFiles": [
-                "${workspaceFolder}/src/node_modules/**"
+                "${workspaceFolder}/node_modules/**"
             ]
         }
     ],

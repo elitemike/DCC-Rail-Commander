@@ -1,0 +1,278 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <!-- Tab strip: Visual | Raw -->
+        <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
+            <button click.trigger="setTab('visual')"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'visual' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Visual
+            </button>
+            <button click.trigger="setTab('raw')"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'raw' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                Raw
+            </button>
+            <span class="ml-auto flex items-baseline gap-1.5 px-3 py-2">
+                <span class="text-xs text-gray-400">${turnouts.length} entries</span>
+                <span class="text-xs text-gray-600 font-mono">myTurnouts.h</span>
+            </span>
+        </div>
+
+        <!-- ── Visual tab ─────────────────────────────────────────────────── -->
+        <div if.bind="activeTab === 'visual'" style="flex:1;min-height:0;overflow:hidden;">
+            <div id="turnout-splitter" style="height:100%;width:100%;">
+
+                <!-- Sidebar -->
+                <div class="flex flex-col overflow-hidden border-r border-white/10 bg-gray-900/40">
+                    <div class="flex items-center px-3 py-2.5 border-b border-white/10">
+                        <span
+                            class="text-xs font-semibold text-gray-400 uppercase tracking-wider flex-1">Turnouts</span>
+                        <button click.trigger="addEntry()"
+                            class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
+                            title="Add new turnout">+</button>
+                    </div>
+
+                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Turnouts">
+                        <a repeat.for="turnout of turnouts" click.trigger="selectEntry(turnout)"
+                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
+                            class.bind="selectedIndex === $index
+                            ? 'bg-blue-900/60 text-white font-medium'
+                            : 'text-gray-300 hover:bg-white/5 hover:text-white'">
+                            <span class="flex-1 min-w-0 truncate">${getDisplayName(turnout)}</span>
+                            <button
+                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                click.trigger="removeEntryByIndex($index, $event)" title="Remove">×</button>
+                        </a>
+                    </nav>
+
+                    <div if.bind="turnouts.length === 0" class="flex-1 flex items-center justify-center p-4">
+                        <p class="text-gray-600 text-xs text-center">No turnouts.<br>Click + to add one.</p>
+                    </div>
+                </div>
+
+                <!-- Detail panel -->
+                <div class="flex flex-col overflow-hidden">
+                    <div if.bind="editBuffer" class="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
+
+                        <!-- Input form: SERVO_TURNOUT -->
+                        <div if.bind="editBuffer.type === 'SERVO'"
+                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            <div class="flex flex-col gap-4">
+
+                                <div class="flex gap-4">
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pin
+                                            (VPin)</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.pin" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                </div>
+
+                                <div class="flex gap-4">
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Active
+                                            Angle</label>
+                                        <input type="number" min="0" max="512"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.activeAngle" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Inactive
+                                            Angle</label>
+                                        <input type="number" min="0" max="512"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.inactiveAngle" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Profile</label>
+                                        <select
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.profile"
+                                            change.trigger="updateProfile(editBuffer.profile)">
+                                            <option repeat.for="p of profiles" value.bind="p">${p}</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.description" placeholder="Enter description..."
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.comment"
+                                        placeholder="Optional comment (appears after // in file)"
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input form: TURNOUT (DCC accessory decoder) -->
+                        <div if.bind="editBuffer.type === 'DCC'"
+                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex gap-4">
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Address</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.addr" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sub-Address</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.subAddr" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.description" placeholder="Enter description..."
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.comment"
+                                        placeholder="Optional comment (appears after // in file)"
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input form: PIN_TURNOUT (GPIO) -->
+                        <div if.bind="editBuffer.type === 'PIN'"
+                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex gap-4">
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label
+                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                    <div class="flex flex-col gap-1.5 flex-1">
+                                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pin
+                                            (VPin)</label>
+                                        <input type="number"
+                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            value.bind="editBuffer.pin" blur.trigger="onFieldBlur()" />
+                                    </div>
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.description" placeholder="Enter description..."
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <label
+                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                    <input type="text"
+                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        value.bind="editBuffer.comment"
+                                        placeholder="Optional comment (appears after // in file)"
+                                        blur.trigger="onFieldBlur()" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration summary + visual angle bar (SERVO only) -->
+                        <div if.bind="editBuffer.type === 'SERVO'"
+                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Configuration
+                                Summary</h3>
+
+                            <div class="flex flex-wrap gap-4 mb-4">
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-xs text-gray-500">ID</span>
+                                    <span class="text-sm font-medium text-gray-200">${editBuffer.id}</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-xs text-gray-500">Pin (VPin)</span>
+                                    <span class="text-sm font-medium text-gray-200">${editBuffer.pin}</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-xs text-gray-500">Active Angle</span>
+                                    <span class="text-sm font-medium text-gray-200">${editBuffer.activeAngle}</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-xs text-gray-500">Inactive Angle</span>
+                                    <span class="text-sm font-medium text-gray-200">${editBuffer.inactiveAngle}</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-xs text-gray-500">Profile</span>
+                                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold text-white"
+                                        class.bind="profileColor(editBuffer.profile)">${editBuffer.profile}</span>
+                                </div>
+                            </div>
+
+                            <!-- Angle visualisation bar -->
+                            <div class="relative h-5 bg-gray-700 rounded border border-white/10">
+                                <!-- Inactive angle marker (red) -->
+                                <div class="absolute -top-1 w-0.5 h-7 rounded transform -translate-x-1/2 bg-red-500"
+                                    css="left: ${(editBuffer.inactiveAngle / 512) * 100}%"></div>
+                                <!-- Active angle marker (green) -->
+                                <div class="absolute -top-1 w-0.5 h-7 rounded transform -translate-x-1/2 bg-green-500"
+                                    css="left: ${(editBuffer.activeAngle / 512) * 100}%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-600 mt-1">
+                                <span>0</span><span>256</span><span>512</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div if.bind="!editBuffer" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                        <p if.bind="turnouts.length > 0">Select a turnout to edit its properties.</p>
+                        <p if.bind="turnouts.length === 0">No turnouts. Click + to add one.</p>
+                    </div>
+                </div>
+            </div><!-- end #turnout-splitter -->
+        </div><!-- end visual tab -->
+
+        <!-- ── Raw tab ────────────────────────────────────────────────────── -->
+        <div if.bind="activeTab === 'raw'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myTurnouts.h"
+                on-text-change.bind="onRawChange"></monaco-editor>
+        </div>
+
+    </div>
+</template>

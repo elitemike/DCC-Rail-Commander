@@ -1,0 +1,86 @@
+<template>
+    <div class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
+
+        <!-- config.h → config-h-editor -->
+        <div if.bind="currentView === 'configH'" class="flex flex-col flex-1 overflow-hidden">
+            <config-h-editor></config-h-editor>
+        </div>
+
+        <!-- myRoster.h → roster-editor -->
+        <div if.bind="currentView === 'roster'" class="flex flex-col flex-1 overflow-hidden">
+            <roster-editor></roster-editor>
+        </div>
+
+        <!-- myTurnouts.h → turnout-editor -->
+        <div if.bind="currentView === 'turnouts'" class="flex flex-col flex-1 overflow-hidden">
+            <turnout-editor></turnout-editor>
+        </div>
+
+        <!-- myAutomation.h → editable Monaco editor with managed sections -->
+        <div if.bind="currentView === 'automation'" class="flex flex-col h-full">
+            <div class="flex items-center gap-2 px-3 py-2.5 border-b border-white/10 bg-gray-900/60 shrink-0">
+                <svg class="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-sm font-semibold text-white">Automation</span>
+                <span class="text-xs text-gray-600 font-mono">myAutomation.h</span>
+                <span
+                    class="px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-400 border border-green-500/20">Editable</span>
+                <span class="ml-auto text-xs text-gray-600">Managed sections regenerate automatically</span>
+            </div>
+            <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <monaco-editor value.two-way="automationContent" language="cpp"
+                    filename="myAutomation.h"></monaco-editor>
+            </div>
+        </div>
+
+        <!-- mySensors.h → sensors-editor -->
+        <div if.bind="currentView === 'sensors'" class="flex flex-col flex-1 overflow-hidden">
+            <sensors-editor></sensors-editor>
+        </div>
+
+        <!-- mySignals.h → signals-editor -->
+        <div if.bind="currentView === 'signals'" class="flex flex-col flex-1 overflow-hidden">
+            <signals-editor></signals-editor>
+        </div>
+
+        <!-- myRoutes.h → routes-editor -->
+        <div if.bind="currentView === 'routes'" class="flex flex-col flex-1 overflow-hidden">
+            <routes-editor></routes-editor>
+        </div>
+
+        <!-- mySequences.h → sequences-editor -->
+        <div if.bind="currentView === 'sequences'" class="flex flex-col flex-1 overflow-hidden">
+            <sequences-editor></sequences-editor>
+        </div>
+
+        <!-- myAliases.h → aliases-editor -->
+        <div if.bind="currentView === 'aliases'" class="flex flex-col flex-1 overflow-hidden">
+            <aliases-editor></aliases-editor>
+        </div>
+
+        <!-- Generic / unknown file → plain Monaco editor -->
+        <div if.bind="currentView === 'generic' && activeFile" class="flex flex-col flex-1 min-h-0">
+            <div class="flex items-center gap-2 px-3 py-2.5 border-b border-white/10 bg-gray-900/60 shrink-0">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-sm font-semibold text-white">${friendlyName(activeFile.name)}</span>
+                <span class="text-xs text-gray-600 font-mono"
+                    if.bind="friendlyName(activeFile.name) !== activeFile.name">${activeFile.name}</span>
+            </div>
+            <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <monaco-editor value.two-way="genericContent" language="cpp"
+                    filename.bind="activeFile.name"></monaco-editor>
+            </div>
+        </div>
+
+        <!-- No file selected -->
+        <div if.bind="currentView === 'none'" class="h-full flex items-center justify-center text-gray-600 text-sm">
+            No configuration file selected.
+        </div>
+
+    </div>
+</template>
