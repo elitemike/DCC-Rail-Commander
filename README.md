@@ -1,6 +1,8 @@
+Note - This is a port to electron with new features, this is not usable in it's current state, please use the original EX-Installer
+
 # EX-Installer
 
-EX-Installer is a Python based, cross-platform installer for the various Arduino based DCC-EX products.
+EX-Installer is an Electron based cross-platform installer for the various Arduino based DCC-EX products.
 
 Binaries will be made available to allow EX-Installer to be run on:
 
