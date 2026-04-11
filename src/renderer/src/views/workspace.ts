@@ -1,4 +1,4 @@
-import { resolve } from 'aurelia'
+import { queueTask, resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
 import { IDialogService } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
@@ -13,6 +13,7 @@ import { DeviceWizard } from '../components/device-wizard'
 import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { parseDeviceFromHeader } from '../utils/configHeaderParser'
+import { Splitter } from '@syncfusion/ej2-layouts'
 
 export class Workspace {
     private readonly router = resolve(Router)
@@ -48,6 +49,35 @@ export class Workspace {
     showDeviceMenu = false
     savedConfigs: SavedConfiguration[] = []
 
+    // ── Device monitor ────────────────────────────────────────────────────────
+    showMonitor = false
+
+    // ── Bottom panel / splitter ──────────────────────────────────────────────
+    private splitterObj: Splitter | null = null
+    activeBottomTab: 'output' | 'monitor' = 'output'
+
+    toggleMonitor(): void {
+        this.showMonitor = !this.showMonitor
+        if (this.showMonitor) {
+            this.activeBottomTab = 'monitor'
+            this.openBottomPanel()
+        } else if (this.activeBottomTab === 'monitor') {
+            this.activeBottomTab = 'output'
+        }
+    }
+
+    setBottomTab(tab: 'output' | 'monitor'): void {
+        this.activeBottomTab = tab
+    }
+
+    private openBottomPanel(): void {
+        this.splitterObj?.expand(1)
+    }
+
+    closeBottomPanel(): void {
+        this.splitterObj?.collapse(1)
+    }
+
     async binding(): Promise<void> {
         await this.config.ready
         this.isMock = this.config.isMock
@@ -58,6 +88,26 @@ export class Workspace {
         await this.loadSavedConfigs()
         await this.refreshConfigFilesFromDisk()
         this.configEditorState.loadFromInstallerState()
+    }
+
+    attached(): void {
+        queueTask(() => {
+            this.splitterObj = new Splitter({
+                orientation: 'Vertical',
+                width: '100%',
+                height: '100%',
+                paneSettings: [
+                    { size: '65%', min: '100px' },
+                    { size: '35%', min: '60px', collapsed: true },
+                ],
+            })
+            this.splitterObj.appendTo('#workspace-splitter')
+        })
+    }
+
+    detaching(): void {
+        this.splitterObj?.destroy()
+        this.splitterObj = null
     }
 
     /**
@@ -263,6 +313,8 @@ export class Workspace {
         this.compileError = null
         this.compileSuccess = null
         this.progressPercent = 10
+        this.activeBottomTab = 'output'
+        this.openBottomPanel()
 
         try {
             await this.saveFiles()
@@ -315,8 +367,16 @@ export class Workspace {
 
             this.compileLog += `Compiling for ${fqbn}...\n`
             this.progressPercent = 40
+            let streamedLines = 0
+            const unsubCompile = this.cli.subscribeToProgress(({ phase, message }) => {
+                if (phase === 'compile') {
+                    this.compileLog += message + '\n'
+                    streamedLines++
+                }
+            })
             const result = await this.cli.compile(this.state.scratchPath!, fqbn)
-            this.compileLog += result.output ?? ''
+            unsubCompile()
+            if (streamedLines === 0) this.compileLog += result.output ?? ''
             if (!result.success) throw new Error(result.error ?? 'Compilation failed')
 
             this.progressPercent = 70
@@ -356,8 +416,16 @@ export class Workspace {
 
             this.compileLog += `\nUploading to ${device.port}...\n`
             this.progressPercent = 80
+            let streamedUploadLines = 0
+            const unsubUpload = this.cli.subscribeToProgress(({ phase, message }) => {
+                if (phase === 'upload') {
+                    this.compileLog += message + '\n'
+                    streamedUploadLines++
+                }
+            })
             const result = await this.cli.upload(this.state.scratchPath!, fqbn, device.port)
-            this.compileLog += result.output ?? ''
+            unsubUpload()
+            if (streamedUploadLines === 0) this.compileLog += result.output ?? ''
             if (!result.success) throw new Error(result.error ?? 'Upload failed')
 
             this.progressPercent = 100

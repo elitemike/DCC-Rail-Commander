@@ -266,16 +266,27 @@ export class ArduinoCliService {
     async compile(sketchPath: string, fqbn: string): Promise<{ success: boolean; output: string; error?: string }> {
         this.emitProgress('compile', `Compiling for ${fqbn}...`)
         return new Promise((resolve) => {
-            const child = spawn(this.cliBinaryPath, ['compile', '--fqbn', fqbn, sketchPath, '--format', 'json'], {
+            const child = spawn(this.cliBinaryPath, ['compile', '--fqbn', fqbn, sketchPath], {
                 timeout: 300000,
             })
             let stdout = ''
             let stderr = ''
             child.stdout.on('data', (d: Buffer) => {
-                stdout += d.toString()
-                this.emitProgress('compile', d.toString().trim())
+                const text = d.toString()
+                stdout += text
+                for (const line of text.split(/\r\n|\r|\n/)) {
+                    const trimmed = line.trim()
+                    if (trimmed) this.emitProgress('compile', trimmed)
+                }
             })
-            child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+            child.stderr.on('data', (d: Buffer) => {
+                const text = d.toString()
+                stderr += text
+                for (const line of text.split(/\r\n|\r|\n/)) {
+                    const trimmed = line.trim()
+                    if (trimmed) this.emitProgress('compile', trimmed)
+                }
+            })
             child.on('close', (code) => {
                 resolve({
                     success: code === 0,
@@ -292,16 +303,27 @@ export class ArduinoCliService {
     async upload(sketchPath: string, fqbn: string, port: string): Promise<{ success: boolean; output: string; error?: string }> {
         this.emitProgress('upload', `Uploading to ${port}...`)
         return new Promise((resolve) => {
-            const child = spawn(this.cliBinaryPath, ['upload', '-p', port, '--fqbn', fqbn, sketchPath, '--format', 'json'], {
+            const child = spawn(this.cliBinaryPath, ['upload', '-p', port, '--fqbn', fqbn, '--verbose', sketchPath], {
                 timeout: 300000,
             })
             let stdout = ''
             let stderr = ''
             child.stdout.on('data', (d: Buffer) => {
-                stdout += d.toString()
-                this.emitProgress('upload', d.toString().trim())
+                const text = d.toString()
+                stdout += text
+                for (const line of text.split(/\r\n|\r|\n/)) {
+                    const trimmed = line.trim()
+                    if (trimmed) this.emitProgress('upload', trimmed)
+                }
             })
-            child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+            child.stderr.on('data', (d: Buffer) => {
+                const text = d.toString()
+                stderr += text
+                for (const line of text.split(/\r\n|\r|\n/)) {
+                    const trimmed = line.trim()
+                    if (trimmed) this.emitProgress('upload', trimmed)
+                }
+            })
             child.on('close', (code) => {
                 resolve({
                     success: code === 0,

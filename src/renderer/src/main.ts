@@ -35,6 +35,7 @@ import { SequencesEditorCustomElement } from './components/sequences-editor'
 import { AliasesEditorCustomElement } from './components/aliases-editor'
 
 // Per-product visual config forms
+import { SerialMonitorCustomElement } from './components/serial-monitor'
 import { CommandstationConfigFormCustomElement } from './components/config-forms/commandstation-config-form'
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
 
@@ -84,6 +85,7 @@ new Aurelia()
         AliasesEditorCustomElement,
         ConfirmDialog,
         CompileProgressCustomElement,
+        SerialMonitorCustomElement,
         CommandstationConfigFormCustomElement,
         IOExpanderConfigFormCustomElement,
     )

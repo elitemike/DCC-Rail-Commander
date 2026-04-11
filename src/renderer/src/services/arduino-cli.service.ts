@@ -56,6 +56,11 @@ export class ArduinoCliService {
         return window.arduinoCli.listBoards()
     }
 
+    subscribeToProgress(cb: (payload: { phase: string; message: string }) => void): () => void {
+        if (!window.arduinoCli) return () => { }
+        return window.arduinoCli.onProgress(cb)
+    }
+
     async compile(sketchPath: string, fqbn: string): Promise<CompileResult> {
         return window.arduinoCli.compile(sketchPath, fqbn)
     }

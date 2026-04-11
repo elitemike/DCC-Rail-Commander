@@ -35,6 +35,7 @@ function makeWorkspace(overrides: {
     const cli = {
         compile: vi.fn().mockResolvedValue({ success: true, output: '' }),
         upload: vi.fn().mockResolvedValue({ success: true, output: '' }),
+        subscribeToProgress: vi.fn().mockReturnValue(() => { }),
         ...overrides.cli,
     } as unknown as ArduinoCliService
 

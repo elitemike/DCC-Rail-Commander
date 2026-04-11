@@ -450,13 +450,13 @@ describe('compile()', () => {
         expect(args).toContain('/my/sketch')
     })
 
-    it('passes --format json to spawn', async () => {
+    it('does not pass --format json to spawn', async () => {
         const svc = makeService()
         mockSpawn.mockReturnValue(makeSpawnChild(0))
         await svc.compile('/sketch', 'arduino:avr:mega')
         const args: string[] = mockSpawn.mock.calls[0][1]
-        expect(args).toContain('--format')
-        expect(args).toContain('json')
+        expect(args).not.toContain('--format')
+        expect(args).not.toContain('json')
     })
 
     it('resolves success=false on spawn error event', async () => {
@@ -488,7 +488,7 @@ describe('compile()', () => {
 //   enableWifi: true, wifiMode: 'ap', wifiChannel: 1,
 //   disableEeprom: true (all auto-selected for ESP32).
 //
-// compile() builds: ['compile', '--fqbn', fqbn, sketchPath, '--format', 'json']
+// compile() builds: ['compile', '--fqbn', fqbn, sketchPath]
 
 describe('compile() — EX-CSB1 configuration', () => {
     // CSB1 specific constants (match arduino-cli-ipc.ts KNOWN_BOARDS entry)
@@ -517,7 +517,7 @@ describe('compile() — EX-CSB1 configuration', () => {
 
     it('spawns arduino-cli with the exact CSB1 arg sequence', async () => {
         // Verifies the full ordered arg array:
-        // ['compile', '--fqbn', 'esp32:esp32:esp32', <sketchPath>, '--format', 'json']
+        // ['compile', '--fqbn', 'esp32:esp32:esp32', <sketchPath>]
         const svc = makeService()
         mockSpawn.mockReturnValue(makeSpawnChild(0))
         await svc.compile(CSB1_SKETCH_PATH, CSB1_FQBN)
@@ -528,8 +528,6 @@ describe('compile() — EX-CSB1 configuration', () => {
             '--fqbn',
             CSB1_FQBN,
             CSB1_SKETCH_PATH,
-            '--format',
-            'json',
         ])
     })
 

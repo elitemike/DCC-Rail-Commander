@@ -26,6 +26,8 @@
         "@aurelia/vite-plugin": "^2.0.0-rc.0",
         "@fontsource/roboto": "^5.2.10",
         "@syncfusion/ej2": "^32.1.24",
+        "@xterm/addon-fit": "^0.11.0",
+        "@xterm/xterm": "^6.0.0",
         "aurelia": "^2.0.0-rc.0",
         "electron-store": "^11.0.2",
         "monaco-editor": "^0.55.1",
@@ -43,11 +45,11 @@
         "electron": "^40.6.0",
         "electron-vite": "^5.0.0",
         "postcss-import": "^16.1.1",
+        "rimraf": "^5.0.1",
         "tailwindcss": "^4.2.0",
         "typescript": "^5.7.0",
         "vite": "^7.3.1",
         "vite-plugin-monaco-editor": "^1.1.0",
-        "rimraf": "^5.0.1",
         "vitest": "^4.0.18"
     },
     "engines": {

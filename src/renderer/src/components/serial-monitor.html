@@ -1,18 +1,35 @@
-<template>
-    <div class="serial-monitor flex flex-col h-full border rounded-lg overflow-hidden" if.bind="visible">
-        <div class="flex items-center justify-between px-4 py-2 bg-gray-100 border-b">
-            <h3 class="font-bold text-sm">Serial Monitor</h3>
-            <button click.trigger="close()" class="e-btn e-small e-outline">Close</button>
-        </div>
+<div class="flex flex-col w-full h-full bg-[#0d1117] border-t border-white/10 overflow-hidden">
 
-        <div class="flex-1 overflow-y-auto bg-black text-green-400 font-mono text-xs p-3 min-h-50" ref="outputEl">
-            <div repeat.for="line of output">${line}</div>
-        </div>
+    <!-- \u2500\u2500 Header bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 -->
+    <div class="flex items-center gap-3 px-3 py-1.5 bg-gray-900/80 border-b border-white/10 shrink-0">
+        <!-- Terminal icon -->
+        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span class="text-white text-sm font-semibold">Device Monitor</span>
+        <!-- Status badge -->
+        <span class="text-xs font-mono" class.bind="statusColor">${statusText}</span>
 
-        <div class="flex gap-2 p-2 border-t bg-gray-50">
-            <input type="text" value.bind="command" keydown.trigger="onKeydown($event)" placeholder="Enter command..."
-                class="flex-1 px-3 py-1 border rounded text-sm" />
-            <button click.trigger="send()" class="e-btn e-primary e-small">Send</button>
+        <div class="flex-1"></div>
+
+        <!-- Quick commands — collapsible row -->
+        <div class="flex flex-wrap items-center gap-1">
+            <!-- Status group -->
+            <button repeat.for="qc of quickCommands" click.trigger="sendQuickCommand(qc.cmd)" title="Send: ${qc.cmd}"
+                class="px-2 py-0.5 rounded text-xs font-mono transition-colors" class.bind="qc.group === 'estop'
+                        ? 'bg-red-700/70 hover:bg-red-600 text-red-100'
+                        : qc.group === 'power'
+                        ? 'bg-blue-700/50 hover:bg-blue-600/70 text-blue-200'
+                        : qc.group === 'exrail'
+                        ? 'bg-purple-700/50 hover:bg-purple-600/70 text-purple-200'
+                        : 'bg-white/5 hover:bg-white/15 text-gray-300'">
+                ${qc.label}
+            </button>
         </div>
     </div>
-</template>
+
+    <!-- \u2500\u2500 xterm.js terminal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 -->
+    <div ref="terminalEl" class="flex-1 overflow-hidden p-1" style="min-height: 0;"></div>
+
+</div>

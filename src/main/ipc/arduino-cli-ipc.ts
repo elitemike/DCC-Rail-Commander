@@ -73,15 +73,16 @@ export function registerArduinoCliIpcHandlers(arduinoCliService: ArduinoCliServi
     ipcMain.handle('arduino-cli:compile', async (_event, sketchPath: string, fqbn: string) => {
         console.debug('[ipc] compile request', { sketchPath, fqbn, IS_MOCK_COMPILE })
         if (IS_MOCK_COMPILE) {
-            await new Promise(r => setTimeout(r, 800))
-            const mockResult = {
-                success: true,
-                output: [
-                    `Compiling for ${fqbn} (mock)...`,
-                    `Sketch uses 12345 bytes (4%) of program storage space. Maximum is 253952 bytes.`,
-                    `Global variables use 2300 bytes (28%) of dynamic memory, leaving 5892 bytes for local variables.`,
-                ].join('\n'),
-            }
+            const emitMock = (msg: string) => BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed()) win.webContents.send('arduino-cli:progress', { phase: 'compile', message: msg })
+            })
+            await new Promise(r => setTimeout(r, 200))
+            emitMock(`Compiling for ${fqbn} (mock)...`)
+            await new Promise(r => setTimeout(r, 400))
+            emitMock(`Sketch uses 12345 bytes (4%) of program storage space. Maximum is 253952 bytes.`)
+            await new Promise(r => setTimeout(r, 200))
+            emitMock(`Global variables use 2300 bytes (28%) of dynamic memory, leaving 5892 bytes for local variables.`)
+            const mockResult = { success: true, output: '' }
             console.debug('[ipc] compile mock result', mockResult)
             return mockResult
         }

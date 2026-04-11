@@ -1,7 +1,16 @@
+/* ── JetBrains Mono Nerd Font (bundled) — for xterm.js powerline glyphs ── */
+@font-face {
+    font-family: 'JetBrains Mono NF';
+    src: url('./assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
 @import "@fontsource/roboto/300.css";
 @import "@fontsource/roboto/400.css";
 @import "@fontsource/roboto/500.css";
 @import "@fontsource/roboto/700.css";
+@import "@xterm/xterm/css/xterm.css";
 @import "tailwindcss";
 @import "@syncfusion/ej2-base/styles/tailwind-dark.css";
 @import "@syncfusion/ej2-buttons/styles/tailwind-dark.css";
