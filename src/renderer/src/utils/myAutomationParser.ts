@@ -128,6 +128,74 @@ export interface SequenceEntry {
 export interface AliasEntry {
     name: string;
     value: string;
+    aliasType?: AliasTargetType;
+}
+
+export type AliasTargetType = 'Roster' | 'Turnout' | 'Sensor' | 'Route' | 'Sequence';
+
+export interface ObjectIdReference {
+    type: AliasTargetType;
+    id: number;
+    label: string;
+}
+
+export interface ObjectIdCollections {
+    roster: Roster[];
+    turnouts: Turnout[];
+    sensors?: SensorEntry[];
+    routes?: RouteEntry[];
+    sequences?: SequenceEntry[];
+}
+
+const VALID_ALIAS_TYPES = new Set<AliasTargetType>(['Roster', 'Turnout', 'Sensor', 'Route', 'Sequence']);
+
+export function parseAliasTypeComment(comment: string | undefined): AliasTargetType | undefined {
+    if (!comment) return undefined;
+    const match = comment.match(/\btype:\s*(Roster|Turnout|Sensor|Route|Sequence)\b/i);
+    if (!match) return undefined;
+
+    const normalized = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
+    return VALID_ALIAS_TYPES.has(normalized as AliasTargetType) ? normalized as AliasTargetType : undefined;
+}
+
+export function parseAliasNumericValue(value: string): number | null {
+    const trimmed = value.trim();
+    if (!/^[+-]?\d+$/.test(trimmed)) return null;
+    const parsed = Number(trimmed);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+export function getPrimaryAliasForId(aliases: AliasEntry[], id: number): AliasEntry | undefined {
+    return aliases.find(alias => parseAliasNumericValue(alias.value) === id);
+}
+
+export function collectObjectIdReferences(id: number, data: ObjectIdCollections): ObjectIdReference[] {
+    const references: ObjectIdReference[] = [];
+
+    for (const entry of data.roster) {
+        if (entry.dccAddress === id) references.push({ type: 'Roster', id, label: entry.name || `Roster ${id}` });
+    }
+    for (const entry of data.turnouts) {
+        if (entry.id === id) references.push({ type: 'Turnout', id, label: entry.description || `Turnout ${id}` });
+    }
+    for (const entry of data.sensors ?? []) {
+        if (entry.id === id) references.push({ type: 'Sensor', id, label: entry.description || `Sensor ${id}` });
+    }
+    for (const entry of data.routes ?? []) {
+        if (entry.id === id) references.push({ type: 'Route', id, label: entry.description || `Route ${id}` });
+    }
+    for (const entry of data.sequences ?? []) {
+        if (entry.id === id) references.push({ type: 'Sequence', id, label: `Sequence ${id}` });
+    }
+
+    return references;
+}
+
+export function inferAliasTypes(alias: AliasEntry, data: ObjectIdCollections): AliasTargetType[] {
+    const numericValue = parseAliasNumericValue(alias.value);
+    if (numericValue === null) return [];
+
+    return Array.from(new Set(collectObjectIdReferences(numericValue, data).map(reference => reference.type)));
 }
 
 export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
@@ -243,17 +311,21 @@ export function parseAliasesFromFile(fileContent: string): AliasEntry[] {
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const defRe = /^\s*#define\s+(\w+)\s+"?([^\"]*)"?\s*(?:\/\/.*)?$/gm;
+    const defRe = /^\s*#define\s+(\w+)\s+"?([^\"]*)"?\s*(?:\/\/\s*(.*))?$/gm;
     const out: AliasEntry[] = [];
     let m: RegExpExecArray | null;
     while ((m = defRe.exec(uncommented)) !== null) {
-        out.push({ name: m[1], value: m[2] });
+        out.push({ name: m[1], value: m[2], aliasType: parseAliasTypeComment(m[3]) });
     }
     return out;
 }
 
 export function serializeAliasesToFile(aliases: AliasEntry[]): string {
-    return aliases.map(a => `#define ${a.name} "${a.value}"`).join('\n');
+    return aliases.map(a => {
+        let line = `#define ${a.name} "${a.value}"`;
+        if (a.aliasType) line += ` // type: ${a.aliasType}`;
+        return line;
+    }).join('\n');
 }
 
 // ─── Roster parsing ─────────────────────────────────────────────────────────

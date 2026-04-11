@@ -318,6 +318,8 @@ export class Home {
     }
 
     async loadConfig(config: SavedConfiguration): Promise<void> {
+        const { files: hydratedFiles, changed } = await this.rehydrateConfigFilesFromDisk(config)
+
         this.state.selectedDevice = {
             name: config.deviceName,
             port: config.devicePort,
@@ -329,9 +331,59 @@ export class Home {
         this.state.repoPath = config.repoPath
         this.state.scratchPath = config.scratchPath
         this.state.sourceFolder = config.sourceFolder ?? null
-        this.state.configFiles = config.configFiles.map((f) => ({ ...f }))
+        this.state.configFiles = hydratedFiles.map((f) => ({ ...f }))
         this.state.activeConfigId = config.id
+
+        if (changed) {
+            const idx = this.state.savedConfigurations.findIndex((c) => c.id === config.id)
+            if (idx !== -1) {
+                this.state.savedConfigurations[idx] = {
+                    ...this.state.savedConfigurations[idx],
+                    configFiles: hydratedFiles.map((f) => ({ ...f })),
+                }
+                await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+            }
+        }
+
         await this.router.load('workspace')
+    }
+
+    private async rehydrateConfigFilesFromDisk(config: SavedConfiguration): Promise<{
+        files: Array<{ name: string; content: string }>
+        changed: boolean
+    }> {
+        const roots = [
+            ...(config.sourceFolder ? [config.sourceFolder] : []),
+            config.scratchPath,
+        ]
+
+        let changed = false
+        const files: Array<{ name: string; content: string }> = []
+
+        for (const f of config.configFiles) {
+            let diskContent: string | null = null
+
+            for (const root of roots) {
+                const diskPath = `${root}/${f.name}`
+                const exists = await this.files.exists(diskPath)
+                if (!exists) continue
+                try {
+                    diskContent = await this.files.readFile(diskPath)
+                    break
+                } catch {
+                    // Continue fallback search across candidate roots.
+                }
+            }
+
+            if (diskContent !== null) {
+                if (diskContent !== f.content) changed = true
+                files.push({ name: f.name, content: diskContent })
+            } else {
+                files.push({ ...f })
+            }
+        }
+
+        return { files, changed }
     }
 
     async deleteConfig(config: SavedConfiguration, event: Event): Promise<void> {

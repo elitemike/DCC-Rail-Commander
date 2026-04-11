@@ -11,7 +11,7 @@
 import { test as base, expect, _electron as electron } from '@playwright/test'
 import type { Page, ElectronApplication } from '@playwright/test'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'fs'
-import { join, resolve } from 'path'
+import { basename, join, resolve } from 'path'
 import { tmpdir } from 'os'
 
 // Strip ELECTRON_RUN_AS_NODE so the binary runs as Electron, not Node.js.
@@ -459,6 +459,96 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         expect(savedContent).toContain('DCCEX-Installer')
         expect(savedContent).toContain('ROSTER(3, "Thomas"')
         expect(savedContent).toContain('ROSTER(5, "Percy"')
+    })
+
+    test('Save persists roster alias edits to myAliases.h in source folder', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8')
+        writeFileSync(join(sourceFolder, 'myRoster.h'), EXTERNAL_ROSTER_H, 'utf-8')
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await homePage.getByText('Roster', { exact: true }).first().click()
+        await homePage.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const aliasInput = homePage
+            .locator('div:has(> label:has-text("Alias")) input[type="text"]')
+            .first()
+        await aliasInput.fill('THOMAS_ALIAS')
+        await aliasInput.blur()
+
+        await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.waitForTimeout(500)
+
+        const aliasesPath = join(sourceFolder, 'myAliases.h')
+        expect(existsSync(aliasesPath)).toBe(true)
+        const aliasesContent = readFileSync(aliasesPath, 'utf-8')
+        expect(aliasesContent).toContain('#define THOMAS_ALIAS "3" // type: Roster')
+    })
+
+    test('Save persists roster alias when Save is clicked without leaving the alias field', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8')
+        writeFileSync(join(sourceFolder, 'myRoster.h'), EXTERNAL_ROSTER_H, 'utf-8')
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await homePage.getByText('Roster', { exact: true }).first().click()
+        await homePage.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const aliasInput = homePage
+            .locator('div:has(> label:has-text("Alias")) input[type="text"]')
+            .first()
+        await aliasInput.fill('THOMAS_ALIAS_NO_BLUR')
+
+        // Intentionally do not blur the alias field before saving.
+        await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.waitForTimeout(500)
+
+        const aliasesPath = join(sourceFolder, 'myAliases.h')
+        expect(existsSync(aliasesPath)).toBe(true)
+        const aliasesContent = readFileSync(aliasesPath, 'utf-8')
+        expect(aliasesContent).toContain('#define THOMAS_ALIAS_NO_BLUR "3" // type: Roster')
+    })
+
+    test('reopening saved config reads alias content from disk (not stale cache)', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8')
+        writeFileSync(join(sourceFolder, 'myRoster.h'), EXTERNAL_ROSTER_H, 'utf-8')
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await homePage.getByText('Roster', { exact: true }).first().click()
+        await homePage.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const aliasInput = homePage
+            .locator('div:has(> label:has-text("Alias")) input[type="text"]')
+            .first()
+        await aliasInput.fill('CACHED_ALIAS')
+        await aliasInput.blur()
+
+        await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.waitForTimeout(500)
+
+        const aliasesPath = join(sourceFolder, 'myAliases.h')
+        writeFileSync(aliasesPath, '#define DISK_ALIAS "3" // type: Roster\n', 'utf-8')
+
+        await homePage.getByRole('button', { name: 'EX-Installer' }).click()
+        await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
+
+        await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await homePage.getByText('Roster', { exact: true }).first().click()
+        await homePage.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const reopenedAliasInput = homePage
+            .locator('div:has(> label:has-text("Alias")) input[type="text"]')
+            .first()
+        await expect(reopenedAliasInput).toHaveValue('DISK_ALIAS')
     })
 
 })

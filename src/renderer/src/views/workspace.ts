@@ -61,22 +61,39 @@ export class Workspace {
     }
 
     /**
-     * Re-reads each config file from disk, replacing any empty content.
-     * This heals stale saved configs and handles the first-ever load after
-     * the mock repo is seeded.
+     * Re-reads each config file from disk to keep editor state aligned with
+     * on-disk truth. For Load-from-Folder flows, prefer sourceFolder reads.
      */
     private async refreshConfigFilesFromDisk(): Promise<void> {
-        if (!this.state.scratchPath) return
+        const roots = [
+            ...(this.state.sourceFolder ? [this.state.sourceFolder] : []),
+            ...(this.state.scratchPath ? [this.state.scratchPath] : []),
+        ]
+        if (roots.length === 0) return
+
         let changed = false
+
         for (const f of this.state.configFiles) {
-            if (f.content.trim() !== '') continue  // already has content
-            const diskPath = `${this.state.scratchPath}/${f.name}`
-            const diskExists = await this.files.exists(diskPath)
-            if (diskExists) {
-                f.content = await this.files.readFile(diskPath)
+            let diskContent: string | null = null
+
+            for (const root of roots) {
+                const diskPath = `${root}/${f.name}`
+                const diskExists = await this.files.exists(diskPath)
+                if (!diskExists) continue
+                try {
+                    diskContent = await this.files.readFile(diskPath)
+                    break
+                } catch {
+                    // Continue fallback search across candidate roots.
+                }
+            }
+
+            if (diskContent !== null && diskContent !== f.content) {
+                f.content = diskContent
                 changed = true
             }
         }
+
         if (changed) await this.updateSavedConfig()
     }
 
@@ -231,8 +248,9 @@ export class Workspace {
         const active = globalThis.document?.activeElement as HTMLElement | null | undefined
         if (active && typeof active.blur === 'function') {
             active.blur()
-            // Allow blur/change handlers to run before saving files.
+            // Allow framework blur/change handlers to run before saving files.
             await Promise.resolve()
+            await new Promise<void>(resolve => setTimeout(resolve, 0))
         }
     }
 

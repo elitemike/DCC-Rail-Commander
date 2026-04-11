@@ -4,6 +4,8 @@ import type { ConfigEditorState } from '../../src/renderer/src/models/config-edi
 import {
     deriveDefineGroups,
     parseRosterFromFile,
+    parseAliasesFromFile,
+    serializeAliasesToFile,
     serializeRosterToFile,
 } from '../../src/renderer/src/utils/myAutomationParser'
 import type { Roster } from '../../src/renderer/src/utils/myAutomationParser'
@@ -526,5 +528,72 @@ describe('parseRosterFromFile — preserve empty function tokens', () => {
         expect(fns[6].noFunction).toBe(true)
         expect(fns[7].name).toBe('Dimmer')
         expect(fns[8].name).toBe('Mute')
+    })
+})
+
+describe('RosterEditorCustomElement alias integration', () => {
+    it('populates aliasInput from myAliases.h when selecting a roster entry', () => {
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        const loadAppendedFunctions = vi.fn()
+        Object.assign(editor, {
+            state: { getPrimaryAliasNameForId: vi.fn().mockReturnValue('YARD_GOAT') },
+            dccAddressInput: '',
+            aliasInput: '',
+            errorMessage: '',
+            appendedFunctionsList: [],
+            loadAppendedFunctions,
+        })
+
+            ; (editor as any)._setBuffer(0, {
+                dccAddress: 42,
+                name: 'Switcher',
+                functions: [],
+                comment: '',
+            })
+
+        expect(editor.aliasInput).toBe('YARD_GOAT')
+        expect(loadAppendedFunctions).toHaveBeenCalledOnce()
+    })
+
+    it('syncs the matching alias when the roster ID or alias changes', () => {
+        const existing = {
+            dccAddress: 42,
+            name: 'Switcher',
+            functions: [],
+            comment: '',
+        }
+        const updateRosterEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                roster: [existing],
+                updateRosterEntry,
+                syncAliasForId,
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue('OLD_ALIAS'),
+            },
+            editBufferIndex: 0,
+            editBuffer: { ...existing, dccAddress: 84 },
+            aliasInput: 'NEW_ALIAS',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...existing, dccAddress: 84 })
+        expect(syncAliasForId).toHaveBeenCalledWith(42, 84, 'NEW_ALIAS', 'Roster', 'OLD_ALIAS')
+    })
+})
+
+describe('Alias type comments', () => {
+    it('parses alias type metadata from an end-of-line comment', () => {
+        const aliases = parseAliasesFromFile('#define YARD_EXIT "200" // type: Turnout')
+        expect(aliases).toEqual([{ name: 'YARD_EXIT', value: '200', aliasType: 'Turnout' }])
+    })
+
+    it('serializes alias type metadata back to myAliases.h', () => {
+        const text = serializeAliasesToFile([{ name: 'SW1', value: '42', aliasType: 'Roster' }])
+        expect(text).toBe('#define SW1 "42" // type: Roster')
     })
 })

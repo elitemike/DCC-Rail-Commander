@@ -1,4 +1,4 @@
-import { queueTask, resolve } from 'aurelia'
+import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../models/config-editor-state'
@@ -12,7 +12,16 @@ export class TurnoutEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
+    private readonly observerLocator = resolve(IObserverLocator)
     private splitterObj: Splitter | null = null
+
+    private readonly _aliasSubscriber = {
+        handleChange: () => {
+            if (this.editBuffer !== null) {
+                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id)
+            }
+        },
+    }
 
     readonly profiles: TurnoutProfile[] = ['Instant', 'Fast', 'Medium', 'Slow', 'Bounce']
     readonly defaultStates: TurnoutDefaultState[] = ['NORMAL', 'THROWN']
@@ -45,6 +54,11 @@ export class TurnoutEditorCustomElement {
 
     // ── Lifecycle ──────────────────────────────────────────────────────
     attached(): void {
+        // Refresh alias display in case aliases changed while this editor was inactive
+        if (this.editBuffer !== null) {
+            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id)
+        }
+        this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
             const savedWidth = this._loadSidebarWidth()
             this.splitterObj = new Splitter({
@@ -64,6 +78,7 @@ export class TurnoutEditorCustomElement {
     }
 
     detaching(): void {
+        this.observerLocator.getObserver(this.state, 'aliases').unsubscribe(this._aliasSubscriber)
         if (this.activeTab === 'raw') {
             const text = this.rawEditor?.flush() ?? this._rawText
             this._processRawLeave(text)
@@ -131,6 +146,9 @@ export class TurnoutEditorCustomElement {
     // ── Selection / edit buffer ───────────────────────────────────────────────
     editBuffer: Turnout | null = null
     editBufferIndex: number | null = null
+    aliasInput = ''
+    errorMessage = ''
+    warningMessage = ''
 
     get turnouts(): Turnout[] {
         return this.state.turnouts
@@ -139,6 +157,9 @@ export class TurnoutEditorCustomElement {
     private _setBuffer(index: number, entry: Turnout): void {
         this.editBufferIndex = index
         this.editBuffer = { ...entry }
+        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id)
+        this.errorMessage = ''
+        this.warningMessage = this.state.getCrossTypeIdWarning?.(entry.id, 'Turnout') ?? ''
     }
 
     selectEntry(entry: Turnout): void {
@@ -150,15 +171,44 @@ export class TurnoutEditorCustomElement {
     clearBuffer(): void {
         this.editBuffer = null
         this.editBufferIndex = null
+        this.aliasInput = ''
+        this.errorMessage = ''
+        this.warningMessage = ''
     }
 
     commitBuffer(): void {
         if (this.editBuffer === null || this.editBufferIndex === null) return
+        const existing = this.state.turnouts?.[this.editBufferIndex]
+        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id) : ''
+        const aliasChanged = !!existing && (existing.id !== this.editBuffer.id || existingAliasName !== this.aliasInput.trim())
         this.state.updateTurnoutEntry(this.editBufferIndex, { ...this.editBuffer })
+        if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {
+            const aliasResult = this.state.syncAliasForId(
+                existing.id,
+                this.editBuffer.id,
+                this.aliasInput,
+                'Turnout',
+                existingAliasName,
+            )
+            if (!aliasResult.ok) {
+                this.errorMessage = aliasResult.reason
+                this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
+                return
+            }
+        }
+        this.errorMessage = ''
+        this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
     }
 
     // ── Field blur handlers (commit on leave) ─────────────────────────────────
     onFieldBlur(): void {
+        if (this.editBuffer) {
+            this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
+        }
+        this.commitBuffer()
+    }
+
+    onAliasBlur(): void {
         this.commitBuffer()
     }
 

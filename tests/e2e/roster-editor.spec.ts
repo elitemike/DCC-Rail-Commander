@@ -21,6 +21,11 @@ async function openRosterEditor(page: import('@playwright/test').Page) {
     await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
 }
 
+async function openAliasesEditor(page: import('@playwright/test').Page) {
+    await page.getByText('Aliases', { exact: true }).first().click()
+    await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+}
+
 /**
  * Switch to the Raw tab inside the roster editor.
  */
@@ -78,6 +83,12 @@ async function getMonacoContent(page: import('@playwright/test').Page): Promise<
         // normalize to regular spaces so string comparisons work as expected.
         return lines.map(l => (l.textContent ?? '').replace(/\u00a0/g, ' ')).join('\n')
     })
+}
+
+async function getDetailTextInput(page: import('@playwright/test').Page, label: string, index = 0) {
+    return page
+        .locator(`div:has(> label:has-text("${label}")) input[type="text"]`)
+        .nth(index)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -258,6 +269,46 @@ test.describe('Roster Editor', () => {
         const content = await getMonacoContent(page)
         expect(content).toContain('Steam Release///Dimmer/Mute')
         expect(content).toContain('Mute')
+    })
+
+    test('alias from myAliases.h populates in the roster visual editor', async ({ workspacePage: page }) => {
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+
+        await setMonacoContent(page, '#define THOMAS_ALIAS "3" // type: Roster')
+
+        await openRosterEditor(page)
+        await page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await expect(aliasInput).toHaveValue('THOMAS_ALIAS')
+    })
+
+    test('editing a roster alias updates myAliases.h with type metadata', async ({ workspacePage: page }) => {
+        await openRosterEditor(page)
+        await page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('BLUE_ENGINE')
+        await aliasInput.blur()
+
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+
+        await expect(page.locator('div.monaco-editor')).toContainText('#define BLUE_ENGINE "3" // type: Roster')
+    })
+
+    test('shows a warning when roster ID is reused by another object type', async ({ workspacePage: page }) => {
+        await openRosterEditor(page)
+        await page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
+
+        const dccInput = page
+            .locator('div:has(> label:has-text("DCC Address")) input[type="number"]')
+            .first()
+        await dccInput.fill('200')
+        await dccInput.blur()
+
+        await expect(page.getByText('ID 200 is also used by Turnout objects.')).toBeVisible()
     })
 
     // ── Invalid lines: commenting + toast ────────────────────────────────────

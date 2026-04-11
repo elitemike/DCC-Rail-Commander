@@ -1,4 +1,4 @@
-import { queueTask, resolve } from 'aurelia'
+import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { TreeView, ContextMenu } from '@syncfusion/ej2-navigations'
 import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs } from '@syncfusion/ej2-navigations'
@@ -67,8 +67,22 @@ export class RosterEditorCustomElement {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private splitterObj: Splitter | null = null
+    private readonly observerLocator = resolve(IObserverLocator)
+
+    private readonly _aliasSubscriber = {
+        handleChange: () => {
+            if (this.editBuffer !== null) {
+                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress)
+            }
+        },
+    }
 
     attached(): void {
+        // Refresh alias display in case aliases changed while this editor was inactive
+        if (this.editBuffer !== null) {
+            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress)
+        }
+        this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
             const savedWidth = this._loadSidebarWidth()
             this.splitterObj = new Splitter({
@@ -89,7 +103,7 @@ export class RosterEditorCustomElement {
             // Electron CSP eval violation (Syncfusion's template engine uses new Function())
             this.sfTree = new TreeView({
                 fields: {
-                    dataSource: this._buildTreeData(),
+                    dataSource: this._buildTreeData() as unknown as { [key: string]: Object }[],
                     id: 'id',
                     text: 'text',
                     child: 'children',
@@ -156,6 +170,7 @@ export class RosterEditorCustomElement {
     }
 
     detaching(): void {
+        this.observerLocator.getObserver(this.state, 'aliases').unsubscribe(this._aliasSubscriber)
         if (this.activeTab === 'raw') {
             const text = this.rawEditor?.flush() ?? this._rawText
             this._processRawLeave(text)
@@ -441,6 +456,8 @@ export class RosterEditorCustomElement {
     editBuffer: Roster | null = null
     editBufferIndex: number | null = null
     errorMessage = ''
+    warningMessage = ''
+    aliasInput = ''
 
     get roster(): Roster[] {
         return this.state.roster
@@ -458,14 +475,18 @@ export class RosterEditorCustomElement {
             appendedFunctions: entry.appendedFunctions?.map(f => ({ ...f })),
         }
         this.dccAddressInput = String(entry.dccAddress)
+        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.dccAddress)
         this.errorMessage = ''
+        this.warningMessage = this.state.getCrossTypeIdWarning?.(entry.dccAddress, 'Roster') ?? ''
         this.loadAppendedFunctions()
     }
 
     clearBuffer(): void {
         this.editBuffer = null
         this.editBufferIndex = null
+        this.aliasInput = ''
         this.errorMessage = ''
+        this.warningMessage = ''
         this.appendedFunctionsList = []
     }
 
@@ -480,8 +501,25 @@ export class RosterEditorCustomElement {
         }
         const existing = this.state.roster[this.editBufferIndex]
         const changed = !existing || JSON.stringify(existing) !== JSON.stringify(this.editBuffer)
+        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress) : ''
+        const aliasChanged = !!existing && (existing.dccAddress !== this.editBuffer.dccAddress || existingAliasName !== this.aliasInput.trim())
         this.state.updateRosterEntry(this.editBufferIndex, { ...this.editBuffer })
+        if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {
+            const aliasResult = this.state.syncAliasForId(
+                existing.dccAddress,
+                this.editBuffer.dccAddress,
+                this.aliasInput,
+                'Roster',
+                existingAliasName,
+            )
+            if (!aliasResult.ok) {
+                this.errorMessage = aliasResult.reason
+                this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.dccAddress, 'Roster') ?? ''
+                return
+            }
+        }
         this.errorMessage = ''
+        this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.dccAddress, 'Roster') ?? ''
         // Only rebuild the tree when data actually changed; pure selection switches
         // (no edits) call commitBuffer too but produce no visible change, and
         // triggering a refresh on every click breaks SF's own selection management.
@@ -495,12 +533,14 @@ export class RosterEditorCustomElement {
         const n = parseInt(this.dccAddressInput, 10)
         if (!isNaN(n) && this.editBuffer) {
             this.editBuffer.dccAddress = n
+            this.warningMessage = this.state.getCrossTypeIdWarning?.(n, 'Roster') ?? ''
         }
     }
 
     onDccAddressBlur(): void { this.commitBuffer() }
     onNameBlur(): void { this.commitBuffer() }
     onCommentBlur(): void { this.commitBuffer() }
+    onAliasBlur(): void { this.commitBuffer() }
 
     // ── Add / remove loco entries ─────────────────────────────────────────────
     addEntry(): void {

@@ -17,6 +17,11 @@ async function openTurnoutEditor(page: import('@playwright/test').Page) {
     await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
 }
 
+async function openAliasesEditor(page: import('@playwright/test').Page) {
+    await page.getByText('Aliases', { exact: true }).first().click()
+    await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+}
+
 async function switchToRaw(page: import('@playwright/test').Page) {
     await page.getByRole('button', { name: 'Raw' }).click()
     await expect(page.locator('div.monaco-editor')).toBeVisible()
@@ -61,6 +66,12 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
         if (i < lines.length - 1) await page.keyboard.press('Enter')
     }
     await page.waitForTimeout(500)
+}
+
+async function getDetailTextInput(page: import('@playwright/test').Page, label: string, index = 0) {
+    return page
+        .locator(`div:has(> label:has-text("${label}")) input[type="text"]`)
+        .nth(index)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -237,6 +248,98 @@ test.describe('Turnout Editor', () => {
         // Go back to raw and verify
         await switchToRaw(page)
         await expect(page.locator('div.monaco-editor')).toContainText('Water Tower Siding')
+    })
+
+    test('alias from myAliases.h populates in the turnout visual editor', async ({ workspacePage: page }) => {
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+
+        await setMonacoContent(page, '#define YARD_SWITCH "200" // type: Turnout')
+
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await expect(aliasInput).toHaveValue('YARD_SWITCH')
+    })
+
+    test('editing a turnout alias updates myAliases.h with type metadata', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('JUNCTION_MAIN')
+        await aliasInput.blur()
+
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+
+        await expect(page.locator('div.monaco-editor')).toContainText('#define JUNCTION_MAIN "200" // type: Turnout')
+    })
+
+    test('can create a cross-type turnout ID conflict used by alias validation', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const idInput = page
+            .locator('div:has(> label:has-text("ID")) input[type="number"]')
+            .first()
+        await idInput.fill('3')
+        await idInput.blur()
+
+        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (3)' })).toBeVisible()
+    })
+
+    test('allows alias creation when target ID is shared across object types', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        // Create ambiguity first: turnout ID 3 collides with roster ID 3.
+        const idInput = page
+            .locator('div:has(> label:has-text("ID")) input[type="number"]')
+            .first()
+        await idInput.fill('3')
+        await idInput.blur()
+        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (3)' })).toBeVisible()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('AMBIG_ALIAS')
+        await aliasInput.blur()
+
+        // Shared IDs are now valid because alias usage is context-driven.
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('#define AMBIG_ALIAS "3" // type: Turnout')
+    })
+
+    test('deleting a turnout alias in the aliases editor clears the alias field in the turnout editor', async ({ workspacePage: page }) => {
+        // Set up alias for turnout 200 via the aliases editor raw view
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, '#define YARD_SWITCH "200" // type: Turnout')
+
+        // Open turnout editor, select the turnout with the alias, verify it shows
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await expect(aliasInput).toHaveValue('YARD_SWITCH')
+
+        // Navigate to aliases editor, switch to visual and delete YARD_SWITCH
+        await openAliasesEditor(page)
+        await page.getByRole('button', { name: 'Visual' }).click()
+        // Confirm the alias row is rendered (1 entry shown)
+        await expect(page.locator('aliases-editor').getByText('1 entries')).toBeVisible()
+        // Click Delete on the only alias row (we set exactly one)
+        await page.locator('aliases-editor').getByRole('button', { name: 'Delete' }).first().click()
+        await expect(page.getByText('No aliases')).toBeVisible({ timeout: 3_000 })
+
+        // Return to turnout editor and select the same turnout
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        // Alias field must now be empty — deletion propagated via IObserverLocator
+        const refreshedAliasInput = await getDetailTextInput(page, 'Alias')
+        await expect(refreshedAliasInput).toHaveValue('')
     })
 
     // ── Invalid lines: commenting + toast ────────────────────────────────────

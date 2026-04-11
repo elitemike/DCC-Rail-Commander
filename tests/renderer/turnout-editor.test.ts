@@ -174,3 +174,58 @@ describe('TurnoutEditorCustomElement default state', () => {
         expect(updated.defaultState).toBe('THROWN')
     })
 })
+
+describe('TurnoutEditorCustomElement alias integration', () => {
+    it('populates aliasInput from myAliases.h when selecting a turnout entry', () => {
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { getPrimaryAliasNameForId: vi.fn().mockReturnValue('MAIN_YARD') },
+            aliasInput: '',
+        })
+
+            ; (editor as any)._setBuffer(0, {
+                type: 'DCC',
+                id: 200,
+                addr: 10,
+                subAddr: 1,
+                description: 'Yard Exit',
+                comment: '',
+                defaultState: 'NORMAL',
+            })
+
+        expect(editor.aliasInput).toBe('MAIN_YARD')
+    })
+
+    it('syncs the matching alias when the turnout ID or alias changes', () => {
+        const existing = {
+            type: 'SERVO' as const,
+            id: 200,
+            pin: 25,
+            activeAngle: 410,
+            inactiveAngle: 205,
+            profile: 'Slow' as const,
+            description: 'Main Line Junction',
+            comment: '',
+            defaultState: 'NORMAL' as const,
+        }
+        const updateTurnoutEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                turnouts: [existing],
+                updateTurnoutEntry,
+                syncAliasForId,
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue('OLD_TURNOUT'),
+            },
+            editBufferIndex: 0,
+            editBuffer: { ...existing, id: 201 },
+            aliasInput: 'NEW_TURNOUT',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).toHaveBeenCalledWith(0, { ...existing, id: 201 })
+        expect(syncAliasForId).toHaveBeenCalledWith(200, 201, 'NEW_TURNOUT', 'Turnout', 'OLD_TURNOUT')
+    })
+})

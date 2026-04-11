@@ -2,14 +2,20 @@ import {
     bindable,
     BindingMode,
     ICustomElementViewModel,
+    resolve,
 } from 'aurelia'
 import * as monaco from 'monaco-editor'
 import { getCompletions } from '../config/file-configs'
 import { registerDiagnosticProviders, revalidateModel } from '../config/dccex-validators'
+import { ConfigEditorState } from '../models/config-editor-state'
+import { buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
 
 // ── Global filename-aware completion + hover providers (registered once) ──────
 // Stored on `window` so Vite HMR module re-evaluation cannot reset the flag.
-const WIN = window as Window & { __dccexProvidersRegistered?: boolean }
+const WIN = window as Window & {
+    __dccexProvidersRegistered?: boolean
+    __dccexConfigEditorState?: ConfigEditorState
+}
 
 function registerProviders(): void {
     if (WIN.__dccexProvidersRegistered) return
@@ -34,7 +40,9 @@ function registerProviders(): void {
 
             const suggestions: monaco.languages.CompletionItem[] = snippets.map(s => ({
                 label: s.label,
-                kind: monaco.languages.CompletionItemKind.Function,
+                kind: s.insertText.includes('(')
+                    ? monaco.languages.CompletionItemKind.Function
+                    : monaco.languages.CompletionItemKind.Keyword,
                 detail: s.detail,
                 documentation: s.documentation,
                 insertText: s.insertText,
@@ -58,6 +66,39 @@ function registerProviders(): void {
                         range,
                     })
                 }
+            }
+
+            if (isExrailCompletionFile(filename) && WIN.__dccexConfigEditorState) {
+                const linePrefix = model.getValueInRange({
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: 1,
+                    endColumn: position.column,
+                })
+
+                const state = WIN.__dccexConfigEditorState
+                const dynamicSuggestions = buildExrailSymbolSuggestions(filename, linePrefix, {
+                    aliases: state.aliases,
+                    roster: state.roster,
+                    turnouts: state.turnouts,
+                    sensors: state.sensors,
+                    routes: state.routes,
+                    sequences: state.sequences,
+                })
+
+                suggestions.push(
+                    ...dynamicSuggestions.map(s => ({
+                        label: s.label,
+                        kind: s.kind === 'alias'
+                            ? monaco.languages.CompletionItemKind.Variable
+                            : monaco.languages.CompletionItemKind.Constant,
+                        detail: s.detail,
+                        documentation: s.documentation,
+                        insertText: s.insertText,
+                        sortText: s.sortText,
+                        range,
+                    })),
+                )
             }
 
             return { suggestions }
@@ -99,6 +140,7 @@ function registerProviders(): void {
  * Emits `change` event with updated text each time content changes (debounced).
  */
 export class MonacoEditorCustomElement implements ICustomElementViewModel {
+    private readonly configEditorState = resolve(ConfigEditorState)
     @bindable({ mode: BindingMode.twoWay }) value = ''
     @bindable language = 'cpp'
     @bindable readonly = false
@@ -116,6 +158,7 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
 
     attached(): void {
         try { console.debug('MonacoEditor attached', { filename: this.filename, containerRect: this.container?.getBoundingClientRect?.() }) } catch { }
+        WIN.__dccexConfigEditorState = this.configEditorState
         registerProviders()
 
         // Define a custom theme based on vs-dark that explicitly sets the

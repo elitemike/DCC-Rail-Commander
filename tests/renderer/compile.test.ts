@@ -58,7 +58,7 @@ function makeWorkspace(overrides: {
         showDeviceMenu: false,
         savedConfigs: [],
         activeFileIndex: 0,
-        configEditorState: { clearChanges: vi.fn(), syncAll: vi.fn() },
+        configEditorState: { clearChanges: vi.fn(), syncAll: vi.fn(), loadFromInstallerState: vi.fn() },
     })
 
     ws.eaPublish = eaPublish
@@ -300,6 +300,74 @@ describe('Workspace.saveFiles — preflush behavior', () => {
 
         expect((ws as any).files.writeFile).toHaveBeenCalledTimes(configFiles.length)
             ; (globalThis as { document?: unknown }).document = prevDocument
+    })
+
+    it('waits for asynchronous blur handlers before writing files', async () => {
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles } })
+        const writeFile = (ws as any).files.writeFile as ReturnType<typeof vi.fn>
+        let blurApplied = false
+
+        writeFile.mockImplementation(async () => {
+            expect(blurApplied).toBe(true)
+        })
+
+        const blur = vi.fn(() => {
+            setTimeout(() => {
+                blurApplied = true
+            }, 0)
+        })
+
+        const prevDocument = (globalThis as { document?: unknown }).document
+            ; (globalThis as { document?: unknown }).document = { activeElement: { blur } }
+
+        await ws.saveFiles()
+
+        expect(blur).toHaveBeenCalledTimes(1)
+        expect(writeFile).toHaveBeenCalledTimes(configFiles.length)
+            ; (globalThis as { document?: unknown }).document = prevDocument
+    })
+})
+
+describe('Workspace.switchToConfig — disk rehydration', () => {
+    it('prefers source-folder file content over stale saved config content', async () => {
+        const staleConfig = {
+            id: 'cfg-1',
+            name: 'Loaded Folder',
+            deviceName: megaDevice.name,
+            devicePort: megaDevice.port,
+            deviceFqbn: megaDevice.fqbn,
+            product: 'ex_commandstation',
+            productName: 'EX-CommandStation',
+            version: '',
+            repoPath: REPO,
+            scratchPath: SCRATCH,
+            sourceFolder: '/source/folder',
+            lastModified: new Date().toISOString(),
+            configFiles: [
+                { name: 'myAliases.h', content: '#define OLD_ALIAS 1\n' },
+            ],
+        }
+
+        const ws = makeWorkspace({
+            state: {
+                selectedDevice: megaDevice,
+                repoPath: REPO,
+                scratchPath: SCRATCH,
+                savedConfigurations: [staleConfig],
+            },
+            files: {
+                exists: vi.fn().mockImplementation(async (p: string) => p === '/source/folder/myAliases.h'),
+                readFile: vi.fn().mockImplementation(async (p: string) => {
+                    if (p === '/source/folder/myAliases.h') return '#define FRESH_ALIAS 1\n'
+                    throw new Error('unexpected file read')
+                }),
+            },
+        })
+
+        await ws.switchToConfig(staleConfig)
+
+        expect(ws.state.configFiles.find(f => f.name === 'myAliases.h')?.content).toContain('FRESH_ALIAS')
+        expect((ws as any).files.readFile).toHaveBeenCalledWith('/source/folder/myAliases.h')
     })
 })
 

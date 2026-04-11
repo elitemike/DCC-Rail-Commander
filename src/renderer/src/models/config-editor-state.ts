@@ -27,6 +27,12 @@ import {
     parseAliasesFromFile,
     serializeAliasesToFile,
     parseDefaultThrownTurnoutIdsFromAutomation,
+    getPrimaryAliasForId,
+    parseAliasNumericValue,
+    collectObjectIdReferences,
+    parseAliasTypeComment,
+    type AliasTargetType,
+    type AliasEntry,
 } from '../utils/myAutomationParser'
 
 /**
@@ -365,14 +371,143 @@ export class ConfigEditorState {
         return `${header}\n${serialized}`
     }
 
-    setAliasesFromRaw(text: string): void {
+    setAliasesFromRaw(text: string): { ok: true } | { ok: false; reason: string } {
         try {
-            this.aliases = parseAliasesFromFile(text)
+            const parsed = parseAliasesFromFile(text)
+            const normalized = this.normalizeAliases(parsed)
+            if (!normalized.ok) return normalized
+            this.aliases = normalized.aliases
             this.hasChanges = true
         } catch {
             // keep existing aliases if parse fails
+            return { ok: false, reason: 'Unable to parse aliases from raw text.' }
         }
         this._syncToInstallerState()
+        return { ok: true }
+    }
+
+    getPrimaryAliasNameForId(id: number): string {
+        return getPrimaryAliasForId(this.aliases, id)?.name ?? ''
+    }
+
+    getObjectIdReferences(id: number) {
+        return collectObjectIdReferences(id, {
+            roster: this.roster,
+            turnouts: this.turnouts,
+            sensors: this.sensors,
+            routes: this.routes,
+            sequences: this.sequences,
+        })
+    }
+
+    getCrossTypeIdWarning(id: number, currentType: AliasTargetType): string {
+        const conflictingTypes = Array.from(new Set(
+            this.getObjectIdReferences(id)
+                .map(reference => reference.type)
+                .filter(type => type !== currentType),
+        ))
+
+        if (conflictingTypes.length === 0) return ''
+        return `ID ${id} is also used by ${conflictingTypes.join(', ')} objects.`
+    }
+
+    validateAliasTargetId(id: number): { ok: true } | { ok: false; reason: string } {
+        // Alias lookup is context-driven (command/editor target type), so
+        // cross-type ID reuse is valid and should not be rejected.
+        return { ok: true }
+    }
+
+    private normalizeAliasEntry(alias: AliasEntry): { ok: true; alias: AliasEntry } | { ok: false; reason: string } {
+        const numericValue = parseAliasNumericValue(alias.value)
+        if (numericValue === null) {
+            return { ok: true, alias: { ...alias, aliasType: alias.aliasType ? parseAliasTypeComment(`type: ${alias.aliasType}`) : alias.aliasType } }
+        }
+
+        const validation = this.validateAliasTargetId(numericValue)
+        if (!validation.ok) return validation
+
+        const references = this.getObjectIdReferences(numericValue)
+        const resolvedType = alias.aliasType ?? (references.length === 1 ? references[0]?.type : undefined)
+        return { ok: true, alias: { ...alias, aliasType: resolvedType } }
+    }
+
+    normalizeAliases(aliases: AliasEntry[]): { ok: true; aliases: AliasEntry[] } | { ok: false; reason: string } {
+        const normalized: AliasEntry[] = []
+        for (const alias of aliases) {
+            const result = this.normalizeAliasEntry(alias)
+            if (!result.ok) return result
+            normalized.push(result.alias)
+        }
+        return { ok: true, aliases: normalized }
+    }
+
+    syncAliasForId(
+        previousId: number,
+        nextId: number,
+        aliasName: string,
+        aliasType?: AliasTargetType,
+        previousAliasName?: string,
+    ): { ok: true } | { ok: false; reason: string } {
+        const trimmedName = aliasName.trim()
+        const trimmedPreviousName = previousAliasName?.trim() ?? ''
+        const aliases = [...this.aliases]
+
+        let aliasIndex = -1
+        if (trimmedPreviousName) {
+            aliasIndex = aliases.findIndex(alias =>
+                parseAliasNumericValue(alias.value) === previousId && alias.name === trimmedPreviousName,
+            )
+        }
+        if (aliasIndex === -1 && aliasType) {
+            aliasIndex = aliases.findIndex(alias =>
+                parseAliasNumericValue(alias.value) === previousId && alias.aliasType === aliasType,
+            )
+        }
+        if (aliasIndex === -1) {
+            aliasIndex = aliases.findIndex(alias => parseAliasNumericValue(alias.value) === previousId)
+        }
+
+        if (trimmedName === '') {
+            if (aliasIndex !== -1) {
+                aliases.splice(aliasIndex, 1)
+                this.aliases = aliases
+                this.hasChanges = true
+                this._syncToInstallerState()
+            }
+            return { ok: true }
+        }
+
+        const validation = this.validateAliasTargetId(nextId)
+        if (!validation.ok) {
+            return validation
+        }
+
+        const normalizedType = this.getObjectIdReferences(nextId)[0]?.type ?? aliasType
+        const aliasByNameIndex = aliases.findIndex(alias => {
+            if (alias.name !== trimmedName) return false
+            if (!normalizedType || !alias.aliasType) return false
+            return alias.aliasType === normalizedType
+        })
+        const aliasByTargetIndex = aliases.findIndex(alias => {
+            if (parseAliasNumericValue(alias.value) !== nextId) return false
+            if (!normalizedType) return true
+            return alias.aliasType === normalizedType
+        })
+
+        const updateIndex = aliasIndex !== -1
+            ? aliasIndex
+            : (aliasByNameIndex !== -1 ? aliasByNameIndex : aliasByTargetIndex)
+
+        if (updateIndex !== -1) {
+            aliases[updateIndex] = { ...aliases[updateIndex], name: trimmedName, value: String(nextId), aliasType: normalizedType }
+        } else {
+            aliases.push({ name: trimmedName, value: String(nextId), aliasType: normalizedType })
+        }
+
+        this.aliases = aliases
+        this.hasChanges = true
+        this._syncToInstallerState()
+        return { ok: true }
     }
 
     // ── Preserved content (non-ROSTER/TURNOUT lines from imported myAutomation.h)
@@ -491,6 +626,15 @@ export class ConfigEditorState {
     // ── Initialise from InstallerState.configFiles ────────────────────────────
     loadFromInstallerState(): void {
         const files = this.installerState.configFiles
+
+        // Reset managed state first so reopened sessions never retain stale
+        // values from a previously loaded configuration.
+        this.configHContent = ''
+        this.roster = []
+        this.turnouts = []
+        this.aliases = []
+        this.preservedAutomationContent = ''
+
         let automationContent = ''
         for (const f of files) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
@@ -499,6 +643,9 @@ export class ConfigEditorState {
                 this.roster = parseRosterFromFile(f.content)
             } else if (f.name === 'myTurnouts.h') {
                 this.turnouts = parseTurnoutFromFile(f.content)
+            } else if (f.name === 'myAliases.h') {
+                const normalized = this.normalizeAliases(parseAliasesFromFile(f.content))
+                this.aliases = normalized.ok ? normalized.aliases : []
             } else if (f.name === 'myAutomation.h') {
                 automationContent = f.content
                 // Strip managed includes block; preserve the user's custom code
