@@ -10,9 +10,10 @@ import { FileService } from '../services/file.service'
 import { ArduinoCliService } from '../services/arduino-cli.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
+import { DevicePickerDialog } from '../components/device-picker-dialog'
 import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
-import { parseDeviceFromHeader } from '../utils/configHeaderParser'
+import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
 import { Splitter } from '@syncfusion/ej2-layouts'
 
 export class Workspace {
@@ -113,6 +114,10 @@ export class Workspace {
     /**
      * Re-reads each config file from disk to keep editor state aligned with
      * on-disk truth. For Load-from-Folder flows, prefer sourceFolder reads.
+     *
+     * After reading config.h from disk, if the device header block is absent,
+     * inject it (using the device stored in InstallerState) and persist it back
+     * to disk immediately so subsequent reads see the complete header.
      */
     private async refreshConfigFilesFromDisk(): Promise<void> {
         const roots = [
@@ -125,13 +130,15 @@ export class Workspace {
 
         for (const f of this.state.configFiles) {
             let diskContent: string | null = null
+            let diskPath: string | null = null
 
             for (const root of roots) {
-                const diskPath = `${root}/${f.name}`
-                const diskExists = await this.files.exists(diskPath)
+                const candidate = `${root}/${f.name}`
+                const diskExists = await this.files.exists(candidate)
                 if (!diskExists) continue
                 try {
-                    diskContent = await this.files.readFile(diskPath)
+                    diskContent = await this.files.readFile(candidate)
+                    diskPath = candidate
                     break
                 } catch {
                     // Continue fallback search across candidate roots.
@@ -141,6 +148,30 @@ export class Workspace {
             if (diskContent !== null && diskContent !== f.content) {
                 f.content = diskContent
                 changed = true
+            }
+
+            // Ensure config.h on disk always has the device header block. If it
+            // was missing (e.g. the user's file predates EX-Installer or was
+            // edited externally), inject it now and persist back to every root so
+            // all copies stay in sync.
+            if (f.name === 'config.h' && diskPath && !hasDeviceHeader(f.content)) {
+                const device = this.state.selectedDevice
+                if (device && device.fqbn) {
+                    f.content = injectDeviceHeader(f.content, device)
+                    changed = true
+                    // Write back to every root that has this file
+                    for (const root of roots) {
+                        try {
+                            const candidate = `${root}/${f.name}`
+                            if (await this.files.exists(candidate)) {
+                                await this.files.writeFile(candidate, f.content)
+                            }
+                        } catch {
+                            // Non-fatal — header will be written on next Save
+                        }
+                    }
+                    console.debug('[workspace] injected missing device header into config.h on disk')
+                }
             }
         }
 
@@ -330,7 +361,8 @@ export class Workspace {
             console.debug('[workspace.compile] scratchPath=', this.state.scratchPath, 'device.fqbn=', fqbn, 'device=', device)
 
             if (!looksLikeFqbn(fqbn)) {
-                // Try to recover from the injected header in config.h
+                // Try to recover from the injected header in config.h, then fall back
+                // to inferring the target from MOTOR_SHIELD_TYPE.
                 try {
                     if (this.state.scratchPath) {
                         const headerText = await this.files.readFile(`${this.state.scratchPath}/config.h`)
@@ -339,6 +371,17 @@ export class Workspace {
                             fqbn = parsed.fqbn
                             device.fqbn = fqbn
                             console.debug('[workspace.compile] recovered fqbn from config.h header:', fqbn)
+                        }
+                        // Also infer from MOTOR_SHIELD_TYPE when no device header is present
+                        if (!looksLikeFqbn(fqbn)) {
+                            const motorMatch = /^#define\s+MOTOR_SHIELD_TYPE\s+(\S+)/m.exec(headerText)
+                            const motorDriver = motorMatch?.[1]?.toUpperCase() ?? ''
+                            if (motorDriver.startsWith('EXCSB1')) {
+                                fqbn = 'esp32:esp32:esp32'
+                                device.fqbn = fqbn
+                                if (!device.name || device.name === 'Unknown') device.name = 'EX-CSB1'
+                                console.debug('[workspace.compile] recovered fqbn from MOTOR_SHIELD_TYPE:', motorDriver, '→', fqbn)
+                            }
                         }
                     }
                 } catch (e) {
@@ -526,6 +569,50 @@ export class Workspace {
 
     goHome(): void {
         this.router.load('home')
+    }
+
+    async rescanPort(): Promise<void> {
+        const device = this.state.selectedDevice
+        if (!device) return
+
+        const result = await this.dialogService
+            .open({
+                component: () => DevicePickerDialog,
+                model: { initialFqbn: device.fqbn, portOnly: true },
+            })
+            .whenClosed((r) => r)
+
+        // cancel = user closed the dialog — keep existing port
+        if ((result as any).status === 'cancel') return
+
+        const picked = (result as any).value as { port: string; fqbn: string } | null
+        if (!picked?.port) return
+
+        device.port = picked.port
+        if (picked.fqbn && (picked.fqbn.startsWith(device.fqbn) || !device.fqbn)) {
+            device.fqbn = picked.fqbn
+        }
+
+        // Persist the new port into config.h header and saved configs
+        const configH = this.state.configFiles.find(f => f.name === 'config.h')
+        if (configH) {
+            configH.content = injectDeviceHeader(configH.content, device)
+        }
+        await this.updateSavedConfig()
+        // Also write to disk so it survives a reload
+        await this.saveFiles()
+
+        this.toastService.show({
+            title: 'Port Updated',
+            content: `Now using ${device.port}.`,
+            cssClass: 'e-toast-success',
+        })
+    }
+
+    /** True when a device with both an FQBN and a port is selected. */
+    get canCompile(): boolean {
+        const d = this.state.selectedDevice
+        return !!d && !!d.fqbn && !!d.port
     }
 
     get productName(): string {

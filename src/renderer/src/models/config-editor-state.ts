@@ -1,5 +1,6 @@
 import { observable, resolve } from 'aurelia'
 import { InstallerState } from './installer-state'
+import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
 import type {
     Roster,
     Turnout,
@@ -82,11 +83,21 @@ export function extractAutomationCustomContent(content: string): string {
         }
     }
 
-    // Backward-compat migration: strip legacy generated AUTOSTART blocks
-    // that were previously inserted without managed tags.
+    // Backward-compat migration: strip legacy generated AUTOSTART blocks that
+    // were previously inserted without managed tags.
+    // IMPORTANT: only strip if EVERY non-blank, non-comment line is a pure
+    // TrackManager command (SET_TRACK / SET_POWER / POWERON).  If the user has
+    // mixed any other EXRAIL command into the block (even alongside POWERON or
+    // SET_TRACK) the whole block is treated as user content and preserved.
     text = text.replace(/AUTOSTART\s*\n([\s\S]*?)\nDONE\s*/g, (full, body: string) => {
-        const isGeneratedTrackManager = /SET_TRACK\([A-D],|SET_POWER\([A-D],|POWERON/.test(body)
-        return isGeneratedTrackManager ? '' : full
+        const bodyLines = body.split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.startsWith('//'))
+        if (bodyLines.length === 0) return full  // empty block — keep
+        const isLegacyTrackManager = bodyLines.every(l =>
+            /^SET_TRACK\([A-D],/.test(l) || /^SET_POWER\([A-D],/.test(l) || l === 'POWERON',
+        )
+        return isLegacyTrackManager ? '' : full
     })
 
     // Also strip any bare managed #include lines left outside the block
@@ -699,7 +710,7 @@ export class ConfigEditorState {
     private _syncToInstallerState(): void {
         for (const f of this.installerState.configFiles) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
-                f.content = this.configHContent
+                f.content = this._preserveDeviceHeader(this.configHContent, f.content)
             } else if (f.name === 'myRoster.h') {
                 f.content = this.rosterRaw
             } else if (f.name === 'myTurnouts.h') {
@@ -747,11 +758,34 @@ export class ConfigEditorState {
         }
     }
 
+    /**
+     * Returns `newContent` with the device-identification header block preserved
+     * from `existingContent` when the new content lacks one but the selected
+     * device has an FQBN.
+     */
+    private _preserveDeviceHeader(newContent: string, existingContent: string): string {
+        if (!hasDeviceHeader(newContent)) {
+            const device = this.installerState.selectedDevice
+            if (device?.fqbn) {
+                return injectDeviceHeader(newContent, device)
+            }
+            // Fall back: re-use whatever header was already on disk
+            if (hasDeviceHeader(existingContent)) {
+                const headerEnd = existingContent.indexOf('// ==== End DCCEX-Installer Device Configuration ====')
+                if (headerEnd !== -1) {
+                    const headerBlock = existingContent.slice(0, headerEnd + '// ==== End DCCEX-Installer Device Configuration ===='.length + 1)
+                    return headerBlock + newContent
+                }
+            }
+        }
+        return newContent
+    }
+
     syncConfigH(): void {
         this.hasChanges = true
         for (const f of this.installerState.configFiles) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
-                f.content = this.configHContent
+                f.content = this._preserveDeviceHeader(this.configHContent, f.content)
             }
         }
     }

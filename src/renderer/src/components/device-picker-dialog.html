@@ -4,11 +4,16 @@
 
             <!-- Header -->
             <div class="px-6 pt-6 pb-4 border-b border-white/10">
-                <h2 class="text-white text-lg font-semibold">Select Your Board</h2>
-                <p class="text-blue-300/70 text-sm mt-1">
+                <h2 class="text-white text-lg font-semibold">${portOnly ? 'Select Port' : 'Select Your Board'}</h2>
+                <p class="text-blue-300/70 text-sm mt-1" if.bind="!portOnly">
                     Choose the board connected to your computer. This will be saved in
                     <span class="font-mono text-blue-300">config.h</span>
                     so you won't be asked again.
+                </p>
+                <p class="text-blue-300/70 text-sm mt-1" if.bind="portOnly">
+                    The board type was identified from your
+                    <span class="font-mono text-blue-300">config.h</span>.
+                    Select the port it is connected to.
                 </p>
             </div>
 

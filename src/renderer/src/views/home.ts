@@ -97,6 +97,7 @@ export class Home {
         // ── Device resolution ─────────────────────────────────────────────────
         // Check if config.h already contains a device header from a previous load.
         const configHFile = configFiles.find(f => f.name === 'config.h')!
+        const configHOriginalContent = configHFile.content
         let device: ArduinoCliBoardInfo | null = parseDeviceFromHeader(configHFile.content)
 
         console.debug('[loadFromFolder] parsed device from header:', device)
@@ -118,40 +119,61 @@ export class Home {
                 console.debug('[loadFromFolder] CLI listBoards failed; falling back to stored device')
             }
         } else {
-            // No saved device in config.h — show the board picker so the user can
-            // identify the board. The selection is written back into config.h so
-            // subsequent opens skip this step.
-            const result = await this.dialogService
-                .open({ component: () => DevicePickerDialog })
-                .whenClosed((r) => r)
-
-            // 'cancel' = user dismissed the dialog entirely — abort folder load
-            if ((result as any).status === 'cancel') return
-
-            // 'ok' with null = user clicked "Continue without device"
-            // 'ok' with board = user picked a board
-            device = (result as any).value as ArduinoCliBoardInfo | null
-
-            if (device) {
-                // If the picker returned a board without an FQBN (some platforms
-                // or mock setups may omit it), try to enrich the selection by
-                // re-querying the live board list and matching on port/serial.
-                if (!device.fqbn) {
-                    try {
-                        const live = await this.cli.listBoards()
-                        const matched = live.find(b => b.port === device!.port || (b.serialNumber && b.serialNumber === (device as any).serialNumber))
-                        if (matched && matched.fqbn) {
-                            console.debug('[loadFromFolder] enriched picked device fqbn from live scan:', matched.fqbn)
-                            device.fqbn = matched.fqbn
-                        }
-                    } catch {
-                        console.debug('[loadFromFolder] failed to enrich picked device fqbn')
-                    }
+            // No saved device in config.h — try to infer the board type from
+            // MOTOR_SHIELD_TYPE before falling back to the interactive picker.
+            const motorMatch = /^#define\s+MOTOR_SHIELD_TYPE\s+(\S+)/m.exec(configHFile.content)
+            const motorDriver = motorMatch?.[1]?.toUpperCase() ?? ''
+            if (motorDriver.startsWith('EXCSB1')) {
+                // EXCSB1 / EXCSB1_WITH_EX8874 / EXCSB1_PROG → ESP32 generic target
+                const impliedFqbn = 'esp32:esp32:esp32'
+                try {
+                    const liveBoards = await this.cli.listBoards()
+                    // Match on base FQBN so option-suffixed variants (esp32:esp32:esp32:FlashFreq=...) are found
+                    const match = liveBoards.find(b => b.fqbn === impliedFqbn || b.fqbn.startsWith(impliedFqbn + ':'))
+                    device = match ?? { name: 'EX-CSB1', fqbn: impliedFqbn, port: '', protocol: 'serial' }
+                } catch {
+                    device = { name: 'EX-CSB1', fqbn: impliedFqbn, port: '', protocol: 'serial' }
                 }
-                // Embed device info as human-readable comments at the top of config.h.
-                // On next open the header is parsed and the wizard is skipped.
                 configHFile.content = injectDeviceHeader(configHFile.content, device)
-                console.debug('[loadFromFolder] device picked by user:', device)
+                console.debug('[loadFromFolder] inferred device from MOTOR_SHIELD_TYPE:', motorDriver, device)
+            }
+
+            if (!device) {
+                // Couldn't infer from motor shield — show the board picker so the user
+                // can identify the board. The selection is written back into config.h so
+                // subsequent opens skip this step.
+                const result = await this.dialogService
+                    .open({ component: () => DevicePickerDialog })
+                    .whenClosed((r) => r)
+
+                // 'cancel' = user dismissed the dialog entirely — abort folder load
+                if ((result as any).status === 'cancel') return
+
+                // 'ok' with null = user clicked "Continue without device"
+                // 'ok' with board = user picked a board
+                device = (result as any).value as ArduinoCliBoardInfo | null
+
+                if (device) {
+                    // If the picker returned a board without an FQBN (some platforms
+                    // or mock setups may omit it), try to enrich the selection by
+                    // re-querying the live board list and matching on port/serial.
+                    if (!device.fqbn) {
+                        try {
+                            const live = await this.cli.listBoards()
+                            const matched = live.find(b => b.port === device!.port || (b.serialNumber && b.serialNumber === (device as any).serialNumber))
+                            if (matched && matched.fqbn) {
+                                console.debug('[loadFromFolder] enriched picked device fqbn from live scan:', matched.fqbn)
+                                device.fqbn = matched.fqbn
+                            }
+                        } catch {
+                            console.debug('[loadFromFolder] failed to enrich picked device fqbn')
+                        }
+                    }
+                    // Embed device info as human-readable comments at the top of config.h.
+                    // On next open the header is parsed and the wizard is skipped.
+                    configHFile.content = injectDeviceHeader(configHFile.content, device)
+                    console.debug('[loadFromFolder] device picked by user:', device)
+                }
             }
         }
 
@@ -162,6 +184,32 @@ export class Home {
             protocol: 'serial',
         }
 
+        // ── Port resolution ───────────────────────────────────────────────────
+        // If we identified the board type but couldn't determine the port (e.g.
+        // board not connected during load, or live scan returned no match), ask
+        // the user to select the port now.  We pass the known FQBN as a hint so
+        // the dialog can pre-select the right entry.
+        if (!selectedDevice.port && selectedDevice.fqbn) {
+            const portResult = await this.dialogService
+                .open({ component: () => DevicePickerDialog, model: { initialFqbn: selectedDevice.fqbn, portOnly: true } })
+                .whenClosed((r) => r)
+
+            // 'cancel' = user dismissed the dialog — abort folder load
+            if ((portResult as any).status === 'cancel') return
+
+            const picked = (portResult as any).value as ArduinoCliBoardInfo | null
+            if (picked?.port) {
+                selectedDevice.port = picked.port
+                // Keep whichever FQBN is more specific (picked may have option suffixes)
+                if (!selectedDevice.fqbn || picked.fqbn.startsWith(selectedDevice.fqbn)) {
+                    selectedDevice.fqbn = picked.fqbn
+                }
+                // Re-inject the header now that we have a real port
+                configHFile.content = injectDeviceHeader(configHFile.content, selectedDevice)
+                console.debug('[loadFromFolder] port selected by user:', selectedDevice.port)
+            }
+        }
+
         console.debug('[loadFromFolder] selectedDevice final:', selectedDevice)
 
         // ── Sketch path resolution ────────────────────────────────────────────
@@ -169,6 +217,16 @@ export class Home {
             await this.resolveSketchPath(folder, configFiles.map(f => f.name), entries)
 
         console.debug('[loadFromFolder] resolveSketchPath ->', { scratchPath, repoPath, productKey, sourceFolder })
+
+        // If the device header was injected or the port was reconciled, write
+        // config.h back to the original folder on disk immediately.  This ensures
+        // refreshConfigFilesFromDisk (called when the workspace binds) reads the
+        // up-to-date content rather than overwriting the in-memory injection with
+        // the old unmodified file.
+        if (configHFile.content !== configHOriginalContent) {
+            console.debug('[loadFromFolder] writing updated config.h back to source folder')
+            await this.files.writeFile(`${folder}/config.h`, configHFile.content)
+        }
 
         // Write user config files into the internal scratch directory so the
         // compiler can find them alongside the copied .ino and .cpp source files.

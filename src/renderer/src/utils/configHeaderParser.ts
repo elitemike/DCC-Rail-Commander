@@ -54,15 +54,16 @@ export function parseDeviceFromHeader(text: string): ArduinoCliBoardInfo | null 
 
     // Be permissive about whitespace so different editors / platforms don't break parsing
     const nameMatch = /^\/\/\s*Name:\s*(.+)$/m.exec(headerBlock)
-    const portMatch = /^\/\/\s*Port:\s*(.+)$/m.exec(headerBlock)
+    // Port is allowed to be empty (board may not have been connected when the header was written)
+    const portMatch = /^\/\/\s*Port:\s*(.*)$/m.exec(headerBlock)
     const fqbnMatch = /^\/\/\s*FQBN:\s*(.+)$/m.exec(headerBlock)
     const protocolMatch = /^\/\/\s*Protocol:\s*(.+)$/m.exec(headerBlock)
 
-    if (!nameMatch || !portMatch || !fqbnMatch) return null
+    if (!nameMatch || !fqbnMatch) return null
 
     return {
         name: nameMatch[1].trim(),
-        port: portMatch[1].trim(),
+        port: portMatch ? portMatch[1].trim() : '',
         fqbn: fqbnMatch[1].trim(),
         protocol: protocolMatch ? protocolMatch[1].trim() : 'serial',
     }
@@ -102,12 +103,21 @@ export function injectDeviceHeader(configHContent: string, device: ArduinoCliBoa
  *                   was found, otherwise the stored value is returned unchanged)
  *   `portChanged` — true when the live port differs from the stored port
  */
+/**
+ * Returns the base FQBN (first three colon-separated segments) so that boards
+ * that report option-suffixed FQBNs (e.g. esp32:esp32:esp32:FlashFreq=80m,...)
+ * still match against the canonical form stored in config.h.
+ */
+function baseFqbn(fqbn: string): string {
+    return fqbn.split(':').slice(0, 3).join(':')
+}
+
 export function reconcileDevicePort(
     stored: ArduinoCliBoardInfo,
     connected: ArduinoCliBoardInfo[],
 ): { device: ArduinoCliBoardInfo; portChanged: boolean } {
-    // Match on FQBN — the stable identifier that never changes between sessions
-    const match = connected.find(b => b.fqbn === stored.fqbn)
+    // Match on base FQBN — stable board identity, ignoring option suffixes
+    const match = connected.find(b => baseFqbn(b.fqbn) === baseFqbn(stored.fqbn))
 
     if (!match) {
         // Board not currently attached — use stored info as-is
@@ -119,7 +129,7 @@ export function reconcileDevicePort(
         return { device: stored, portChanged: false }
     }
 
-    // Port changed — return updated board with current OS-assigned port
+    // Port changed (or was previously empty) — return updated board with live port
     return {
         device: { ...stored, port: match.port },
         portChanged: true,
