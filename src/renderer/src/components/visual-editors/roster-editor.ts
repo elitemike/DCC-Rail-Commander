@@ -994,7 +994,7 @@ export class RosterEditorCustomElement {
         try {
             const { dialog } = await this.dialogService.open({
                 component: () =>
-                    import('../confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                    import('../dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
                 model: { title, message },
             })
             const result = await dialog.closed

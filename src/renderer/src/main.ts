@@ -26,7 +26,7 @@ import { RosterEditorCustomElement } from './components/visual-editors/roster-ed
 import { TurnoutEditorCustomElement } from './components/visual-editors/turnout-editor'
 import { ConfigHEditorCustomElement } from './components/visual-editors/config-h-editor'
 import { FileEditorPanelCustomElement } from './components/visual-editors/file-editor-panel'
-import { ConfirmDialog } from './components/confirm-dialog'
+import { ConfirmDialog } from './components/dialogs/confirm-dialog'
 import { CompileProgressCustomElement } from './components/compile-progress'
 import { SensorsEditorCustomElement } from './components/visual-editors/sensors-editor'
 import { SignalsEditorCustomElement } from './components/visual-editors/signals-editor'

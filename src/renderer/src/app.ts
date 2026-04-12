@@ -39,7 +39,7 @@ export class App {
         try {
             const { dialog } = await this.dialogService.open({
                 component: () =>
-                    import('./components/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                    import('./components/dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
                 model: {
                     title: 'Unsaved Changes',
                     message: 'You have unsaved configuration changes.',

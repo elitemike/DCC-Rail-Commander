@@ -1,7 +1,7 @@
 import { resolve } from 'aurelia'
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
-import { ArduinoCliService } from '../services/arduino-cli.service'
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import { ArduinoCliService } from '../../services/arduino-cli.service'
+import type { ArduinoCliBoardInfo } from '../../../../types/ipc'
 
 /**
  * Minimal dialog that scans for connected boards and lets the user pick one.

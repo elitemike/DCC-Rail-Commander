@@ -10,7 +10,7 @@ import { FileService } from '../services/file.service'
 import { ArduinoCliService } from '../services/arduino-cli.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
-import { DevicePickerDialog } from '../components/device-picker-dialog'
+import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
 import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
@@ -275,7 +275,7 @@ export class Workspace {
         try {
             const { dialog } = await this.dialogService.open({
                 component: () =>
-                    import('../components/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                    import('../components/dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
                 model: { title, message },
             })
             const result = await dialog.closed
