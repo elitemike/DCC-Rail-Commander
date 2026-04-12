@@ -1,16 +1,6 @@
 import { observable, resolve } from 'aurelia'
 import { InstallerState } from './installer-state'
 import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
-import type {
-    Roster,
-    Turnout,
-    RosterFunction,
-    SensorEntry,
-    SignalEntry,
-    RouteEntry,
-    SequenceEntry,
-    AliasEntry,
-} from '../utils/myAutomationParser'
 import {
     serializeRosterToFile,
     serializeTurnoutToFile,
@@ -32,8 +22,15 @@ import {
     parseAliasNumericValue,
     collectObjectIdReferences,
     parseAliasTypeComment,
-    type AliasTargetType,
+    type Roster,
+    type Turnout,
+    type RosterFunction,
+    type SensorEntry,
+    type SignalEntry,
+    type RouteEntry,
+    type SequenceEntry,
     type AliasEntry,
+    type AliasTargetType,
 } from '../utils/myAutomationParser'
 
 /**
