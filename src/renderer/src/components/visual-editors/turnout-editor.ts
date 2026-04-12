@@ -1,10 +1,10 @@
 import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Splitter } from '@syncfusion/ej2-layouts'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../utils/myAutomationParser'
-import { commentInvalidTurnoutLines } from '../utils/myAutomationParser'
-import { ToastService } from '../services/toast.service'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
+import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
+import { ToastService } from '../../services/toast.service'
 
 type ViewTab = 'visual' | 'raw'
 
@@ -284,7 +284,7 @@ export class TurnoutEditorCustomElement {
         try {
             const { dialog } = await this.dialogService.open({
                 component: () =>
-                    import('./confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                    import('../confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
                 model: { title, message },
             })
             const result = await dialog.closed

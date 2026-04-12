@@ -1,7 +1,7 @@
 import { bindable, resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import { InstallerState } from '../models/installer-state'
-import { friendlyName } from '../utils/friendly-names'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import { InstallerState } from '../../models/installer-state'
+import { friendlyName } from '../../utils/friendly-names'
 
 /**
  * file-editor-panel — replaces the raw textarea in workspace.html.

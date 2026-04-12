@@ -1,6 +1,6 @@
 import { resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { SequenceEntry } from '../utils/myAutomationParser'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { SequenceEntry } from '../../utils/myAutomationParser'
 
 export class SequencesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)

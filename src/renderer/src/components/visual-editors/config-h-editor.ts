@@ -1,6 +1,6 @@
 import { resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import { InstallerState } from '../models/installer-state'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import { InstallerState } from '../../models/installer-state'
 
 type ViewTab = 'visual' | 'raw'
 

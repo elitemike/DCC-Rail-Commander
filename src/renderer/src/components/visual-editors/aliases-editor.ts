@@ -1,7 +1,7 @@
 import { resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { AliasEntry } from '../utils/myAutomationParser'
-import { inferAliasTypes } from '../utils/myAutomationParser'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { AliasEntry } from '../../utils/myAutomationParser'
+import { inferAliasTypes } from '../../utils/myAutomationParser'
 
 export class AliasesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)

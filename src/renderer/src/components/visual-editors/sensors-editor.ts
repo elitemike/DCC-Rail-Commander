@@ -1,6 +1,6 @@
 import { resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { SensorEntry } from '../utils/myAutomationParser'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { SensorEntry } from '../../utils/myAutomationParser'
 
 export class SensorsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)

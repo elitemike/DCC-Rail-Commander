@@ -3,16 +3,16 @@ import { IDialogService } from '@aurelia/dialog'
 import { TreeView, ContextMenu } from '@syncfusion/ej2-navigations'
 import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs } from '@syncfusion/ej2-navigations'
 import { Splitter } from '@syncfusion/ej2-layouts'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { Roster, RosterFunction, DefineGroup } from '../utils/myAutomationParser'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { Roster, RosterFunction, DefineGroup } from '../../utils/myAutomationParser'
 import {
     getRealFunctions,
     commentInvalidRosterLines,
     deriveDefineGroups,
     sanitizeMacroName,
     serializeFunction,
-} from '../utils/myAutomationParser'
-import { ToastService } from '../services/toast.service'
+} from '../../utils/myAutomationParser'
+import { ToastService } from '../../services/toast.service'
 
 type ViewTab = 'visual' | 'raw'
 
@@ -994,7 +994,7 @@ export class RosterEditorCustomElement {
         try {
             const { dialog } = await this.dialogService.open({
                 component: () =>
-                    import('./confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                    import('../confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
                 model: { title, message },
             })
             const result = await dialog.closed

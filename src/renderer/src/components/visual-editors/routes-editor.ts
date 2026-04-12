@@ -1,6 +1,6 @@
 import { resolve } from 'aurelia'
-import { ConfigEditorState } from '../models/config-editor-state'
-import type { RouteEntry } from '../utils/myAutomationParser'
+import { ConfigEditorState } from '../../models/config-editor-state'
+import type { RouteEntry } from '../../utils/myAutomationParser'
 
 export class RoutesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
