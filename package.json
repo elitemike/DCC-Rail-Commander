@@ -21,8 +21,8 @@
         "clean:all": "pnpm run clean && rimraf node_modules src/node_modules"
     },
     "dependencies": {
-        "@aurelia/dialog": "2.0.0-rc.0",
-        "@aurelia/router": "2.0.0-rc.0",
+        "@aurelia/dialog": "2.0.0-rc.1",
+        "@aurelia/router": "2.0.0-rc.1",
         "@aurelia/vite-plugin": "^2.0.0-rc.0",
         "@fontsource/roboto": "^5.2.10",
         "@syncfusion/ej2": "^32.1.24",

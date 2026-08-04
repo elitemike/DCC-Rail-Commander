@@ -37,7 +37,14 @@ async function switchToVisual(page: import('@playwright/test').Page) {
 
 async function openAutomationTab(page: import('@playwright/test').Page) {
     await page.getByText('Automation', { exact: true }).first().click()
-    await expect(page.locator('file-editor-panel div.monaco-editor')).toBeVisible()
+    await expect(page.locator('automation-editor')).toBeVisible()
+    await page.waitForTimeout(300)
+}
+
+async function openAutomationRaw(page: import('@playwright/test').Page) {
+    await openAutomationTab(page)
+    await page.locator('automation-editor').getByRole('button', { name: 'Raw' }).click()
+    await expect(page.locator('automation-editor div.monaco-editor')).toBeVisible()
     await page.waitForTimeout(300)
 }
 
@@ -137,52 +144,6 @@ test.describe('Config Editor — EX-CommandStation', () => {
         ).toBeVisible()
     })
 
-    test('TrackManager tab shows Track A and Track B selects', async ({ workspacePage }) => {
-        await openDeviceSettings(workspacePage)
-
-        await workspacePage
-            .locator('commandstation-config-form')
-            .getByRole('button', { name: 'TrackManager' })
-            .click()
-
-        await expect(
-            workspacePage.locator('commandstation-config-form').getByText('Track A'),
-        ).toBeVisible()
-        await expect(
-            workspacePage.locator('commandstation-config-form').getByText('Track B'),
-        ).toBeVisible()
-        // Both Track A and B DDLs present — general tab may also have dropdown(s), so check >= 2
-        const ddlWrappers = workspacePage.locator('commandstation-config-form .e-ddl')
-        const count = await ddlWrappers.count()
-        expect(count).toBeGreaterThanOrEqual(2)
-    })
-
-    test('TrackManager tab shows Startup power section', async ({ workspacePage }) => {
-        await openDeviceSettings(workspacePage)
-
-        await workspacePage
-            .locator('commandstation-config-form')
-            .getByRole('button', { name: 'TrackManager' })
-            .click()
-
-        await expect(
-            workspacePage.locator('commandstation-config-form').getByText('Startup power'),
-        ).toBeVisible()
-    })
-
-    test('TrackManager tab shows Track Configuration section', async ({ workspacePage }) => {
-        await openDeviceSettings(workspacePage)
-
-        await workspacePage
-            .locator('commandstation-config-form')
-            .getByRole('button', { name: 'TrackManager' })
-            .click()
-
-        await expect(
-            workspacePage.locator('commandstation-config-form').getByText('Track Configuration'),
-        ).toBeVisible()
-    })
-
     test('switching to Raw tab shows Monaco editor', async ({ workspacePage }) => {
         await openDeviceSettings(workspacePage)
         await switchToRaw(workspacePage)
@@ -208,12 +169,71 @@ test.describe('Config Editor — EX-CommandStation', () => {
 
         // Select the motor driver from the Syncfusion dropdown.
         await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
+        await csb1StackedPage.waitForTimeout(200)
         await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
 
         await switchToRaw(csb1StackedPage)
 
         await expect(csb1StackedPage.locator('config-h-editor div.monaco-editor'))
             .toContainText('#define MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874')
+    })
+
+})
+
+// ── Automation Editor (myAutomation.h) ───────────────────────────────────────
+
+test.describe('Automation Editor — myAutomation.h', () => {
+    test('Automation tab is present in the sidebar', async ({ workspacePage }) => {
+        await expect(workspacePage.getByText('Automation', { exact: true }).first()).toBeVisible()
+    })
+
+    test('Automation tab shows Visual/Raw tab bar', async ({ workspacePage }) => {
+        await openAutomationTab(workspacePage)
+
+        await expect(
+            workspacePage.locator('automation-editor').getByRole('button', { name: 'Visual' }),
+        ).toBeVisible()
+        await expect(
+            workspacePage.locator('automation-editor').getByRole('button', { name: 'Raw' }),
+        ).toBeVisible()
+    })
+
+    test('Visual tab is active by default and shows the TrackManager form', async ({ workspacePage }) => {
+        await openAutomationTab(workspacePage)
+
+        await expect(workspacePage.locator('track-manager-form')).toBeVisible()
+    })
+
+    test('TrackManager form shows Track A and Track B selects', async ({ workspacePage }) => {
+        await openAutomationTab(workspacePage)
+
+        await expect(
+            workspacePage.locator('track-manager-form').getByText('Track A'),
+        ).toBeVisible()
+        await expect(
+            workspacePage.locator('track-manager-form').getByText('Track B'),
+        ).toBeVisible()
+        // Both Track A and B DDLs present
+        const ddlWrappers = workspacePage.locator('track-manager-form .e-ddl')
+        const count = await ddlWrappers.count()
+        expect(count).toBeGreaterThanOrEqual(2)
+    })
+
+    test('TrackManager form shows Startup power section', async ({ workspacePage }) => {
+        await openAutomationTab(workspacePage)
+
+        await expect(
+            workspacePage.locator('track-manager-form').getByText('Startup power'),
+        ).toBeVisible()
+    })
+
+    test('TrackManager form shows Track Configuration section', async ({ workspacePage }) => {
+        await openAutomationTab(workspacePage)
+
+        await expect(
+            workspacePage.locator('track-manager-form').getByText('Track Configuration'),
+        ).toBeVisible()
     })
 
     // ── Regression: TrackManager form → myAutomation.h ───────────────────────
@@ -231,15 +251,19 @@ test.describe('Config Editor — EX-CommandStation', () => {
     // only, so it never runs as a side effect of the form's own write path.
 
     test('regression: toggling TrackManager Startup power to Individual and setting Track C OFF updates myAutomation.h', async ({ csb1StackedPage }) => {
+        // hasStackedMotorShield (and therefore Track C/D visibility) is derived
+        // from the motor driver selected in Device Settings — select the
+        // stacked driver there first.
         await openDeviceSettings(csb1StackedPage)
+        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
+        await csb1StackedPage.waitForTimeout(200)
+        await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
 
-        await csb1StackedPage
-            .locator('commandstation-config-form')
-            .getByRole('button', { name: 'TrackManager' })
-            .click()
+        await openAutomationTab(csb1StackedPage)
 
         // Switch Startup power from "All tracks on (POWERON)" to "Individual tracks (SET_POWER)"
-        const startupDdl = csb1StackedPage.locator('commandstation-config-form .e-ddl:visible').first()
+        const startupDdl = csb1StackedPage.locator('track-manager-form .e-ddl:visible').first()
         await startupDdl.click()
         await csb1StackedPage.waitForTimeout(200)
         await csb1StackedPage.locator('li.e-list-item', { hasText: 'Individual tracks (SET_POWER)' }).first().click()
@@ -247,58 +271,78 @@ test.describe('Config Editor — EX-CommandStation', () => {
 
         // Track C's power dropdown is now visible; set it to OFF.
         // Visible order: startup mode, A-mode, A-power, B-mode, B-power, C-mode, C-power, D-mode, D-power.
-        const visibleDdls = csb1StackedPage.locator('commandstation-config-form .e-ddl:visible')
+        const visibleDdls = csb1StackedPage.locator('track-manager-form .e-ddl:visible')
         await visibleDdls.nth(6).click()
         await csb1StackedPage.waitForTimeout(200)
         await csb1StackedPage.locator('li.e-list-item', { hasText: /^OFF$/ }).first().click()
         await csb1StackedPage.waitForTimeout(200)
 
-        await openAutomationTab(csb1StackedPage)
+        await csb1StackedPage.locator('automation-editor').getByRole('button', { name: 'Raw' }).click()
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toBeVisible()
+        await csb1StackedPage.waitForTimeout(300)
 
-        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(A,ON)')
-        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(C,OFF)')
-        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(D,ON)')
-    })
-})
-
-// ── Automation Editor (myAutomation.h) ───────────────────────────────────────
-
-test.describe('Automation Editor — myAutomation.h', () => {
-    test('Automation tab is present in the sidebar', async ({ workspacePage }) => {
-        await expect(workspacePage.getByText('Automation', { exact: true }).first()).toBeVisible()
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_POWER(A,ON)')
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_POWER(C,OFF)')
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_POWER(D,ON)')
     })
 
-    test('clicking Automation shows the myAutomation.h Monaco editor', async ({ workspacePage }) => {
-        await workspacePage.getByText('Automation', { exact: true }).first().click()
+    // ── Regression: switching motor driver away from stacked must clear Track C/D ─
+    //
+    // hasStackedMotorShield is derived solely from Device Settings' motor driver,
+    // but track-manager-form only re-generates myAutomation.h's TrackManager block
+    // when it (re)binds — not the instant Device Settings changes the driver,
+    // since the two forms live under different sidebar tabs and aren't mounted
+    // together. Without re-syncing on bind, switching back to a non-stacked driver
+    // would leave stale SET_TRACK(C,...)/SET_TRACK(D,...) content behind in
+    // myAutomation.h until some TrackManager field happened to be touched.
 
-        // file-editor-panel renders a Monaco editor for automation view
-        await expect(workspacePage.locator('file-editor-panel div.monaco-editor')).toBeVisible()
+    test('regression: switching motor driver from EXCSB1_WITH_EX8874 back to EXCSB1 clears Track C/D from myAutomation.h', async ({ csb1StackedPage }) => {
+        // Select the stacked driver first so Track C/D content gets generated.
+        await openDeviceSettings(csb1StackedPage)
+        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
+        await csb1StackedPage.waitForTimeout(200)
+        await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
+
+        await openAutomationRaw(csb1StackedPage)
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_TRACK(C,')
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_TRACK(D,')
+
+        // Switch back to the plain (non-stacked) driver.
+        await openDeviceSettings(csb1StackedPage)
+        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
+        await csb1StackedPage.waitForTimeout(200)
+        await csb1StackedPage.locator('li.e-list-item', { hasText: /^EXCSB1$/ }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
+
+        await openAutomationRaw(csb1StackedPage)
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).not.toContainText('SET_TRACK(C,')
+        await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).not.toContainText('SET_TRACK(D,')
     })
 
-    test('myAutomation.h editor shows Editable badge (not read-only)', async ({ workspacePage }) => {
-        await workspacePage.getByText('Automation', { exact: true }).first().click()
+    test('myAutomation.h Raw editor shows Editable badge (not read-only)', async ({ workspacePage }) => {
+        await openAutomationRaw(workspacePage)
 
         await expect(
-            workspacePage.locator('file-editor-panel').getByText('Editable'),
+            workspacePage.locator('automation-editor').getByText('Editable'),
         ).toBeVisible()
     })
 
-    test('myAutomation.h editor does not have the readonly attribute', async ({ workspacePage }) => {
-        await workspacePage.getByText('Automation', { exact: true }).first().click()
-        await workspacePage.locator('file-editor-panel div.monaco-editor').waitFor({ state: 'visible' })
+    test('myAutomation.h Raw editor does not have the readonly attribute', async ({ workspacePage }) => {
+        await openAutomationRaw(workspacePage)
 
         // The Monaco container should NOT carry aria-readonly="true"
-        const isReadOnly = await workspacePage.locator('file-editor-panel div.monaco-editor').evaluate(
+        const isReadOnly = await workspacePage.locator('automation-editor div.monaco-editor').evaluate(
             (el) => el.getAttribute('aria-readonly') === 'true'
         )
         expect(isReadOnly).toBe(false)
     })
 
     test('shows "Managed sections regenerate automatically" hint', async ({ workspacePage }) => {
-        await workspacePage.getByText('Automation', { exact: true }).first().click()
+        await openAutomationRaw(workspacePage)
 
         await expect(
-            workspacePage.locator('file-editor-panel').getByText('Managed sections regenerate automatically'),
+            workspacePage.locator('automation-editor').getByText('Managed sections regenerate automatically'),
         ).toBeVisible()
     })
 
@@ -336,8 +380,8 @@ test.describe('Automation Editor — myAutomation.h', () => {
             '// myAutomation.h - Generated by EX-Installer v0.0.20 for EX-CommandStation v5.4.18-Prod',
         ].join('\n')
 
-        await workspacePage.getByText('Automation', { exact: true }).first().click()
-        const editor = workspacePage.locator('file-editor-panel div.monaco-editor').first()
+        await openAutomationRaw(workspacePage)
+        const editor = workspacePage.locator('automation-editor div.monaco-editor').first()
         await expect(editor).toBeVisible()
 
         await editor.click()
