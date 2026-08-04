@@ -7,6 +7,7 @@ import { ConfigEditorState } from '../models/config-editor-state'
 import { friendlyName } from '../utils/friendly-names'
 import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
+import { GitService } from '../services/git.service'
 import { ArduinoCliService } from '../services/arduino-cli.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
@@ -14,6 +15,7 @@ import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
 import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
+import { copyProductSourceFiles } from '../utils/product-source-files'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 
@@ -25,6 +27,7 @@ export class Workspace {
     private readonly toastService = resolve(ToastService)
     private readonly preferences = resolve(PreferencesService)
     private readonly files = resolve(FileService)
+    private readonly git = resolve(GitService)
     private readonly cli = resolve(ArduinoCliService)
     private readonly config = resolve(ConfigService)
 
@@ -320,6 +323,37 @@ export class Workspace {
         await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
     }
 
+    /**
+     * If the user picked a different firmware version (Device Settings'
+     * version dropdown) than what's currently checked out, check it out in
+     * repoPath and refresh the firmware source files in scratchPath before
+     * compiling. User config files (config.h, myAutomation.h, etc.) are never
+     * touched — see copyProductSourceFiles().
+     */
+    private async refreshCheckedOutVersion(): Promise<void> {
+        const { selectedProduct, selectedVersion, repoPath, scratchPath, activeConfigId } = this.state
+        if (!selectedProduct || !selectedVersion || !repoPath || !scratchPath) return
+
+        const savedConfig = this.state.savedConfigurations.find((c) => c.id === activeConfigId)
+        // Nothing to reconcile if we don't know what's currently checked out,
+        // or it already matches the selected version.
+        if (!savedConfig || savedConfig.version === selectedVersion) return
+
+        const product = productDetails[selectedProduct]
+        if (!product) return
+        if (!(await this.files.exists(`${repoPath}/.git`))) return
+
+        const checkout = await this.git.checkout(repoPath, selectedVersion)
+        if (!checkout.success) {
+            throw new Error(checkout.error ?? `Failed to check out ${selectedVersion}`)
+        }
+
+        await copyProductSourceFiles(this.files, product, repoPath, scratchPath)
+
+        savedConfig.version = selectedVersion
+        await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+    }
+
     // ── Compile & Upload ──────────────────────────────────────────────────────
     clearCompileLog(): void {
         this.compileLog = ''
@@ -355,6 +389,7 @@ export class Workspace {
         this.openBottomPanel()
 
         try {
+            await this.refreshCheckedOutVersion()
             await this.saveFiles()
             this.progressPercent = 20
 

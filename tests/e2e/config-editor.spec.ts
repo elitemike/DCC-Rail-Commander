@@ -48,6 +48,15 @@ async function openAutomationRaw(page: import('@playwright/test').Page) {
     await page.waitForTimeout(300)
 }
 
+// Motor Driver is the second SF DropDownList in commandstation-config-form
+// (index 1) — the Firmware Version dropdown in the tab-bar header is index 0.
+async function selectMotorDriver(page: import('@playwright/test').Page, driverName: string | RegExp) {
+    await page.locator('commandstation-config-form .e-ddl').nth(1).click()
+    await page.waitForTimeout(200)
+    await page.locator('li.e-list-item', { hasText: driverName }).first().click()
+    await page.waitForTimeout(200)
+}
+
 async function getMonacoText(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
         const container = document.querySelector('config-h-editor div.monaco-editor') as HTMLElement
@@ -168,10 +177,7 @@ test.describe('Config Editor — EX-CommandStation', () => {
         await openDeviceSettings(csb1StackedPage)
 
         // Select the motor driver from the Syncfusion dropdown.
-        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
-        await csb1StackedPage.waitForTimeout(200)
-        await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
-        await csb1StackedPage.waitForTimeout(200)
+        await selectMotorDriver(csb1StackedPage, 'EXCSB1_WITH_EX8874')
 
         await switchToRaw(csb1StackedPage)
 
@@ -255,10 +261,7 @@ test.describe('Automation Editor — myAutomation.h', () => {
         // from the motor driver selected in Device Settings — select the
         // stacked driver there first.
         await openDeviceSettings(csb1StackedPage)
-        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
-        await csb1StackedPage.waitForTimeout(200)
-        await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
-        await csb1StackedPage.waitForTimeout(200)
+        await selectMotorDriver(csb1StackedPage, 'EXCSB1_WITH_EX8874')
 
         await openAutomationTab(csb1StackedPage)
 
@@ -299,10 +302,7 @@ test.describe('Automation Editor — myAutomation.h', () => {
     test('regression: switching motor driver from EXCSB1_WITH_EX8874 back to EXCSB1 clears Track C/D from myAutomation.h', async ({ csb1StackedPage }) => {
         // Select the stacked driver first so Track C/D content gets generated.
         await openDeviceSettings(csb1StackedPage)
-        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
-        await csb1StackedPage.waitForTimeout(200)
-        await csb1StackedPage.locator('li.e-list-item', { hasText: 'EXCSB1_WITH_EX8874' }).first().click()
-        await csb1StackedPage.waitForTimeout(200)
+        await selectMotorDriver(csb1StackedPage, 'EXCSB1_WITH_EX8874')
 
         await openAutomationRaw(csb1StackedPage)
         await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).toContainText('SET_TRACK(C,')
@@ -310,10 +310,7 @@ test.describe('Automation Editor — myAutomation.h', () => {
 
         // Switch back to the plain (non-stacked) driver.
         await openDeviceSettings(csb1StackedPage)
-        await csb1StackedPage.locator('commandstation-config-form .e-ddl').first().click()
-        await csb1StackedPage.waitForTimeout(200)
-        await csb1StackedPage.locator('li.e-list-item', { hasText: /^EXCSB1$/ }).first().click()
-        await csb1StackedPage.waitForTimeout(200)
+        await selectMotorDriver(csb1StackedPage, /^EXCSB1$/)
 
         await openAutomationRaw(csb1StackedPage)
         await expect(csb1StackedPage.locator('automation-editor div.monaco-editor')).not.toContainText('SET_TRACK(C,')
