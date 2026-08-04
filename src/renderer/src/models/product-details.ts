@@ -77,6 +77,26 @@ export function extractVersionDetails(tag: string): {
     }
 }
 
+/** Sort tags newest-first by semver (major, then minor, then patch). */
+export function sortVersionsDescending(tags: string[]): string[] {
+    return [...tags].sort((a, b) => {
+        const va = extractVersionDetails(a)
+        const vb = extractVersionDetails(b)
+        if (va.major !== vb.major) return vb.major - va.major
+        if (va.minor !== vb.minor) return vb.minor - va.minor
+        return vb.patch - va.patch
+    })
+}
+
+/**
+ * The version to preselect by default: the newest tag with a Prod suffix,
+ * falling back to the newest tag overall if none are Prod-suffixed.
+ * `sortedTags` must already be newest-first (see sortVersionsDescending).
+ */
+export function pickLatestVersion(sortedTags: string[]): string | null {
+    return sortedTags.find((t) => extractVersionDetails(t).type === 'Prod') ?? sortedTags[0] ?? null
+}
+
 /** Arduino CLI platform packages */
 export const basePlatforms: Record<string, string> = {
     'arduino:avr': '1.8.6',

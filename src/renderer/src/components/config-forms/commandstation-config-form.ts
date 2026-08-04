@@ -2,6 +2,7 @@ import { resolve, observable } from 'aurelia'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
 import { FileService } from '../../services/file.service'
+import { GitService } from '../../services/git.service'
 import {
     type CommandStationConfigOptions,
     defaultCommandStationConfig,
@@ -9,6 +10,7 @@ import {
     generateCommandStationConfig,
     reconcileTrackManagerContent,
 } from '../../config/commandstation'
+import { sortVersionsDescending, pickLatestVersion } from '../../models/product-details'
 import { TextBox, NumericTextBox } from '@syncfusion/ej2-inputs'
 import { CheckBox, RadioButton, Button } from '@syncfusion/ej2-buttons'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
@@ -32,10 +34,16 @@ export class CommandstationConfigFormCustomElement {
     private readonly editorState = resolve(ConfigEditorState)
     private readonly installerState = resolve(InstallerState)
     private readonly fileService = resolve(FileService)
+    private readonly gitService = resolve(GitService)
 
     activeConfigTab: ConfigTab = 'general'
     motorDrivers: string[] = []
     opts: CommandStationConfigOptions = defaultCommandStationConfig()
+
+    // Firmware version (git tag) selection — applied on next Compile
+    versions: string[] = []
+    versionBusy = false
+    versionError: string | null = null
 
     readonly displays = [
         { value: 'NONE', label: 'None' },
@@ -52,12 +60,12 @@ export class CommandstationConfigFormCustomElement {
     ]
 
     // Element refs set by Aurelia template ref binding
+    versionEl!: HTMLInputElement
     motorDriverEl!: HTMLInputElement
     displayEl!: HTMLInputElement
     scrollModeEl!: HTMLInputElement
     enableWifiEl?: HTMLInputElement         // conditional: if.bind="!isCsb1"
     enableEthernetEl?: HTMLInputElement     // conditional: if.bind="!isEsp32"
-    enablePowerOnStartEl!: HTMLInputElement
     disableEepromEl?: HTMLInputElement      // conditional: if.bind="!isCsb1"
     disableProgEl!: HTMLInputElement
     wifiModeApEl!: HTMLInputElement
@@ -69,12 +77,12 @@ export class CommandstationConfigFormCustomElement {
     resetWifiBtnEl!: HTMLButtonElement
 
     // SF instances
+    private sfVersion?: DropDownList
     private sfMotorDriver?: DropDownList
     private sfDisplay?: DropDownList
     private sfScrollMode?: DropDownList
     private sfEnableWifi?: CheckBox
     private sfEnableEthernet?: CheckBox
-    private sfEnablePowerOnStart?: CheckBox
     private sfDisableEeprom?: CheckBox
     private sfDisableProg?: CheckBox
     private sfWifiModeAp?: RadioButton
@@ -123,6 +131,11 @@ export class CommandstationConfigFormCustomElement {
     async attached(): Promise<void> {
         await this.loadMotorDrivers()
         this.initSfControls()
+        // Fire-and-forget: version tags come from a git call that can be slow
+        // (or fail entirely offline) and must never block the rest of the
+        // form from rendering. loadVersions() refreshes sfVersion itself once
+        // it resolves.
+        void this.loadVersions()
         // Listen for config switches so the form can refresh without a
         // full reattach. The workspace dispatches `exinst:config-switched`.
         try {
@@ -141,13 +154,56 @@ export class CommandstationConfigFormCustomElement {
         }
     }
 
+    /** Load available firmware version tags. The latest Prod release is always selected. */
+    private async loadVersions(): Promise<void> {
+        const repoPath = this.installerState.repoPath
+        if (!repoPath) return
+        this.versionBusy = true
+        this.versionError = null
+        try {
+            // Pull first so newly-tagged releases show up — listTags() only
+            // reads whatever is already local, and this repo is otherwise
+            // only refreshed from the "Add Device" wizard. Non-fatal: fall
+            // back to whatever tags are already local if offline.
+            try {
+                await this.gitService.pull(repoPath)
+            } catch {
+                // ignore — proceed with local tags
+            }
+            const tags = await this.gitService.listTags(repoPath)
+            this.versions = sortVersionsDescending(tags)
+            const latest = pickLatestVersion(this.versions)
+            if (latest) {
+                this.installerState.selectedVersion = latest
+            } else if (this.installerState.selectedVersion && !this.versions.includes(this.installerState.selectedVersion)) {
+                // Couldn't fetch anything (e.g. offline) — keep whatever was
+                // already known selectable rather than clearing it out.
+                this.versions = [this.installerState.selectedVersion, ...this.versions]
+            }
+        } catch (err) {
+            this.versionError = (err as Error).message
+        } finally {
+            this.versionBusy = false
+            // sfVersion was already created (with an empty/stale dataSource)
+            // by the time this resolves, since it isn't awaited before
+            // initSfControls() — refresh it now that versions are in.
+            if (this.sfVersion) {
+                this.sfVersion.dataSource = this.versions
+                if (this.installerState.selectedVersion && this.sfVersion.value !== this.installerState.selectedVersion) {
+                    this.sfVersion.value = this.installerState.selectedVersion
+                }
+                this.sfVersion.refresh()
+            }
+        }
+    }
+
     private destroySfControls(): void {
+        this.sfVersion?.destroy()
         this.sfMotorDriver?.destroy()
         this.sfDisplay?.destroy()
         this.sfScrollMode?.destroy()
         this.sfEnableWifi?.destroy()
         this.sfEnableEthernet?.destroy()
-        this.sfEnablePowerOnStart?.destroy()
         this.sfDisableEeprom?.destroy()
         this.sfDisableProg?.destroy()
         this.sfWifiModeAp?.destroy()
@@ -176,6 +232,18 @@ export class CommandstationConfigFormCustomElement {
 
     private initSfControls(): void {
         // ── General tab ──────────────────────────────────────────────────────
+
+        this.sfVersion = new DropDownList({
+            dataSource: this.versions,
+            value: this.installerState.selectedVersion,
+            change: (args) => {
+                // Just records the selection — the actual git checkout and
+                // firmware source refresh happen lazily on the next Compile
+                // (see Workspace.refreshCheckedOutVersion()).
+                this.installerState.selectedVersion = args.value as string
+            },
+        })
+        this.sfVersion.appendTo(this.versionEl)
 
         this.sfMotorDriver = new DropDownList({
             dataSource: this.motorDrivers,
@@ -237,16 +305,6 @@ export class CommandstationConfigFormCustomElement {
             })
             this.sfEnableEthernet.appendTo(this.enableEthernetEl)
         }
-
-        this.sfEnablePowerOnStart = new CheckBox({
-            label: 'Start with power on',
-            checked: this.opts.enablePowerOnStart,
-            change: (args) => {
-                this.opts.enablePowerOnStart = args.checked
-                this.onFieldChange()
-            },
-        })
-        this.sfEnablePowerOnStart.appendTo(this.enablePowerOnStartEl)
 
         if (this.disableEepromEl) {
             this.sfDisableEeprom = new CheckBox({

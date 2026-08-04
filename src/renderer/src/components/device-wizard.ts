@@ -11,10 +11,11 @@ import { ConfigService } from '../services/config.service'
 import { resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { DevicePickerDialog } from './dialogs/device-picker-dialog'
-import { productDetails, extractVersionDetails } from '../models/product-details'
+import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
 import type { ArduinoCliBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
+import { isProductUserFile, copyProductSourceFiles } from '../utils/product-source-files'
 
 /**
  * Known USB Vendor/Product IDs → board name and FQBN.
@@ -226,16 +227,8 @@ export class DeviceWizard {
 
             this.versionStatus = 'Loading version list...'
             const tags = await this.git.listTags(repoPath)
-            this.versions = tags.sort((a, b) => {
-                const va = extractVersionDetails(a)
-                const vb = extractVersionDetails(b)
-                if (va.major !== vb.major) return vb.major - va.major
-                if (va.minor !== vb.minor) return vb.minor - va.minor
-                return vb.patch - va.patch
-            })
-            this.selectedVersion =
-                this.versions.find((t) => extractVersionDetails(t).type === 'Prod') ??
-                this.versions[0] ?? null
+            this.versions = sortVersionsDescending(tags)
+            this.selectedVersion = pickLatestVersion(this.versions)
             this.versionStatus = ''
         } catch (err) {
             this.versionError = (err as Error).message
@@ -328,17 +321,7 @@ export class DeviceWizard {
 
             // ── Collect user-tracked file names ──────────────────────────────
             // These are config.h, myAutomation, etc. — preserved across reconfigures.
-            const userFileNames = new Set<string>(product.minimumConfigFiles)
-            if (product.otherConfigFilePatterns) {
-                // We'll match files from the scratch dir against these patterns
-                for (const p of product.otherConfigFilePatterns) {
-                    // We'll evaluate per-file below
-                    void p
-                }
-            }
-            const userPatterns = (product.otherConfigFilePatterns ?? []).map(p => new RegExp(p))
-            const isUserFile = (name: string) =>
-                userFileNames.has(name) || userPatterns.some(re => re.test(name))
+            const isUserFile = (name: string) => isProductUserFile(product, name)
 
             // ── Save existing user files from previous scratchPath (if any) ──
             // Look for any previously saved config for the same product/repo
@@ -363,26 +346,7 @@ export class DeviceWizard {
             await this.files.mkdir(scratchPath)
 
             // ── Selectively copy source files from repo (no examples/templates) ──
-            const allowedExts = ['.ino', '.cpp', '.h']
-            const allowedSubDirs = ['src', 'libraries']
-            const isSourceFile = (name: string) => {
-                if (name.endsWith('.example') || name.endsWith('.template')) return false
-                return allowedExts.some(ext => name.endsWith(ext))
-            }
-            const copySourceDir = async (srcDir: string, destDir: string) => {
-                const entries = await this.files.listDir(srcDir)
-                for (const entry of entries) {
-                    const src = `${srcDir}/${entry}`
-                    const dest = `${destDir}/${entry}`
-                    if (allowedSubDirs.includes(entry)) {
-                        await this.files.mkdir(dest)
-                        await copySourceDir(src, dest)
-                    } else if (isSourceFile(entry) && !isUserFile(entry)) {
-                        await this.files.copyFiles(src, dest)
-                    }
-                }
-            }
-            await copySourceDir(repoPath, scratchPath)
+            await copyProductSourceFiles(this.files, product, repoPath, scratchPath)
 
             // ── Resolve user config files ────────────────────────────────────
             // Priority: 1) previously-saved user edit
