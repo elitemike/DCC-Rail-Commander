@@ -414,3 +414,43 @@ export function generateMyAutomation(opts: MyAutomationOptions): string {
     lines.push('')
     return lines.join('\n') + '\n'
 }
+
+/** The one motor driver value that means "stacked (dual) motor shield". */
+export const STACKED_MOTOR_DRIVER = 'EXCSB1_WITH_EX8874'
+
+/**
+ * Regenerate myAutomation.h's TrackManager block so it reflects the motor
+ * driver currently in config.h, preserving whatever track modes/power/loco
+ * IDs are already recorded in the existing myAutomation.h content.
+ *
+ * hasStackedMotorShield is derived solely from config.h's motor driver (see
+ * track-manager-form.ts) — this is what keeps myAutomation.h in sync when
+ * that driver changes on the Device Settings side, since Device Settings and
+ * the Automation tab's TrackManager form are separate, independently-mounted
+ * components and don't otherwise notify each other of edits.
+ */
+export function reconcileTrackManagerContent(configHContent: string, existingAutomationContent: string): string {
+    const opts = defaultCommandStationConfig()
+    Object.assign(opts, parseCommandStationConfig(configHContent))
+    const trackOpts = parseMyAutomationTrackManager(existingAutomationContent)
+    delete trackOpts.hasStackedMotorShield
+    Object.assign(opts, trackOpts)
+
+    return generateMyAutomation({
+        enablePowerOnStart: opts.enablePowerOnStart,
+        hasStackedMotorShield: opts.motorDriver.toUpperCase() === STACKED_MOTOR_DRIVER,
+        startupPowerMode: opts.startupPowerMode,
+        trackAMode: opts.trackAMode,
+        trackALocoId: opts.trackALocoId,
+        trackAPower: opts.trackAPower,
+        trackBMode: opts.trackBMode,
+        trackBLocoId: opts.trackBLocoId,
+        trackBPower: opts.trackBPower,
+        trackCMode: opts.trackCMode,
+        trackCLocoId: opts.trackCLocoId,
+        trackCPower: opts.trackCPower,
+        trackDMode: opts.trackDMode,
+        trackDLocoId: opts.trackDLocoId,
+        trackDPower: opts.trackDPower,
+    })
+}

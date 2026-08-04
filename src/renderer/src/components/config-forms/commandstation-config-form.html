@@ -9,14 +9,9 @@
                 General
             </button>
             <button click.trigger="setConfigTab('wifi')"
-                class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
                 class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
                 WiFi
-            </button>
-            <button click.trigger="setConfigTab('trackmanager')"
-                class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
-                class.bind="activeConfigTab === 'trackmanager' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
-                TrackManager
             </button>
             <span if.bind="isCsb1"
                 class="ml-auto px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -150,152 +145,6 @@
 
                     </div>
                 </div>
-            </div>
-
-            <!-- ── TRACKMANAGER tab ───────────────────────────────────────────── -->
-            <div class="${activeConfigTab === 'trackmanager' ? 'flex flex-col gap-4 max-w-2xl' : 'hidden'}">
-
-                <!-- Stacked motor shield option (CSB1 only) -->
-                <div if.bind="isCsb1" class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Motor Shield
-                        Configuration</span>
-                    <input ref="hasStackedMotorShieldEl" type="checkbox" />
-                </div>
-
-                <!-- Track manager mode selector -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track Configuration</span>
-                    <div class="flex gap-6">
-                        <input ref="trackManagerModeDccOnlyEl" type="radio" />
-                        <input ref="trackManagerModeDcOnlyEl" type="radio" />
-                        <input ref="trackManagerModeMixedEl" type="radio" />
-                    </div>
-                    <div class="flex items-center gap-3 pt-2 border-t border-white/10">
-                        <label class="text-xs text-gray-400 shrink-0">Startup power</label>
-                        <div class="w-64">
-                            <input ref="startupPowerModeEl" type="text" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Track A -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track A</span>
-                    <div class="flex items-center gap-4">
-                        <!-- Type selector (mixed mode only) -->
-                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
-                            <div class="flex items-center gap-3">
-                                <input ref="trackATypeDccEl" type="radio" />
-                                <input ref="trackATypeDcEl" type="radio" />
-                            </div>
-                            <div class="w-px h-6 bg-white/10"></div>
-                        </div>
-                        <!-- Mode dropdown -->
-                        <div class="w-36">
-                            <input ref="trackAModeEl" type="text" />
-                        </div>
-                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
-                            <input ref="trackAPowerEl" type="text" />
-                        </div>
-                        <!-- Loco ID (DC mode only) -->
-                        <div class="${trackAIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
-                            <div class="w-24">
-                                <input ref="trackALocoIdEl" type="text" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Track B -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track B</span>
-                    <div class="flex items-center gap-4">
-                        <!-- Type selector (mixed mode only) -->
-                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
-                            <div class="flex items-center gap-3">
-                                <input ref="trackBTypeDccEl" type="radio" />
-                                <input ref="trackBTypeDcEl" type="radio" />
-                            </div>
-                            <div class="w-px h-6 bg-white/10"></div>
-                        </div>
-                        <!-- Mode dropdown -->
-                        <div class="w-36">
-                            <input ref="trackBModeEl" type="text" />
-                        </div>
-                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
-                            <input ref="trackBPowerEl" type="text" />
-                        </div>
-                        <!-- Loco ID (DC mode only) -->
-                        <div class="${trackBIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
-                            <div class="w-24">
-                                <input ref="trackBLocoIdEl" type="text" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Track C (only with stacked motor shield) -->
-                <div
-                    class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track C</span>
-                    <div class="flex items-center gap-4">
-                        <!-- Type selector (mixed mode only) -->
-                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
-                            <div class="flex items-center gap-3">
-                                <input ref="trackCTypeDccEl" type="radio" />
-                                <input ref="trackCTypeDcEl" type="radio" />
-                            </div>
-                            <div class="w-px h-6 bg-white/10"></div>
-                        </div>
-                        <!-- Mode dropdown -->
-                        <div class="w-36">
-                            <input ref="trackCModeEl" type="text" />
-                        </div>
-                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
-                            <input ref="trackCPowerEl" type="text" />
-                        </div>
-                        <!-- Loco ID (DC mode only) -->
-                        <div class="${trackCIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
-                            <div class="w-24">
-                                <input ref="trackCLocoIdEl" type="text" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Track D (only with stacked motor shield) -->
-                <div
-                    class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track D</span>
-                    <div class="flex items-center gap-4">
-                        <!-- Type selector (mixed mode only) -->
-                        <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
-                            <div class="flex items-center gap-3">
-                                <input ref="trackDTypeDccEl" type="radio" />
-                                <input ref="trackDTypeDcEl" type="radio" />
-                            </div>
-                            <div class="w-px h-6 bg-white/10"></div>
-                        </div>
-                        <!-- Mode dropdown -->
-                        <div class="w-36">
-                            <input ref="trackDModeEl" type="text" />
-                        </div>
-                        <div class="${opts.startupPowerMode === 'individual' ? 'w-28' : 'hidden'}">
-                            <input ref="trackDPowerEl" type="text" />
-                        </div>
-                        <!-- Loco ID (DC mode only) -->
-                        <div class="${trackDIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                            <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
-                            <div class="w-24">
-                                <input ref="trackDLocoIdEl" type="text" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
         </div><!-- end scrollable body -->

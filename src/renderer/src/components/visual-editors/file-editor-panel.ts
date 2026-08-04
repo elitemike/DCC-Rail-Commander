@@ -17,7 +17,7 @@ export class FileEditorPanelCustomElement {
     @bindable activeFileIndex = 0
 
     /** Refs to the raw Monaco editors — only one is mounted at a time (if.bind) */
-    automationEditor?: MonacoEditorCustomElement
+    automationEditorEl?: { flush(): void }
     genericEditor?: MonacoEditorCustomElement
 
     /**
@@ -27,7 +27,7 @@ export class FileEditorPanelCustomElement {
      * un-flushed debounce and gets overwritten by regeneration logic.
      */
     flushPending(): void {
-        this.automationEditor?.flush()
+        this.automationEditorEl?.flush()
         this.genericEditor?.flush()
     }
 
@@ -71,16 +71,6 @@ export class FileEditorPanelCustomElement {
     }
 
     set genericContent(val: string) {
-        if (this.activeFile) {
-            this.activeFile.content = val
-        }
-    }
-
-    get automationContent(): string {
-        return this.activeFile?.content ?? this.state.automationPreview
-    }
-
-    set automationContent(val: string) {
         if (this.activeFile) {
             this.activeFile.content = val
         }

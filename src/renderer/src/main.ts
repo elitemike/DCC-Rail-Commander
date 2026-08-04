@@ -25,6 +25,7 @@ import { MonacoEditorCustomElement } from './components/monaco-editor'
 import { RosterEditorCustomElement } from './components/visual-editors/roster-editor'
 import { TurnoutEditorCustomElement } from './components/visual-editors/turnout-editor'
 import { ConfigHEditorCustomElement } from './components/visual-editors/config-h-editor'
+import { AutomationEditorCustomElement } from './components/visual-editors/automation-editor'
 import { FileEditorPanelCustomElement } from './components/visual-editors/file-editor-panel'
 import { ConfirmDialog } from './components/dialogs/confirm-dialog'
 import { CompileProgressCustomElement } from './components/compile-progress'
@@ -37,6 +38,7 @@ import { AliasesEditorCustomElement } from './components/visual-editors/aliases-
 // Per-product visual config forms
 import { SerialMonitorCustomElement } from './components/serial-monitor'
 import { CommandstationConfigFormCustomElement } from './components/config-forms/commandstation-config-form'
+import { TrackManagerFormCustomElement } from './components/config-forms/track-manager-form'
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
 
 registerLicense(syncfusionLicense)
@@ -77,6 +79,7 @@ new Aurelia()
         RosterEditorCustomElement,
         TurnoutEditorCustomElement,
         ConfigHEditorCustomElement,
+        AutomationEditorCustomElement,
         FileEditorPanelCustomElement,
         SensorsEditorCustomElement,
         SignalsEditorCustomElement,
@@ -87,6 +90,7 @@ new Aurelia()
         CompileProgressCustomElement,
         SerialMonitorCustomElement,
         CommandstationConfigFormCustomElement,
+        TrackManagerFormCustomElement,
         IOExpanderConfigFormCustomElement,
     )
     .app(App)
