@@ -113,6 +113,33 @@ export function extractAutomationCustomContent(content: string): string {
 }
 
 /**
+ * Extracts the literal body of a managed block (e.g. the TrackManager
+ * AUTOSTART/DONE block) from myAutomation.h content, stripping the two fixed
+ * boilerplate comment lines that `automationPreview` re-adds itself. Returns
+ * '' if the tag isn't present or is unterminated.
+ *
+ * Without this, loading a file that already has a managed block (e.g. from
+ * an imported folder, or simply re-opening a saved config without visiting
+ * the form that owns that block) leaves the corresponding `generated*Content`
+ * state empty, and the next regeneration silently drops the block.
+ */
+function extractManagedBlockBody(content: string, tag: string): string {
+    const openIdx = content.indexOf(tag)
+    if (openIdx === -1) return ''
+    const closeIdx = content.indexOf(tag, openIdx + tag.length)
+    if (closeIdx === -1) return ''
+    const inner = content.slice(openIdx + tag.length, closeIdx)
+    return inner
+        .split('\n')
+        .filter(line => {
+            const t = line.trim()
+            return t !== '' && !t.startsWith('// This') && !t.startsWith('// Do not edit inside this block')
+        })
+        .join('\n')
+        .trim()
+}
+
+/**
  * ConfigEditorState — singleton that owns the in-memory editing state for all
  * configuration files.  It is the single source of truth for:
  *   • config.h                  (raw text)
@@ -642,6 +669,7 @@ export class ConfigEditorState {
         this.turnouts = []
         this.aliases = []
         this.preservedAutomationContent = ''
+        this.generatedTrackManagerContent = ''
 
         let automationContent = ''
         for (const f of files) {
@@ -659,6 +687,10 @@ export class ConfigEditorState {
                 // Strip managed includes block; preserve the user's custom code
                 // so it survives every subsequent auto-regeneration.
                 this.preservedAutomationContent = extractAutomationCustomContent(f.content)
+                // Rehydrate the TrackManager managed-block state from the file
+                // itself — otherwise it stays empty until the TrackManager form
+                // is visited, and the block would be dropped on next save.
+                this.generatedTrackManagerContent = extractManagedBlockBody(f.content, MANAGED_TRACK_MANAGER_TAG)
             }
         }
 
@@ -705,6 +737,18 @@ export class ConfigEditorState {
 
     // ── Write back to InstallerState.configFiles ──────────────────────────────
     private _syncToInstallerState(): void {
+        // Rehydrate the TrackManager block from whatever is currently in the
+        // raw editor *before* regenerating — this is the only path a direct
+        // Monaco edit to that block can take to survive a save. Only done
+        // here (not in _ensureAutomationFile) because syncTrackManager() —
+        // the TrackManager form's own write path — calls _ensureAutomationFile
+        // immediately after setting generatedTrackManagerContent itself; doing
+        // the af.content extraction there would clobber that fresh value with
+        // the stale pre-update content.
+        const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
+        if (automationFile) {
+            this.generatedTrackManagerContent = extractManagedBlockBody(automationFile.content, MANAGED_TRACK_MANAGER_TAG)
+        }
         for (const f of this.installerState.configFiles) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
                 f.content = this._preserveDeviceHeader(this.configHContent, f.content)
