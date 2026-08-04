@@ -32,7 +32,6 @@
                 <span class="font-medium">${activeConfigName}</span>
                 <span class="text-gray-400">—</span>
                 <span class="text-blue-300">${productName}</span>
-                <span class="text-gray-500 text-xs">${state.selectedVersion}</span>
                 <svg class.bind="showDeviceMenu ? 'rotate-180' : ''"
                     class="w-3 h-3 text-gray-400 ml-1 transition-transform" fill="none" stroke="currentColor"
                     viewBox="0 0 24 24">
@@ -94,6 +93,15 @@
 
         <!-- Spacer -->
         <div class="flex-1"></div>
+
+        <!-- Firmware version selector — applied on next Compile -->
+        <div class="relative flex items-center gap-1.5 mr-1">
+            <div class="w-36" title="Firmware version — applied on next Compile">
+                <input ref="versionEl" type="text" />
+            </div>
+            <span if.bind="versionBusy" class="text-xs text-gray-500 shrink-0">Loading…</span>
+            <span if.bind="versionError" title.bind="versionError" class="text-xs text-red-400 shrink-0">⚠</span>
+        </div>
 
         <!-- ── COMPILE button (dev/mock mode only) ── -->
         <button if.bind="isMock" click.trigger="compile()" disabled.bind="isCompiling || !canCompile"

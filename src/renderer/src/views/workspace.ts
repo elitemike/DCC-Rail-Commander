@@ -12,11 +12,12 @@ import { ArduinoCliService } from '../services/arduino-cli.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
 import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
-import { productDetails } from '../models/product-details'
+import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { Splitter } from '@syncfusion/ej2-layouts'
+import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 
 export class Workspace {
@@ -50,6 +51,13 @@ export class Workspace {
     compileSuccess: boolean | null = null
     compileError: string | null = null
     progressPercent = 0
+
+    // ── Firmware version (git tag) selection — applied on next Compile ───────
+    versions: string[] = []
+    versionBusy = false
+    versionError: string | null = null
+    versionEl!: HTMLInputElement
+    private sfVersion?: DropDownList
 
     // ── Menu ─────────────────────────────────────────────────────────────────
     showDeviceMenu = false
@@ -85,6 +93,11 @@ export class Workspace {
     }
 
     async binding(): Promise<void> {
+        // Seed the version dropdown's dataSource with whatever is already
+        // selected *before* anything renders, so the SF DropDownList has a
+        // sensible initial value/option instead of an empty list while
+        // loadVersions()'s async fetch is still in flight.
+        this.seedVersionsFromSelected()
         await this.config.ready
         this.isMock = this.config.isMock
         if (!this.state.selectedDevice) {
@@ -94,6 +107,60 @@ export class Workspace {
         await this.loadSavedConfigs()
         await this.refreshConfigFilesFromDisk()
         this.configEditorState.loadFromInstallerState()
+        // Fire-and-forget: a git call that can be slow (or fail entirely
+        // offline) and must never block the rest of the view from rendering.
+        void this.loadVersions()
+    }
+
+    private seedVersionsFromSelected(): void {
+        this.versions = this.state.selectedVersion ? [this.state.selectedVersion] : []
+    }
+
+    /** Load available firmware version tags for the active device's repo. The latest Prod release is always selected. */
+    async loadVersions(): Promise<void> {
+        const repoPath = this.state.repoPath
+        if (!repoPath) {
+            this.versions = []
+            return
+        }
+        this.versionBusy = true
+        this.versionError = null
+        try {
+            // Pull first so newly-tagged releases show up — listTags() only
+            // reads whatever is already local, and this repo is otherwise
+            // only refreshed from the "Add Device" wizard. Non-fatal: fall
+            // back to whatever tags are already local if offline.
+            try {
+                await this.git.pull(repoPath)
+            } catch {
+                // ignore — proceed with local tags
+            }
+            const tags = await this.git.listTags(repoPath)
+            this.versions = sortVersionsDescending(tags)
+            const latest = pickLatestVersion(this.versions)
+            if (latest) {
+                this.state.selectedVersion = latest
+            } else if (this.state.selectedVersion && !this.versions.includes(this.state.selectedVersion)) {
+                // Couldn't fetch anything (e.g. offline) — keep whatever was
+                // already known selectable rather than clearing it out.
+                this.versions = [this.state.selectedVersion, ...this.versions]
+            }
+        } catch (err) {
+            this.versionError = (err as Error).message
+        } finally {
+            this.versionBusy = false
+            this.refreshSfVersion()
+        }
+    }
+
+    /** Sync the SF DropDownList's dataSource/value from `versions`/`state.selectedVersion`. */
+    private refreshSfVersion(): void {
+        if (!this.sfVersion) return
+        this.sfVersion.dataSource = this.versions
+        if (this.state.selectedVersion && this.sfVersion.value !== this.state.selectedVersion) {
+            this.sfVersion.value = this.state.selectedVersion
+        }
+        this.sfVersion.refresh()
     }
 
     attached(): void {
@@ -109,11 +176,25 @@ export class Workspace {
             })
             this.splitterObj.appendTo('#workspace-splitter')
         })
+
+        this.sfVersion = new DropDownList({
+            dataSource: this.versions,
+            value: this.state.selectedVersion,
+            change: (args) => {
+                // Just records the selection — the actual git checkout and
+                // firmware source refresh happen lazily on the next Compile
+                // (see refreshCheckedOutVersion()).
+                this.state.selectedVersion = args.value as string
+            },
+        })
+        this.sfVersion.appendTo(this.versionEl)
     }
 
     detaching(): void {
         this.splitterObj?.destroy()
         this.splitterObj = null
+        this.sfVersion?.destroy()
+        this.sfVersion = undefined
     }
 
     /**
@@ -559,6 +640,10 @@ export class Workspace {
         this.activeFileIndex = 0
         this.compileLog = ''
         this.compileSuccess = null
+        // Reset the version dropdown's dataSource to match the newly-switched
+        // device right away, since loadVersions()'s fetch below is async.
+        this.seedVersionsFromSelected()
+        this.refreshSfVersion()
         await this.refreshConfigFilesFromDisk()
         // Ensure the ConfigEditorState mirrors the newly-switched config files
         // so components that parse `config.h` (e.g. commandstation form) see
@@ -572,6 +657,9 @@ export class Workspace {
         } catch {
             // noop in non-browser or test environments
         }
+        // repoPath just changed to a different device's repo — refresh the
+        // version list for it (fire-and-forget, same reasoning as binding()).
+        void this.loadVersions()
     }
 
     async addNewDevice(): Promise<void> {
