@@ -1,3 +1,10 @@
+nodeLinker: hoisted
+shamefullyHoist: true
+allowBuilds:
+  '@serialport/bindings-cpp': true
+  electron: true
+  esbuild: true
+  usb: true
 onlyBuiltDependencies:
   - '@serialport/bindings-cpp'
   - electron

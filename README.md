@@ -72,6 +72,14 @@ In this instance, it is recommended to run in a virtual environment. Assuming Py
 - Install required modules with `pip install -r requirements.txt`
 - Run as a module with `python -m ex_installer`
 
+- WSL requirements
+  - libgtk-3 shared library
+    `sudo apt-get update && sudo apt-get install -y libgtk-3-0`
+
+  - Electron on WSL2 need extra libs beyond GTK too — nss, libnotify, alsa, xss, etc. If GTK fix don't clear it, run full set:
+    `sudo apt-get install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0`
+
+
 ## Versioning
 
 Initially, the application is versioned by updating the file "version.py" located within the "ex_installer" module directory.

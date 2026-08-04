@@ -30,7 +30,7 @@
                 <span class="ml-auto text-xs text-gray-600">Managed sections regenerate automatically</span>
             </div>
             <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <monaco-editor value.two-way="automationContent" language="cpp"
+                <monaco-editor component.ref="automationEditor" value.two-way="automationContent" language="cpp"
                     filename="myAutomation.h"></monaco-editor>
             </div>
         </div>
@@ -72,7 +72,7 @@
                     if.bind="friendlyName(activeFile.name) !== activeFile.name">${activeFile.name}</span>
             </div>
             <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <monaco-editor value.two-way="genericContent" language="cpp"
+                <monaco-editor component.ref="genericEditor" value.two-way="genericContent" language="cpp"
                     filename.bind="activeFile.name"></monaco-editor>
             </div>
         </div>

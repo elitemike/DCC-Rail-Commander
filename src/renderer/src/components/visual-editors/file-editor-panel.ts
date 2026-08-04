@@ -2,6 +2,7 @@ import { bindable, resolve } from 'aurelia'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
 import { friendlyName } from '../../utils/friendly-names'
+import type { MonacoEditorCustomElement } from '../monaco-editor'
 
 /**
  * file-editor-panel — replaces the raw textarea in workspace.html.
@@ -14,6 +15,21 @@ export class FileEditorPanelCustomElement {
 
     /** Currently selected file index (passed in from workspace) */
     @bindable activeFileIndex = 0
+
+    /** Refs to the raw Monaco editors — only one is mounted at a time (if.bind) */
+    automationEditor?: MonacoEditorCustomElement
+    genericEditor?: MonacoEditorCustomElement
+
+    /**
+     * Force any pending debounced Monaco edit into the bound file content.
+     * Must be called before reading/saving configFiles — otherwise an edit
+     * made just before hitting Save can still be sitting in Monaco's
+     * un-flushed debounce and gets overwritten by regeneration logic.
+     */
+    flushPending(): void {
+        this.automationEditor?.flush()
+        this.genericEditor?.flush()
+    }
 
     get activeFile(): { name: string; content: string } | null {
         return this.installer.configFiles[this.activeFileIndex] ?? null

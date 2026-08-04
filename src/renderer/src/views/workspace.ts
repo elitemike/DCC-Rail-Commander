@@ -15,6 +15,7 @@ import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
 import { Splitter } from '@syncfusion/ej2-layouts'
+import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 
 export class Workspace {
     private readonly router = resolve(Router)
@@ -29,6 +30,7 @@ export class Workspace {
 
     // ── Active config file being edited ─────────────────────────────────────
     activeFileIndex = 0
+    filePanel?: FileEditorPanelCustomElement
 
     readonly friendlyName = friendlyName
 
@@ -333,6 +335,11 @@ export class Workspace {
             await Promise.resolve()
             await new Promise<void>(resolve => setTimeout(resolve, 0))
         }
+        // Monaco's raw editors (myAutomation.h, generic custom files) debounce
+        // content → binding updates by 300ms and don't respond to blur, so a
+        // Save right after typing can otherwise be overwritten with stale
+        // pre-edit content.
+        this.filePanel?.flushPending()
     }
 
     async compile(): Promise<void> {

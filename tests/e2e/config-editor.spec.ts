@@ -35,6 +35,12 @@ async function switchToVisual(page: import('@playwright/test').Page) {
     await page.waitForTimeout(200)
 }
 
+async function openAutomationTab(page: import('@playwright/test').Page) {
+    await page.getByText('Automation', { exact: true }).first().click()
+    await expect(page.locator('file-editor-panel div.monaco-editor')).toBeVisible()
+    await page.waitForTimeout(300)
+}
+
 async function getMonacoText(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
         const container = document.querySelector('config-h-editor div.monaco-editor') as HTMLElement
@@ -209,6 +215,50 @@ test.describe('Config Editor — EX-CommandStation', () => {
         await expect(csb1StackedPage.locator('config-h-editor div.monaco-editor'))
             .toContainText('#define MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874')
     })
+
+    // ── Regression: TrackManager form → myAutomation.h ───────────────────────
+    //
+    // syncTrackManager() (called by the TrackManager form on every field
+    // change) sets generatedTrackManagerContent and immediately regenerates
+    // myAutomation.h. A prior fix made _ensureAutomationFile() re-derive
+    // generatedTrackManagerContent from the *current* myAutomation.h content
+    // on every call, to let direct raw edits to that block survive a save.
+    // That extraction was wrongly running inside _ensureAutomationFile() —
+    // which syncTrackManager() also calls — so it immediately clobbered the
+    // fresh form-driven value with the stale pre-update content, silently
+    // dropping the whole TrackManager block. Fixed by moving the raw-edit
+    // extraction into _syncToInstallerState() (the save-time entry point)
+    // only, so it never runs as a side effect of the form's own write path.
+
+    test('regression: toggling TrackManager Startup power to Individual and setting Track C OFF updates myAutomation.h', async ({ csb1StackedPage }) => {
+        await openDeviceSettings(csb1StackedPage)
+
+        await csb1StackedPage
+            .locator('commandstation-config-form')
+            .getByRole('button', { name: 'TrackManager' })
+            .click()
+
+        // Switch Startup power from "All tracks on (POWERON)" to "Individual tracks (SET_POWER)"
+        const startupDdl = csb1StackedPage.locator('commandstation-config-form .e-ddl:visible').first()
+        await startupDdl.click()
+        await csb1StackedPage.waitForTimeout(200)
+        await csb1StackedPage.locator('li.e-list-item', { hasText: 'Individual tracks (SET_POWER)' }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
+
+        // Track C's power dropdown is now visible; set it to OFF.
+        // Visible order: startup mode, A-mode, A-power, B-mode, B-power, C-mode, C-power, D-mode, D-power.
+        const visibleDdls = csb1StackedPage.locator('commandstation-config-form .e-ddl:visible')
+        await visibleDdls.nth(6).click()
+        await csb1StackedPage.waitForTimeout(200)
+        await csb1StackedPage.locator('li.e-list-item', { hasText: /^OFF$/ }).first().click()
+        await csb1StackedPage.waitForTimeout(200)
+
+        await openAutomationTab(csb1StackedPage)
+
+        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(A,ON)')
+        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(C,OFF)')
+        await expect(csb1StackedPage.locator('file-editor-panel div.monaco-editor')).toContainText('SET_POWER(D,ON)')
+    })
 })
 
 // ── Automation Editor (myAutomation.h) ───────────────────────────────────────
@@ -250,6 +300,72 @@ test.describe('Automation Editor — myAutomation.h', () => {
         await expect(
             workspacePage.locator('file-editor-panel').getByText('Managed sections regenerate automatically'),
         ).toBeVisible()
+    })
+
+    // ── Regression: raw edit + immediate Save must not be wiped ─────────────
+    //
+    // myAutomation.h's Monaco editor debounces content → binding updates by
+    // 300ms. Hitting Save right after typing/pasting used to save the file
+    // before that debounce fired, so syncAll() regenerated myAutomation.h
+    // from the stale (pre-edit) content and the user's edit vanished.
+
+    test('regression: pasting raw content into myAutomation.h and immediately hitting Save preserves it', async ({ workspacePage }) => {
+        const pasted = [
+            '// ==== EX-Installer Required Includes ====',
+            '// These #includes are managed by EX-Installer.',
+            '// Do not remove them — they are required for the installer to function correctly.',
+            '#include "myRoster.h"',
+            '#include "myTurnouts.h"',
+            '// ==== EX-Installer Required Includes ====',
+            '',
+            '// ==== EX-Installer TrackManager ====',
+            '// This TrackManager block is managed by EX-Installer.',
+            '// Do not edit inside this block manually.',
+            'AUTOSTART',
+            'SET_TRACK(A,MAIN)',
+            'SET_TRACK(B,MAIN_AUTO)',
+            'SET_TRACK(C,PROG)',
+            'SET_TRACK(D,NONE)',
+            'SET_POWER(A,ON)',
+            'SET_POWER(B,ON)',
+            'SET_POWER(C,OFF)',
+            'SET_POWER(D,OFF)',
+            'DONE',
+            '// ==== EX-Installer TrackManager ====',
+            '',
+            '// myAutomation.h - Generated by EX-Installer v0.0.20 for EX-CommandStation v5.4.18-Prod',
+        ].join('\n')
+
+        await workspacePage.getByText('Automation', { exact: true }).first().click()
+        const editor = workspacePage.locator('file-editor-panel div.monaco-editor').first()
+        await expect(editor).toBeVisible()
+
+        await editor.click()
+        await workspacePage.keyboard.press('Control+A')
+        await workspacePage.keyboard.press('Delete')
+        const lines = pasted.split('\n')
+        for (let i = 0; i < lines.length; i++) {
+            await workspacePage.keyboard.type(lines[i])
+            if (i < lines.length - 1) await workspacePage.keyboard.press('Enter')
+        }
+
+        // Hit Save immediately — do NOT wait for Monaco's 300ms debounce.
+        // This is exactly the scenario that used to wipe the edit.
+        await workspacePage.getByRole('button', { name: 'Save' }).click()
+
+        // Give the save + any re-render a moment to settle, then verify the
+        // content is still present in the editor (not reverted/regenerated
+        // from stale pre-edit content).
+        await workspacePage.waitForTimeout(300)
+
+        await expect(editor).toContainText('SET_TRACK(A,MAIN)')
+        await expect(editor).toContainText('SET_TRACK(B,MAIN_AUTO)')
+        await expect(editor).toContainText('SET_TRACK(C,PROG)')
+        await expect(editor).toContainText('SET_TRACK(D,NONE)')
+        await expect(editor).toContainText('SET_POWER(A,ON)')
+        await expect(editor).toContainText('SET_POWER(C,OFF)')
+        await expect(editor).toContainText('#include "myRoster.h"')
+        await expect(editor).toContainText('#include "myTurnouts.h"')
     })
 })
 
