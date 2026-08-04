@@ -25,6 +25,27 @@ test.describe('Compile button', () => {
         await expect(workspacePage.getByRole('button', { name: 'Compile & Upload' })).not.toBeVisible()
     })
 
+    test('firmware version selector is visible next to Compile and shows the active version', async ({ workspacePage }) => {
+        const versionControl = workspacePage.locator('div[title^="Firmware version"]')
+        await expect(versionControl).toBeVisible()
+        // No real git repo in the e2e fixture, so listTags()/pull() both fail
+        // silently and loadVersions() falls back to keeping the saved config's
+        // version selectable.
+        await expect(versionControl).toContainText('v5.4.0-Prod')
+    })
+
+    test('Device Settings no longer shows a version field', async ({ workspacePage }) => {
+        await workspacePage.getByText('Device Settings', { exact: true }).first().click()
+        await expect(workspacePage.locator('config-h-editor')).toBeVisible()
+
+        await expect(workspacePage.locator('commandstation-config-form').getByText('Version', { exact: true })).not.toBeVisible()
+    })
+
+    test('compiling with the version selector present still succeeds', async ({ workspacePage }) => {
+        await workspacePage.getByRole('button', { name: 'Compile' }).click()
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+    })
+
     test('clicking Compile shows Compiling... then ✓ Success and a success toast', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
 

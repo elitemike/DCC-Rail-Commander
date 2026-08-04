@@ -13,17 +13,8 @@
                 class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
                 WiFi
             </button>
-            <div class="ml-auto flex items-center gap-2 py-1.5">
-                <label class="text-xs text-gray-500 shrink-0">Version</label>
-                <div class="w-40">
-                    <input ref="versionEl" type="text" />
-                </div>
-                <span if.bind="versionBusy" class="text-xs text-gray-500 shrink-0">Loading…</span>
-                <span if.bind="versionError" title.bind="versionError"
-                    class="text-xs text-red-400 shrink-0">⚠</span>
-            </div>
             <span if.bind="isCsb1"
-                class="px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                class="ml-auto px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                 EX-CSB1
             </span>
         </div>

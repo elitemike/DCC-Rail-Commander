@@ -48,10 +48,8 @@ async function openAutomationRaw(page: import('@playwright/test').Page) {
     await page.waitForTimeout(300)
 }
 
-// Motor Driver is the second SF DropDownList in commandstation-config-form
-// (index 1) — the Firmware Version dropdown in the tab-bar header is index 0.
 async function selectMotorDriver(page: import('@playwright/test').Page, driverName: string | RegExp) {
-    await page.locator('commandstation-config-form .e-ddl').nth(1).click()
+    await page.locator('commandstation-config-form .e-ddl').first().click()
     await page.waitForTimeout(200)
     await page.locator('li.e-list-item', { hasText: driverName }).first().click()
     await page.waitForTimeout(200)
