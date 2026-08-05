@@ -58,13 +58,38 @@ export class UsbManager {
         }))
     }
 
-    /** Open a serial port and return a handle key. */
+    /**
+     * Open a serial port and return a handle key.
+     *
+     * Retries a few times on failure: Windows' generic USB-CDC driver (used by
+     * boards with a native-USB serial interface, e.g. ESP32-S2/S3/C3 — no
+     * external CH340/CP210x bridge chip involved) frequently throws a transient
+     * "SetCommState: Unknown error code 31" (ERROR_GEN_FAILURE) on the very
+     * first open attempt right after the port enumerates, then succeeds
+     * immediately on retry. Failing after the third attempt still surfaces
+     * whatever the underlying error was.
+     */
     async openPort(
         path: string,
         baudRate: number = 115200,
     ): Promise<void> {
         if (this.openPorts.has(path)) return
 
+        const attempts = 3
+        let lastErr: Error | undefined
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                await this.openPortOnce(path, baudRate)
+                return
+            } catch (err) {
+                lastErr = err as Error
+                if (attempt < attempts) await new Promise((r) => setTimeout(r, 300 * attempt))
+            }
+        }
+        throw lastErr
+    }
+
+    private openPortOnce(path: string, baudRate: number): Promise<void> {
         return new Promise((resolve, reject) => {
             const port = new SerialPort({ path, baudRate }, (err) => {
                 if (err) return reject(err)
