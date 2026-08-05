@@ -9,13 +9,16 @@ import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
 import { GitService } from '../services/git.service'
 import { ArduinoCliService } from '../services/arduino-cli.service'
+import { UsbService } from '../services/usb.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
 import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
 import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
-import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader } from '../utils/configHeaderParser'
+import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
 import { copyProductSourceFiles } from '../utils/product-source-files'
+import { mergeDetectedBoards } from '../utils/device-scan'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -30,6 +33,7 @@ export class Workspace {
     private readonly files = resolve(FileService)
     private readonly git = resolve(GitService)
     private readonly cli = resolve(ArduinoCliService)
+    private readonly usb = resolve(UsbService)
     private readonly config = resolve(ConfigService)
 
     // ── Active config file being edited ─────────────────────────────────────
@@ -566,6 +570,48 @@ export class Workspace {
         }
     }
 
+    /**
+     * Verifies `device.port` is still a live serial port right before an upload
+     * touches it, and transparently corrects it if the board re-enumerated on a
+     * different port (common right after a reset-triggering upload, a replug, or
+     * — on Windows — a freshly/manually-bound generic USB-serial driver that
+     * doesn't keep a stable COM number). Without this, arduino-cli/esptool would
+     * be handed a stale port string and fail with an opaque "port doesn't exist"
+     * error instead of the app recovering or explaining what happened.
+     */
+    private async ensureLivePort(device: ArduinoCliBoardInfo): Promise<void> {
+        await this.usb.initialize()
+        await this.usb.refresh()
+
+        let cliBoards: ArduinoCliBoardInfo[] = []
+        try {
+            cliBoards = await this.cli.listBoards()
+        } catch { /* fall back silently to the raw serial-port list */ }
+
+        const connected = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
+        if (connected.some((b) => b.port === device.port)) return // still live at the cached port
+
+        const { device: reconciled, portChanged } = reconcileDevicePort(device, connected)
+        if (!portChanged) {
+            throw new Error(
+                `Board "${device.name}" is no longer available at ${device.port}. `
+                + `Reconnect it and click the port badge to rescan before uploading.`,
+            )
+        }
+
+        device.port = reconciled.port
+        const configH = this.state.configFiles.find((f) => f.name === 'config.h')
+        if (configH) configH.content = injectDeviceHeader(configH.content, device)
+        await this.updateSavedConfig()
+        await this.saveFiles()
+
+        this.toastService.show({
+            title: 'Port Updated',
+            content: `Board reconnected at ${device.port}.`,
+            cssClass: 'e-toast-success',
+        })
+    }
+
     async upload(): Promise<void> {
         const device = this.state.selectedDevice
         if (!device || !this.state.scratchPath) return
@@ -579,6 +625,8 @@ export class Workspace {
             if (!fqbn) {
                 throw new Error(`Board "${device.name}" has no FQBN — install Arduino CLI and rescan to identify it.`)
             }
+
+            await this.ensureLivePort(device)
 
             this.compileLog += `\nUploading to ${device.port}...\n`
             this.progressPercent = 80
