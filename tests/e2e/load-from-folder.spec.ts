@@ -368,6 +368,10 @@ test.describe('Load from Folder — device picker dialog', () => {
 
         await homePage.getByText('Load from Folder').first().click()
         await expect(homePage.getByText('Select Your Board')).toBeVisible({ timeout: 8_000 })
+        // The picker now lists every connected serial port (not just the one CLI
+        // mocked above), so explicitly pick the Mega rather than relying on
+        // whichever board happens to be preselected by default.
+        await homePage.getByText('Arduino Mega 2560').click()
         await homePage.getByRole('button', { name: 'Use This Board' }).click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 

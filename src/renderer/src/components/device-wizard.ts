@@ -16,29 +16,7 @@ import type { ArduinoCliBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
 import { isProductUserFile, copyProductSourceFiles } from '../utils/product-source-files'
-
-/**
- * Known USB Vendor/Product IDs → board name and FQBN.
- * Used as a fallback when Arduino CLI doesn't recognise a detected serial port.
- * Leave fqbn empty for generic serial adapters where the target board type is unknown.
- */
-const KNOWN_BOARDS: Record<string, { name: string; fqbn: string }> = {
-    '2341:0042': { name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
-    '2341:0010': { name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
-    '2341:0242': { name: 'Arduino Mega 2560 (DFU)', fqbn: 'arduino:avr:mega' },
-    '2341:0043': { name: 'Arduino Uno', fqbn: 'arduino:avr:uno' },
-    '2341:0001': { name: 'Arduino Uno', fqbn: 'arduino:avr:uno' },
-    '2341:0243': { name: 'Arduino Uno (DFU)', fqbn: 'arduino:avr:uno' },
-    '2341:0058': { name: 'Arduino Nano', fqbn: 'arduino:avr:nano' },
-    '2341:0037': { name: 'Arduino Nano Every', fqbn: 'arduino:megaavr:nanoevery' },
-    '1a86:7523': { name: 'CH340 Serial (Nano/Mega clone)', fqbn: '' },
-    '10c4:ea60': { name: 'CP2102 Serial (ESP32)', fqbn: '' },
-    '0403:6001': { name: 'FTDI Serial Adapter', fqbn: '' },
-    '0403:6015': { name: 'FTDI Serial Adapter', fqbn: '' },
-    '0483:374b': { name: 'STM32 Nucleo (ST-Link)', fqbn: '' },
-    '0483:3748': { name: 'STM32 ST-Link V2', fqbn: '' },
-    '303a:1001': { name: 'EX-CSB1 (DCC-EX CommandStation Board 1)', fqbn: 'esp32:esp32:esp32' },
-}
+import { mergeDetectedBoards } from '../utils/device-scan'
 
 export class DeviceWizard {
     /** Injected automatically by @aurelia/dialog */
@@ -140,31 +118,15 @@ export class DeviceWizard {
         try {
             await this.usb.initialize()
             await this.usb.refresh()
-            const serial = this.usb.serialPorts
 
-            const cliMap = new Map<string, ArduinoCliBoardInfo>()
+            let cliBoards: ArduinoCliBoardInfo[] = []
             if (this.state.cliReady) {
                 try {
-                    const cliBoards = await this.cli.listBoards()
-                    for (const b of cliBoards) cliMap.set(b.port, b)
+                    cliBoards = await this.cli.listBoards()
                 } catch { /* fall back silently */ }
             }
 
-            this.boards = serial.map((sp) => {
-                const cliMatch = cliMap.get(sp.path)
-                if (cliMatch) return { ...cliMatch, serialNumber: cliMatch.serialNumber ?? sp.serialNumber }
-                const vid = sp.vendorId?.toLowerCase() ?? ''
-                const pid = sp.productId?.toLowerCase() ?? ''
-                const vidPid = vid && pid ? `${vid}:${pid}` : ''
-                const knownBoard = KNOWN_BOARDS[vidPid]
-                return {
-                    name: knownBoard?.name ?? sp.manufacturer ?? 'Unknown device',
-                    fqbn: knownBoard?.fqbn ?? '',
-                    port: sp.path,
-                    protocol: 'serial',
-                    serialNumber: sp.serialNumber,
-                } satisfies ArduinoCliBoardInfo
-            })
+            this.boards = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
         } catch (err) {
             this.scanError = (err as Error).message
         } finally {
