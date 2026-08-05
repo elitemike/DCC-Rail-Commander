@@ -30,13 +30,19 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
     scanning = false
     scanError: string | null = null
     portOnly = false
+    showTroubleshooting = false
 
     private initialFqbn = ''
 
-    activate(model?: { initialFqbn?: string; portOnly?: boolean }): Promise<void> {
+    activate(model?: { initialFqbn?: string; portOnly?: boolean }): void {
+        // Deliberately not awaited: @aurelia/dialog doesn't attach/show the dialog
+        // until this hook's return value settles, so awaiting scan() here (USB +
+        // arduino-cli enumeration, can take a second or more) would leave the dialog
+        // invisible the whole time it's "opening". Firing it without awaiting lets
+        // the dialog show immediately with its scanning spinner instead.
         this.initialFqbn = model?.initialFqbn ?? ''
         this.portOnly = model?.portOnly ?? false
-        return this.scan()
+        void this.scan()
     }
 
     async scan(): Promise<void> {

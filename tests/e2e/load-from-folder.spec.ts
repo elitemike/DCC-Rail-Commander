@@ -112,6 +112,20 @@ async function mockListBoards(app: ElectronApplication, boards: ArduinoCliBoardI
     }, boards)
 }
 
+/**
+ * Mocks the `usb:list-serial-ports` IPC channel to return no ports, overriding
+ * the fake devices `--mock-device` normally supplies. Combined with an empty
+ * mockListBoards(), this reproduces the genuine "nothing connected" state the
+ * device-picker dialog's empty-state / troubleshooting UI is meant for.
+ */
+async function mockNoSerialPorts(app: ElectronApplication): Promise<void> {
+    await app.evaluate((_electronApp) => {
+        const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
+        ipcMain.removeHandler('usb:list-serial-ports')
+        ipcMain.handle('usb:list-serial-ports', () => [])
+    })
+}
+
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
 const test = base.extend<LoadFolderFixtures>({
@@ -344,6 +358,25 @@ test.describe('Load from Folder — device picker dialog', () => {
         await homePage.getByRole('button', { name: 'Continue without device' }).click()
 
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+    })
+
+    test('device picker shows driver troubleshooting info when no boards are detected', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), MOCK_CONFIG_H, 'utf-8')
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await mockListBoards(electronApp, [])
+        await mockNoSerialPorts(electronApp)
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('Select Your Board')).toBeVisible({ timeout: 8_000 })
+        await expect(homePage.getByText('No boards detected.')).toBeVisible()
+
+        const toggle = homePage.getByRole('button', { name: "Why can't I see my board?" })
+        await expect(toggle).toBeVisible()
+        await expect(homePage.getByText('WCH')).not.toBeVisible()
+
+        await toggle.click()
+        await expect(homePage.getByText('WCH')).toBeVisible()
+        await expect(homePage.getByRole('button', { name: 'Hide' })).toBeVisible()
     })
 
     test('Cancel in device picker aborts folder load and keeps home screen', async ({ electronApp, homePage, sourceFolder }) => {
