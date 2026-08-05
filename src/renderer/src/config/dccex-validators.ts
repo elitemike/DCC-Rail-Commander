@@ -13,6 +13,7 @@ import * as monaco from 'monaco-editor'
 import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
 import { inferAliasTypes, parseAliasNumericValue, type AliasTargetType } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
+import { getCompletions } from './file-configs'
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
@@ -488,6 +489,94 @@ function validateExrailReferences(text: string, out: monaco.editor.IMarkerData[]
     }
 }
 
+// ── EXRAIL command-name casing validator ────────────────────────────────────────
+
+/**
+ * Replaces `// ...` line comments with spaces (preserving offsets/newlines) so the
+ * casing scan below never matches command-like words inside prose comments.
+ * Quoted strings are tracked so a `//` inside a string literal isn't treated as
+ * the start of a comment.
+ */
+function blankLineComments(text: string): string {
+    const chars = text.split('')
+    let inStr = false
+    let esc = false
+    for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '/' && chars[i + 1] === '/') {
+            while (i < chars.length && chars[i] !== '\n') { chars[i] = ' '; i++ }
+        }
+    }
+    return chars.join('')
+}
+
+/** Offset → true while inside a double-quoted string (same scan style as parseArgSpans). */
+function buildStringMask(text: string): boolean[] {
+    const mask: boolean[] = new Array(text.length).fill(false)
+    let inStr = false
+    let esc = false
+    for (let i = 0; i < text.length; i++) {
+        mask[i] = inStr
+        const ch = text[i]
+        if (esc) { esc = false; continue }
+        if (ch === '\\') { esc = true; continue }
+        if (ch === '"') { inStr = !inStr; continue }
+    }
+    return mask
+}
+
+/**
+ * EXRAIL command names are C preprocessor macros and are case-sensitive —
+ * `throw(200)` is not recognised as `THROW(200)`, it's an undefined symbol that
+ * fails to compile. Flags any word that matches a known command name only when
+ * case is ignored, restricted to genuine command position (immediately followed
+ * by `(`, or standing alone on its own line for paren-less keywords like DONE)
+ * so identifiers/aliases used as *arguments* are never flagged.
+ */
+function validateExrailCommandCasing(text: string, filename: string, out: monaco.editor.IMarkerData[]): void {
+    const canonicalNames = new Set(
+        getCompletions(filename)
+            .map((s) => s.label)
+            .filter((label) => /^[A-Z][A-Z0-9_]*$/.test(label)),
+    )
+    if (canonicalNames.size === 0) return
+
+    const scanText = blankLineComments(text)
+    const stringMask = buildStringMask(scanText)
+
+    const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
+    let m: RegExpExecArray | null
+    while ((m = tokenRe.exec(scanText)) !== null) {
+        const token = m[0]
+        const upper = token.toUpperCase()
+        if (token === upper) continue  // already correctly cased
+        if (!canonicalNames.has(upper)) continue  // not a known EXRAIL command at all
+        if (stringMask[m.index]) continue  // inside a quoted string
+
+        const afterIdx = m.index + token.length
+        const lineEnd = scanText.indexOf('\n', m.index)
+        const restOfLine = scanText.slice(afterIdx, lineEnd === -1 ? scanText.length : lineEnd)
+        const followedByParen = /^\s*\(/.test(restOfLine)
+
+        const lineStart = scanText.lastIndexOf('\n', m.index) + 1
+        const line = scanText.slice(lineStart, lineEnd === -1 ? scanText.length : lineEnd)
+        const isBareLine = line.trim() === token
+
+        if (followedByParen || isBareLine) {
+            out.push(makeMarker(text, m.index, afterIdx,
+                `EXRAIL commands are case-sensitive — '${token}' should be '${upper}'.`,
+            ))
+        }
+    }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
@@ -501,16 +590,26 @@ const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerD
     },
 }
 
+/** True when this file has a known set of macro commands worth case-checking (ROSTER, TURNOUT, THROW, ...). */
+function hasCommandVocabulary(filename: string): boolean {
+    return getCompletions(filename).length > 0
+}
+
 function validateModel(model: monaco.editor.ITextModel): void {
     const filename = model.uri.path.replace(/^\//, '')
     const validate = FILE_VALIDATORS[filename]
     const isExrailFile = isExrailCompletionFile(filename)
-    if (!validate && !isExrailFile) return
+    const hasVocabulary = hasCommandVocabulary(filename)
+    if (!validate && !isExrailFile && !hasVocabulary) return
 
     const text = model.getValue()
     const markers: monaco.editor.IMarkerData[] = []
 
     if (validate) validate(text, markers)
+
+    // Case-sensitivity applies to every macro-file "vocabulary" (ROSTER, SERVO_TURNOUT,
+    // SENSOR, SIGNAL, THROW, ...), not just the EXRAIL script files.
+    if (hasVocabulary) validateExrailCommandCasing(text, filename, markers)
 
     if (isExrailFile) {
         const state = getSharedConfigEditorState()
@@ -547,6 +646,8 @@ export function _runValidatorsForTest(
 
     const validate = FILE_VALIDATORS[filename]
     if (validate) validate(text, markers)
+
+    if (hasCommandVocabulary(filename)) validateExrailCommandCasing(text, filename, markers)
 
     if (isExrailCompletionFile(filename) && exrailData) {
         validateExrailReferences(text, markers, exrailData)
