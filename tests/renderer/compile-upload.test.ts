@@ -3,6 +3,7 @@ import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { InstallerState } from '../../src/renderer/src/models/installer-state'
 import type { ArduinoCliService } from '../../src/renderer/src/services/arduino-cli.service'
 import type { FileService } from '../../src/renderer/src/services/file.service'
+import type { UsbService } from '../../src/renderer/src/services/usb.service'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,7 @@ function makeWorkspace(overrides: {
     state?: Partial<InstallerState>
     cli?: Partial<ArduinoCliService>
     files?: Partial<FileService>
+    usb?: Partial<UsbService>
 } = {}): Workspace {
     const ws = Object.create(Workspace.prototype) as Workspace
 
@@ -35,14 +37,29 @@ function makeWorkspace(overrides: {
     const cli = {
         compile: vi.fn().mockResolvedValue({ success: true, output: '' }),
         upload: vi.fn().mockResolvedValue({ success: true, output: '' }),
+        listBoards: vi.fn().mockResolvedValue([]),
         subscribeToProgress: vi.fn().mockReturnValue(() => { }),
         ...overrides.cli,
     } as unknown as ArduinoCliService
+
+    // ensureLivePort()'s fast path just needs the selected device's own port
+    // to already be present in the "connected" list — default to exactly
+    // that so upload() tests behave as if the port never changed, unless a
+    // test explicitly overrides usb.serialPorts to exercise reconciliation.
+    const usb = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        refresh: vi.fn().mockResolvedValue(undefined),
+        serialPorts: state.selectedDevice
+            ? [{ path: state.selectedDevice.port, manufacturer: state.selectedDevice.name }]
+            : [],
+        ...overrides.usb,
+    } as unknown as UsbService
 
     Object.assign(ws, {
         state,
         cli,
         files,
+        usb,
         ea: { publish: vi.fn() },
         toastService: { show: vi.fn() },
         router: { load: vi.fn() },
@@ -93,6 +110,50 @@ describe('Workspace.upload — guard conditions', () => {
         await ws.upload()
         expect(ws.compileSuccess).toBe(false)
         expect(ws.compileError).toMatch(/fqbn/i)
+    })
+})
+
+// ── upload() — port reconciliation (ensureLivePort) ─────────────────────────────
+
+describe('Workspace.upload — port reconciliation', () => {
+    it('transparently corrects the port when the board re-enumerated elsewhere', async () => {
+        const toastShow = vi.fn()
+        const ws = makeWorkspace({
+            state: {
+                selectedDevice: { ...megaDevice },
+                repoPath: REPO,
+                configFiles: [{ name: 'config.h', content: '// config.h\n' }],
+            },
+            // Board is no longer at /dev/ttyACM0 — it re-enumerated on a new
+            // port, reported by both the raw serial-port list and the CLI.
+            usb: { serialPorts: [{ path: '/dev/ttyACM5', manufacturer: 'Arduino Mega 2560' }] },
+            cli: {
+                listBoards: vi.fn().mockResolvedValue([
+                    { name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega', port: '/dev/ttyACM5', protocol: 'serial' },
+                ]),
+            },
+        })
+        ;(ws as any).toastService.show = toastShow
+
+        await ws.upload()
+
+        expect((ws as any).cli.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM5')
+        expect(ws.state.selectedDevice?.port).toBe('/dev/ttyACM5')
+        expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Port Updated' }))
+    })
+
+    it('fails with a clear error instead of calling cli.upload when the board is not found at all', async () => {
+        const ws = makeWorkspace({
+            state: { selectedDevice: { ...megaDevice }, repoPath: REPO },
+            usb: { serialPorts: [] },
+            cli: { listBoards: vi.fn().mockResolvedValue([]) },
+        })
+
+        await ws.upload()
+
+        expect((ws as any).cli.upload).not.toHaveBeenCalled()
+        expect(ws.compileSuccess).toBe(false)
+        expect(ws.compileError).toMatch(/no longer available/i)
     })
 })
 
