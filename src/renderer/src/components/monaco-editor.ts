@@ -9,12 +9,12 @@ import { getCompletions } from '../config/file-configs'
 import { registerDiagnosticProviders, revalidateModel } from '../config/dccex-validators'
 import { ConfigEditorState } from '../models/config-editor-state'
 import { buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
+import { getSharedConfigEditorState, setSharedConfigEditorState } from '../utils/exrail-editor-state'
 
 // ── Global filename-aware completion + hover providers (registered once) ──────
 // Stored on `window` so Vite HMR module re-evaluation cannot reset the flag.
 const WIN = window as Window & {
     __dccexProvidersRegistered?: boolean
-    __dccexConfigEditorState?: ConfigEditorState
 }
 
 function registerProviders(): void {
@@ -68,7 +68,8 @@ function registerProviders(): void {
                 }
             }
 
-            if (isExrailCompletionFile(filename) && WIN.__dccexConfigEditorState) {
+            const sharedState = getSharedConfigEditorState()
+            if (isExrailCompletionFile(filename) && sharedState) {
                 const linePrefix = model.getValueInRange({
                     startLineNumber: position.lineNumber,
                     endLineNumber: position.lineNumber,
@@ -76,14 +77,13 @@ function registerProviders(): void {
                     endColumn: position.column,
                 })
 
-                const state = WIN.__dccexConfigEditorState
                 const dynamicSuggestions = buildExrailSymbolSuggestions(filename, linePrefix, {
-                    aliases: state.aliases,
-                    roster: state.roster,
-                    turnouts: state.turnouts,
-                    sensors: state.sensors,
-                    routes: state.routes,
-                    sequences: state.sequences,
+                    aliases: sharedState.aliases,
+                    roster: sharedState.roster,
+                    turnouts: sharedState.turnouts,
+                    sensors: sharedState.sensors,
+                    routes: sharedState.routes,
+                    sequences: sharedState.sequences,
                 })
 
                 suggestions.push(
@@ -158,7 +158,7 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
 
     attached(): void {
         try { console.debug('MonacoEditor attached', { filename: this.filename, containerRect: this.container?.getBoundingClientRect?.() }) } catch { }
-        WIN.__dccexConfigEditorState = this.configEditorState
+        setSharedConfigEditorState(this.configEditorState)
         registerProviders()
 
         // Define a custom theme based on vs-dark that explicitly sets the

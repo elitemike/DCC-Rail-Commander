@@ -10,6 +10,9 @@
  */
 
 import * as monaco from 'monaco-editor'
+import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
+import { inferAliasTypes, parseAliasNumericValue, type AliasTargetType } from '../utils/myAutomationParser'
+import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
@@ -432,6 +435,59 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
     }
 }
 
+// ── EXRAIL object-reference validator (myAutomation.h / myRoutes.h / mySequences.h) ────
+
+/** True when `value` is a configured object ID or a defined alias resolving to one of `targetTypes`. */
+function isValidExrailReference(value: string, targetTypes: AliasTargetType[], data: ExrailCompletionData): boolean {
+    if (isInt(value)) {
+        const n = Number(value)
+        return targetTypes.some((type) => {
+            switch (type) {
+                case 'Roster': return data.roster.some((r) => r.dccAddress === n)
+                case 'Turnout': return data.turnouts.some((t) => t.id === n)
+                case 'Sensor': return (data.sensors ?? []).some((s) => s.id === n)
+                case 'Route': return (data.routes ?? []).some((r) => r.id === n)
+                case 'Sequence': return (data.sequences ?? []).some((s) => s.id === n)
+                default: return false
+            }
+        })
+    }
+    if (isIdentifier(value)) {
+        const alias = data.aliases.find((a) => a.name === value)
+        if (!alias) return false
+        const aliasTypes = alias.aliasType ? [alias.aliasType] : inferAliasTypes(alias, data)
+        return aliasTypes.some((t) => targetTypes.includes(t))
+    }
+    // Neither a number nor a bare identifier — e.g. an expression or quoted string
+    // where an object reference was expected.
+    return false
+}
+
+/**
+ * Flags THROW/CLOSE/AT/SETLOCO/etc. arguments that don't resolve to any
+ * currently configured turnout/sensor/route/sequence/roster entry or alias.
+ */
+function validateExrailReferences(text: string, out: monaco.editor.IMarkerData[], data: ExrailCompletionData): void {
+    for (const command of EXRAIL_REFERENCE_COMMANDS) {
+        for (const { argsRaw, innerStart } of eachMacroCall(text, command)) {
+            const args = parseArgSpans(argsRaw, innerStart)
+            args.forEach((arg, argumentIndex) => {
+                if (arg.value === '') return  // missing/empty argument — not this validator's concern
+
+                const targetTypes = getTargetTypes(command, argumentIndex)
+                if (targetTypes.length === 0) return  // this argument slot isn't an object reference
+
+                if (!isValidExrailReference(arg.value, targetTypes, data)) {
+                    const typeLabel = targetTypes.join('/')
+                    out.push(makeMarker(text, arg.start, arg.end,
+                        `'${arg.value}' is not a configured ${typeLabel} ID or alias.`,
+                    ))
+                }
+            })
+        }
+    }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
@@ -448,10 +504,28 @@ const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerD
 function validateModel(model: monaco.editor.ITextModel): void {
     const filename = model.uri.path.replace(/^\//, '')
     const validate = FILE_VALIDATORS[filename]
-    if (!validate) return
+    const isExrailFile = isExrailCompletionFile(filename)
+    if (!validate && !isExrailFile) return
 
+    const text = model.getValue()
     const markers: monaco.editor.IMarkerData[] = []
-    validate(model.getValue(), markers)
+
+    if (validate) validate(text, markers)
+
+    if (isExrailFile) {
+        const state = getSharedConfigEditorState()
+        if (state) {
+            validateExrailReferences(text, markers, {
+                aliases: state.aliases,
+                roster: state.roster,
+                turnouts: state.turnouts,
+                sensors: state.sensors,
+                routes: state.routes,
+                sequences: state.sequences,
+            })
+        }
+    }
+
     monaco.editor.setModelMarkers(model, OWNER, markers)
 }
 
@@ -460,15 +534,24 @@ function validateModel(model: monaco.editor.ITextModel): void {
 /**
  * Run the validators for a given filename against `text` and return simplified
  * marker data.  Use only in unit tests — not part of the public runtime API.
+ *
+ * `exrailData`, when supplied, also runs the EXRAIL object-reference validator
+ * for myAutomation.h / myRoutes.h / mySequences.h (THROW/CLOSE/AT/SETLOCO/etc.).
  */
 export function _runValidatorsForTest(
     filename: string,
     text: string,
+    exrailData?: ExrailCompletionData,
 ): Array<{ message: string; severity: number }> {
-    const validate = FILE_VALIDATORS[filename]
-    if (!validate) return []
     const markers: monaco.editor.IMarkerData[] = []
-    validate(text, markers)
+
+    const validate = FILE_VALIDATORS[filename]
+    if (validate) validate(text, markers)
+
+    if (isExrailCompletionFile(filename) && exrailData) {
+        validateExrailReferences(text, markers, exrailData)
+    }
+
     return markers.map((m) => ({ message: m.message, severity: m.severity }))
 }
 
