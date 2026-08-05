@@ -102,6 +102,24 @@ describe('get() / set()', () => {
         const parsed = JSON.parse(written)
         expect(parsed['arduino-path']).toBe('/usr/bin/arduino-cli')
     })
+
+    // Regression: Electron/Chromium itself writes a `Preferences` file directly
+    // under userData. On Windows (NTFS) and default macOS (APFS/HFS+), both
+    // case-insensitive, a `preferences/` subdirectory collides with that file —
+    // existsSync() reports it as already existing (as a file, not a directory),
+    // mkdirSync is skipped, and every write then fails with ENOENT because the
+    // path descends through a file. The store directory must never be named
+    // exactly 'preferences' (case-insensitively) to avoid this.
+    it('does not use a userData subdirectory that collides with Electron\'s own Preferences file', async () => {
+        const svc = await loadService()
+        svc.set('key', 'value')
+
+        const mkdirDir = mockMkdirSync.mock.calls[0]?.[0] as string | undefined
+        const writeFilePath = mockWriteFileSync.mock.calls[0][0] as string
+
+        expect(mkdirDir?.toLowerCase()).not.toMatch(/[/\\]preferences$/)
+        expect(writeFilePath.toLowerCase()).not.toMatch(/[/\\]preferences[/\\]/)
+    })
 })
 
 // ── getAll() ──────────────────────────────────────────────────────────────────

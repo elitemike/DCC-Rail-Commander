@@ -70,7 +70,7 @@ interface LoadFolderFixtures {
 
 async function launchBareApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
     const testDataDir = mkdtempSync(join(tmpdir(), 'ex-load-folder-e2e-'))
-    const prefsDir = join(testDataDir, 'preferences')
+    const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     // Start with an empty saved-configurations list so we get the onboarding screen
     writeFileSync(
