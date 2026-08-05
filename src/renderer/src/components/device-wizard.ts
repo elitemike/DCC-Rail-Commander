@@ -219,10 +219,16 @@ export class DeviceWizard {
 
             if (repoExists) {
                 this.versionStatus = 'Pulling latest changes...'
-                await this.git.pull(repoPath)
+                const result = await this.git.pull(repoPath)
+                if (!result.success) {
+                    throw new Error(result.error ?? `Failed to pull latest changes for ${product.productName}.`)
+                }
             } else {
                 this.versionStatus = `Cloning ${product.productName}...`
-                await this.git.clone(product.repoUrl, repoPath, product.defaultBranch)
+                const result = await this.git.clone(product.repoUrl, repoPath, product.defaultBranch)
+                if (!result.success) {
+                    throw new Error(result.error ?? `Failed to clone ${product.productName}.`)
+                }
             }
 
             this.versionStatus = 'Loading version list...'

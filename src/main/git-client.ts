@@ -2,6 +2,22 @@ import { join } from 'path'
 import { app } from 'electron'
 import simpleGit, { SimpleGit } from 'simple-git'
 
+/**
+ * simple-git just forwards whatever child_process.spawn('git', ...) throws, which for
+ * the most common Windows failure (git.exe not on PATH) is an opaque "spawn git ENOENT".
+ * Give the user something actionable instead of a bare Node error code.
+ */
+function describeGitError(err: Error): string {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || /spawn git ENOENT/i.test(err.message)) {
+        return 'Git was not found on your system PATH. Install Git for Windows (https://git-scm.com/download/win) and restart EX-Installer.'
+    }
+    if (/ENOTFOUND|ETIMEDOUT|ECONNREFUSED|Could not resolve host/i.test(err.message)) {
+        return `Could not reach the remote repository — check your internet connection or proxy settings.\n${err.message}`
+    }
+    return err.message
+}
+
 export class GitService {
     private getGit(repoPath?: string): SimpleGit {
         if (repoPath) {
@@ -30,7 +46,7 @@ export class GitService {
             await git.submoduleUpdate(['--init', '--recursive']);
             return { success: true };
         } catch (err) {
-            return { success: false, error: (err as Error).message };
+            return { success: false, error: describeGitError(err as Error) };
         }
     }
 
@@ -39,7 +55,7 @@ export class GitService {
             await this.getGit(repoPath).pull()
             return { success: true }
         } catch (err) {
-            return { success: false, error: (err as Error).message }
+            return { success: false, error: describeGitError(err as Error) }
         }
     }
 
