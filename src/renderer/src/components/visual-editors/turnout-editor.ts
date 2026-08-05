@@ -2,14 +2,17 @@ import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
+import { InstallerState } from '../../models/installer-state'
 import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
 import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
+import type { ServoCalibrationResult } from '../dialogs/servo-calibration-dialog'
 
 type ViewTab = 'visual' | 'raw'
 
 export class TurnoutEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly installerState = resolve(InstallerState)
     private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly observerLocator = resolve(IObserverLocator)
@@ -245,6 +248,9 @@ export class TurnoutEditorCustomElement {
         this.state.addTurnoutEntry(newEntry)
         const idx = this.state.turnouts.length - 1
         this._setBuffer(idx, this.state.turnouts[idx])
+        // New entries are always SERVO — jump straight into calibration so
+        // the user can set a sensible position before doing anything else.
+        void this.openServoCalibration()
     }
 
     async removeEntryByIndex(index: number, event?: Event): Promise<void> {
@@ -278,6 +284,25 @@ export class TurnoutEditorCustomElement {
 
     get selectedIndex(): number | null {
         return this.editBufferIndex
+    }
+
+    async openServoCalibration(): Promise<void> {
+        if (!this.editBuffer || this.editBuffer.type !== 'SERVO' || this.editBufferIndex === null) return
+        const turnout = this.editBuffer as ServoTurnout
+        const index = this.editBufferIndex
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../dialogs/servo-calibration-dialog').then(m => m.ServoCalibrationDialog).catch(() => null),
+            model: { turnout: { ...turnout }, devicePort: this.installerState.selectedDevice?.port ?? null },
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return
+        // Re-check after the await: the user may have selected a different
+        // turnout (or deleted this one) while the dialog was open.
+        if (!this.editBuffer || this.editBufferIndex !== index || this.editBuffer.type !== 'SERVO') return
+        const updates = result.value as ServoCalibrationResult
+        this.editBuffer = { ...this.editBuffer, ...updates }
+        this.commitBuffer()
     }
 
     private async _confirm(title: string, message: string): Promise<boolean> {

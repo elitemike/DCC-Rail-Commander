@@ -121,6 +121,11 @@ export class UsbManager {
         })
     }
 
+    /** True if this path currently has an open handle owned by this manager. */
+    isPortOpen(path: string): boolean {
+        return this.openPorts.has(path)
+    }
+
     /** Close an open serial port. */
     closePort(path: string): Promise<void> {
         return new Promise((resolve, reject) => {
