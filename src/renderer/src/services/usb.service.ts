@@ -68,6 +68,10 @@ export class UsbService {
         await window.usb.closePort(path)
     }
 
+    async isPortOpen(path: string): Promise<boolean> {
+        return window.usb.isPortOpen(path)
+    }
+
     dispose(): void {
         this.unsubscribers.forEach((fn) => fn())
         this.unsubscribers.length = 0

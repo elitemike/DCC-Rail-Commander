@@ -28,6 +28,9 @@ const usbApi = {
     closePort: (path: string): Promise<void> =>
         ipcRenderer.invoke('usb:close-port', path),
 
+    isPortOpen: (path: string): Promise<boolean> =>
+        ipcRenderer.invoke('usb:is-port-open', path),
+
     // ── Push-event subscriptions ─────────────────────────────────────────────
     onData: (cb: (payload: { path: string; data: string }) => void) => {
         const handler = (_: IpcRendererEvent, p: { path: string; data: string }) => cb(p)

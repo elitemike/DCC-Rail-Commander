@@ -53,6 +53,7 @@ export interface UsbElectronApi {
     openPort: (path: string, baudRate?: number) => Promise<void>
     writeToPort: (path: string, data: string) => Promise<void>
     closePort: (path: string) => Promise<void>
+    isPortOpen: (path: string) => Promise<boolean>
     onData: (cb: (payload: { path: string; data: string }) => void) => () => void
     onError: (cb: (payload: { path: string; message: string }) => void) => () => void
     onClosed: (cb: (payload: { path: string }) => void) => () => void

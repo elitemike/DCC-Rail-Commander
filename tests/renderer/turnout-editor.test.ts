@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { TurnoutEditorCustomElement } from '../../src/renderer/src/components/turnout-editor'
+import { TurnoutEditorCustomElement } from '../../src/renderer/src/components/visual-editors/turnout-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
