@@ -143,7 +143,7 @@ async function launchApp(mockCompile: boolean): Promise<{ app: ElectronApplicati
     writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
     writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_SKETCH_INO, 'utf-8')
 
-    const prefsDir = join(testDataDir, 'preferences')
+    const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     const savedConfig = {
         id: 'e2e-test-config',
@@ -205,7 +205,7 @@ async function launchIOExpanderApp(): Promise<{ app: ElectronApplication; testDa
     mkdirSync(scratchPath, { recursive: true })
     writeFileSync(join(scratchPath, 'myConfig.h'), MOCK_MYCONFIG_H, 'utf-8')
 
-    const prefsDir = join(testDataDir, 'preferences')
+    const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     const savedConfig = {
         id: 'e2e-iox-config',
@@ -255,7 +255,7 @@ async function launchRosterGroupedApp(): Promise<{ app: ElectronApplication; tes
     writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
     writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_SKETCH_INO, 'utf-8')
 
-    const prefsDir = join(testDataDir, 'preferences')
+    const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     const savedConfig = {
         id: 'e2e-grouped-roster',
@@ -308,7 +308,7 @@ async function launchCsb1StackedApp(): Promise<{ app: ElectronApplication; testD
     writeFileSync(join(scratchPath, 'myAutomation.h'), MOCK_AUTOMATION_STACKED, 'utf-8')
     writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_SKETCH_INO, 'utf-8')
 
-    const prefsDir = join(testDataDir, 'preferences')
+    const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     const savedConfig = {
         id: 'e2e-csb1-stacked',

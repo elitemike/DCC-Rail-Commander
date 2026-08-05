@@ -22,7 +22,15 @@ class JsonStore {
 
     private get filePath(): string {
         if (this._filePath === null) {
-            const dir = join(app.getPath('userData'), 'preferences')
+            // NOT 'preferences' — Electron/Chromium itself writes a `Preferences` file
+            // directly under userData, and on the default case-insensitive filesystems
+            // (Windows NTFS, macOS APFS/HFS+) that collides with a `preferences/`
+            // subdirectory of ours: existsSync() sees Chromium's file and reports the
+            // dir as already existing, so mkdirSync is skipped, and every subsequent
+            // write fails with ENOENT because the path descends through a file, not a
+            // directory. `app-preferences` doesn't collide with any reserved Chromium
+            // userData filename.
+            const dir = join(app.getPath('userData'), 'app-preferences')
             if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
             this._filePath = join(dir, `${this.name}.json`)
         }
