@@ -4,6 +4,7 @@ import { IDialogService } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
 import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
+import { GitService } from '../services/git.service'
 import { ToastService } from '../services/toast.service'
 import { ArduinoCliService } from '../services/arduino-cli.service'
 import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
@@ -34,6 +35,7 @@ export class Home {
     readonly state = resolve(InstallerState)
     private readonly preferences = resolve(PreferencesService)
     private readonly files = resolve(FileService)
+    private readonly git = resolve(GitService)
     private readonly toastService = resolve(ToastService)
     private readonly cli = resolve(ArduinoCliService)
 
@@ -214,7 +216,7 @@ export class Home {
 
         // ── Sketch path resolution ────────────────────────────────────────────
         const { scratchPath, repoPath, productKey, sourceFolder } =
-            await this.resolveSketchPath(folder, configFiles.map(f => f.name), entries)
+            await this.resolveSketchPath(folder, configFiles.map(f => f.name), entries, selectedDevice)
 
         console.debug('[loadFromFolder] resolveSketchPath ->', { scratchPath, repoPath, productKey, sourceFolder })
 
@@ -287,17 +289,22 @@ export class Home {
     }
 
     /**
-     * Determines the sketch path to use for compilation after loading a folder.
+     * Determines the sketch path to use for compilation after loading a folder, and
+     * identifies which product the folder belongs to (needed to pick the right visual
+     * editor form for config.h/myConfig.h — see config-h-editor.html's `productId` gate).
      *
      * If the user's folder already contains a `.ino` file it is a complete Arduino
-     * sketch and can be compiled directly.  Otherwise, we look for an installed
-     * product repo in the app data directory, create a fresh internal scratch
-     * directory under `repos/_build/<id>/<repoFolder>/`, copy the non-user source
-     * files from the repo, and return that path so the compiler can find the `.ino`.
+     * sketch and can be compiled directly — no product detection needed or possible.
+     * Otherwise, we match the folder's config files against each product's
+     * `minimumConfigFiles`. If the matched product's repo hasn't been installed yet
+     * (e.g. this folder was loaded before ever running "New Device"), it is cloned now
+     * so the visual editor becomes available. A clone failure (offline, etc.) still
+     * leaves productKey set — the visual editor only needs to know the product, not a
+     * working repo — it just means compiling won't be possible until it succeeds.
      *
      * Returns:
      *   scratchPath  — absolute path to compile from
-     *   repoPath     — absolute path to the git source (null if none found / none needed)
+     *   repoPath     — absolute path to the git source (null if none found / installed)
      *   productKey   — matched product key (null if not detected)
      *   sourceFolder — the original user folder (non-null only when scratchPath !== folder,
      *                  i.e. an internal scratch was created and we must write config files
@@ -307,6 +314,7 @@ export class Home {
         folder: string,
         configFileNames: string[],
         entries: string[],
+        selectedDevice: ArduinoCliBoardInfo,
     ): Promise<{
         scratchPath: string
         repoPath: string | null
@@ -318,58 +326,90 @@ export class Home {
             return { scratchPath: folder, repoPath: null, productKey: null, sourceFolder: null }
         }
 
-        // Try to find a matching installed product repo and set up an internal scratch.
         try {
             const reposDir = await this.files.getInstallDir('repos')
             const configSet = new Set(configFileNames)
 
-            for (const [productKey, product] of Object.entries(productDetails)) {
+            // Every product whose minimum config files are all present in the folder.
+            const candidates = Object.entries(productDetails).filter(
+                ([, product]) => product.minimumConfigFiles.every((f) => configSet.has(f)),
+            )
+
+            // Some products (ex_commandstation, ex_turntable) both key off config.h
+            // alone and can't be told apart from file names — narrow using the
+            // detected device's FQBN when we have one, same rule as the device wizard.
+            const fqbn = selectedDevice.fqbn
+            const deviceMatches = fqbn
+                ? candidates.filter(([, p]) => p.supportedDevices.some((d) => fqbn.startsWith(d) || d.startsWith(fqbn)))
+                : []
+            const [productKey, product] = deviceMatches[0] ?? candidates[0] ?? []
+
+            if (productKey && product) {
                 const repoFolder = product.repoName.split('/')[1]
                 const repoPath = `${reposDir}/${repoFolder}`
-                const repoExists = await this.files.exists(`${repoPath}/.git`)
-                if (!repoExists) continue
+                let repoExists = await this.files.exists(`${repoPath}/.git`)
 
-                // Product is a candidate only when all its minimum config files are
-                // present in the user's folder (e.g. config.h for ex_commandstation).
-                const hasMinFiles = product.minimumConfigFiles.every(f => configSet.has(f))
-                if (!hasMinFiles) continue
-
-                // Found a match — create a fresh internal scratch directory.
-                const id = String(Date.now())
-                const scratchPath = `${reposDir}/_build/${id}/${repoFolder}`
-
-                try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
-                await this.files.mkdir(scratchPath)
-
-                // Selectively copy source files from the repo (no examples / templates,
-                // no user-managed config files — those are overlaid separately).
-                const allowedExts = ['.ino', '.cpp', '.h']
-                const allowedSubDirs = ['src', 'libraries']
-                const isSourceFile = (name: string): boolean =>
-                    !name.endsWith('.example') &&
-                    !name.endsWith('.template') &&
-                    allowedExts.some(ext => name.endsWith(ext))
-
-                const copySourceDir = async (srcDir: string, destDir: string): Promise<void> => {
-                    const dirEntries = await this.files.listDir(srcDir)
-                    for (const entry of dirEntries) {
-                        if (allowedSubDirs.includes(entry)) {
-                            await this.files.mkdir(`${destDir}/${entry}`)
-                            await copySourceDir(`${srcDir}/${entry}`, `${destDir}/${entry}`)
-                        } else if (isSourceFile(entry) && !configSet.has(entry)) {
-                            await this.files.copyFiles(`${srcDir}/${entry}`, `${destDir}/${entry}`)
-                        }
+                if (!repoExists) {
+                    this.toastService.show({
+                        title: 'Installing Product Files',
+                        content: `Downloading ${product.productName} — this only happens once.`,
+                        cssClass: 'e-toast-info',
+                    })
+                    const result = await this.git.clone(product.repoUrl, repoPath, product.defaultBranch)
+                    repoExists = result.success
+                    if (!result.success) {
+                        this.toastService.show({
+                            title: 'Could Not Install Product Files',
+                            content: result.error ?? `Failed to download ${product.productName}.`,
+                            cssClass: 'e-toast-danger',
+                        })
                     }
                 }
-                await copySourceDir(repoPath, scratchPath)
 
-                return { scratchPath, repoPath, productKey, sourceFolder: folder }
+                if (repoExists) {
+                    // Create a fresh internal scratch directory and populate it with
+                    // the repo's source files so the compiler can find the .ino.
+                    const id = String(Date.now())
+                    const scratchPath = `${reposDir}/_build/${id}/${repoFolder}`
+
+                    try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
+                    await this.files.mkdir(scratchPath)
+
+                    // Selectively copy source files from the repo (no examples / templates,
+                    // no user-managed config files — those are overlaid separately).
+                    const allowedExts = ['.ino', '.cpp', '.h']
+                    const allowedSubDirs = ['src', 'libraries']
+                    const isSourceFile = (name: string): boolean =>
+                        !name.endsWith('.example') &&
+                        !name.endsWith('.template') &&
+                        allowedExts.some((ext) => name.endsWith(ext))
+
+                    const copySourceDir = async (srcDir: string, destDir: string): Promise<void> => {
+                        const dirEntries = await this.files.listDir(srcDir)
+                        for (const entry of dirEntries) {
+                            if (allowedSubDirs.includes(entry)) {
+                                await this.files.mkdir(`${destDir}/${entry}`)
+                                await copySourceDir(`${srcDir}/${entry}`, `${destDir}/${entry}`)
+                            } else if (isSourceFile(entry) && !configSet.has(entry)) {
+                                await this.files.copyFiles(`${srcDir}/${entry}`, `${destDir}/${entry}`)
+                            }
+                        }
+                    }
+                    await copySourceDir(repoPath, scratchPath)
+
+                    return { scratchPath, repoPath, productKey, sourceFolder: folder }
+                }
+
+                // Product identified but repo isn't available (clone failed/offline).
+                // Still report productKey so the visual editor renders — only
+                // compiling is blocked until the repo can be installed.
+                return { scratchPath: folder, repoPath: null, productKey, sourceFolder: null }
             }
         } catch {
             // File system errors (repos dir doesn't exist, permissions, etc.) — fall through.
         }
 
-        // No matching repo found — fall back to using the user's folder directly.
+        // No matching product found — fall back to using the user's folder directly.
         // Compilation will fail if the folder lacks a .ino, but the user can still
         // edit and save their config files.
         return { scratchPath: folder, repoPath: null, productKey: null, sourceFolder: null }

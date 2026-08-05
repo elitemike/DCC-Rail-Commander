@@ -667,6 +667,10 @@ export class ConfigEditorState {
         this.configHContent = ''
         this.roster = []
         this.turnouts = []
+        this.sensors = []
+        this.signals = []
+        this.routes = []
+        this.sequences = []
         this.aliases = []
         this.preservedAutomationContent = ''
         this.generatedTrackManagerContent = ''
@@ -679,6 +683,14 @@ export class ConfigEditorState {
                 this.roster = parseRosterFromFile(f.content)
             } else if (f.name === 'myTurnouts.h') {
                 this.turnouts = parseTurnoutFromFile(f.content)
+            } else if (f.name === 'mySensors.h') {
+                this.sensors = parseSensorsFromFile(f.content)
+            } else if (f.name === 'mySignals.h') {
+                this.signals = parseSignalsFromFile(f.content)
+            } else if (f.name === 'myRoutes.h') {
+                this.routes = parseRoutesFromFile(f.content)
+            } else if (f.name === 'mySequences.h') {
+                this.sequences = parseSequencesFromFile(f.content)
             } else if (f.name === 'myAliases.h') {
                 const normalized = this.normalizeAliases(parseAliasesFromFile(f.content))
                 this.aliases = normalized.ok ? normalized.aliases : []
