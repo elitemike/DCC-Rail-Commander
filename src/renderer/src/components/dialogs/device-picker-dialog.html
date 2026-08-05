@@ -61,6 +61,26 @@
                             Scan again
                         </button>, or continue without one.
                     </p>
+
+                    <button click.trigger="showTroubleshooting = !showTroubleshooting"
+                        class="mt-2 underline text-blue-400/80 hover:text-blue-300 cursor-pointer bg-transparent border-none p-0 text-xs">
+                        ${showTroubleshooting ? 'Hide' : 'Why can\'t I see my board?'}
+                    </button>
+
+                    <div if.bind="showTroubleshooting" class="mt-2 text-left text-xs text-gray-500 bg-white/5 rounded-lg p-3 space-y-1.5">
+                        <p>A board that doesn't appear here almost always means Windows hasn't loaded a driver for it yet, not that the board is faulty:</p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li>Check Device Manager for a "Ports" or "Other devices" entry with a warning icon — that confirms it's a driver problem rather than a bad cable.</li>
+                            <li>Most boards use a CH340/CH341, CP210x, or FTDI USB-to-serial chip and need that chip's driver installed before Windows will assign a COM port.</li>
+                            <li>
+                                On ARM64 Windows (Surface Pro, Snapdragon-based laptops), the common CH340 installers often silently fail to load a matching driver. Get the driver directly from
+                                <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html" target="_blank" rel="noopener"
+                                    class="underline text-blue-400 hover:text-blue-300">the manufacturer, WCH</a>,
+                                and confirm in Device Manager that the installed driver is a native ARM64 build.
+                            </li>
+                            <li>Boards with native USB (no separate bridge chip, e.g. ESP32-S2/S3/C3) need no vendor driver at all and are the most reliable option on ARM64 machines.</li>
+                        </ul>
+                    </div>
                 </div>
 
             </div>
