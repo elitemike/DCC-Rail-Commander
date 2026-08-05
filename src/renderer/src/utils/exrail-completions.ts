@@ -28,13 +28,22 @@ export interface ExrailSymbolSuggestion {
 
 const EXRAIL_FILENAMES = new Set(['myAutomation.h', 'myRoutes.h', 'mySequences.h'])
 
+/** Every EXRAIL command whose arguments reference a configured object (turnout/sensor/route/sequence/roster). */
+export const EXRAIL_REFERENCE_COMMANDS = [
+    'AT', 'AFTER', 'IFOCCUPIED', 'IF', 'ONBUTTON', 'ONSENSOR',
+    'THROW', 'CLOSE', 'ONTHROW', 'ONCLOSE',
+    'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED',
+    'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE', 'IFROUTE_HIDDEN', 'IFROUTE_DISABLED',
+    'SETLOCO', 'START', 'FOLLOW', 'SENDLOCO',
+]
+
 function getArgumentIndex(argumentText: string): number {
     const trimmed = argumentText.trim()
     if (trimmed === '') return 0
     return argumentText.split(',').length - 1
 }
 
-function getTargetTypes(command: string, argumentIndex: number): AliasTargetType[] {
+export function getTargetTypes(command: string, argumentIndex: number): AliasTargetType[] {
     switch (command) {
         case 'AT':
         case 'AFTER':
