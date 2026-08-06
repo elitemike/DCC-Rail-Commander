@@ -140,7 +140,7 @@ describe('header round-trip with roster data', () => {
         const turnouts = parseTurnoutFromFile(full)
         expect(turnouts).toHaveLength(1)
         expect(turnouts[0].id).toBe(200)
-        expect(turnouts[0].defaultState).toBe('NORMAL')
+        expect(turnouts[0].defaultState).toBe('CLOSED')
     })
 
     it('extracts default thrown turnout IDs from AUTOSTART THROW lines', () => {

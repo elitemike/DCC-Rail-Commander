@@ -27,7 +27,7 @@ export class TurnoutEditorCustomElement {
     }
 
     readonly profiles: TurnoutProfile[] = ['Instant', 'Fast', 'Medium', 'Slow', 'Bounce']
-    readonly defaultStates: TurnoutDefaultState[] = ['NORMAL', 'THROWN']
+    readonly defaultStates: TurnoutDefaultState[] = ['CLOSED', 'THROWN']
 
     // ── View tabs ─────────────────────────────────────────────────────────────
     activeTab: ViewTab = 'visual'
@@ -151,7 +151,6 @@ export class TurnoutEditorCustomElement {
     editBufferIndex: number | null = null
     aliasInput = ''
     errorMessage = ''
-    warningMessage = ''
 
     get turnouts(): Turnout[] {
         return this.state.turnouts
@@ -162,7 +161,6 @@ export class TurnoutEditorCustomElement {
         this.editBuffer = { ...entry }
         this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id)
         this.errorMessage = ''
-        this.warningMessage = this.state.getCrossTypeIdWarning?.(entry.id, 'Turnout') ?? ''
     }
 
     selectEntry(entry: Turnout): void {
@@ -176,7 +174,6 @@ export class TurnoutEditorCustomElement {
         this.editBufferIndex = null
         this.aliasInput = ''
         this.errorMessage = ''
-        this.warningMessage = ''
     }
 
     commitBuffer(): void {
@@ -195,19 +192,14 @@ export class TurnoutEditorCustomElement {
             )
             if (!aliasResult.ok) {
                 this.errorMessage = aliasResult.reason
-                this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
                 return
             }
         }
         this.errorMessage = ''
-        this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
     }
 
     // ── Field blur handlers (commit on leave) ─────────────────────────────────
     onFieldBlur(): void {
-        if (this.editBuffer) {
-            this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.id, 'Turnout') ?? ''
-        }
         this.commitBuffer()
     }
 
@@ -243,7 +235,7 @@ export class TurnoutEditorCustomElement {
             profile: 'Slow',
             description: 'New Turnout',
             comment: '',
-            defaultState: 'NORMAL',
+            defaultState: 'CLOSED',
         }
         this.state.addTurnoutEntry(newEntry)
         const idx = this.state.turnouts.length - 1
