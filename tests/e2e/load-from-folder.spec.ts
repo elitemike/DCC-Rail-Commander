@@ -306,14 +306,14 @@ test.describe('Load from Folder — device header present in config.h', () => {
             productId: '0042',
         }])
 
-        await homePage.getByTitle('Change port — click to rescan connected boards').click()
+        await homePage.getByTestId('port-badge').click()
         await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
         await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
         await homePage.getByRole('button', { name: 'Use This Board' }).click()
 
         await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
         // The port badge itself must reflect the new port immediately.
-        await expect(homePage.getByTitle('Change port — click to rescan connected boards')).toContainText('/dev/ttyACM9')
+        await expect(homePage.getByTestId('port-badge')).toContainText('/dev/ttyACM9')
 
         // The Raw editor (bound to ConfigEditorState.configHContent) must also show it —
         // this is exactly the field that went stale and clobbered the save.
@@ -353,7 +353,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
             productId: '0042',
         }])
 
-        await homePage.getByTitle('Change port — click to rescan connected boards').click()
+        await homePage.getByTestId('port-badge').click()
         await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
         await homePage.getByRole('button', { name: 'Use This Board' }).click()
         await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
@@ -365,7 +365,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
         // The port badge must reflect the rescanned port, not the one the config was created with.
-        await expect(homePage.getByTitle('Change port — click to rescan connected boards')).toContainText('/dev/ttyACM9')
+        await expect(homePage.getByTestId('port-badge')).toContainText('/dev/ttyACM9')
     })
 
     test('port picker does not auto-select an unrelated board when the known device is not connected', async ({ electronApp, homePage, sourceFolder }) => {
@@ -396,6 +396,83 @@ test.describe('Load from Folder — device header present in config.h', () => {
 
         await homePage.getByText('Arduino Uno').click()
         await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
+    })
+
+    test('port badge shows connected and the Monitor auto-opens when the device answers on load', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await mockListBoards(electronApp, [MOCK_DEVICE])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyTest0',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /Device connected/, { timeout: 5_000 })
+        // The Monitor should have opened itself — no manual "Monitor" click.
+        // "Device Monitor" is the serial-monitor panel's own header text —
+        // unambiguous, unlike "Monitor" which also matches the toolbar toggle
+        // button and the bottom-panel tab button.
+        await expect(homePage.getByText('Device Monitor', { exact: true })).toBeVisible({ timeout: 5_000 })
+    })
+
+    test('port badge shows not-detected and the Monitor stays closed when the device does not answer', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        // Nothing connected matches /dev/ttyTest0.
+        await mockListBoards(electronApp, [])
+        await mockSerialPorts(electronApp, [])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /not detected/, { timeout: 5_000 })
+        await expect(homePage.getByText('Device Monitor', { exact: true })).not.toBeVisible()
+    })
+
+    test('turning off Auto-connect is a persisted preference — Monitor stays closed on the next load', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await mockListBoards(electronApp, [MOCK_DEVICE])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyTest0',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByText('Device Monitor', { exact: true })).toBeVisible({ timeout: 5_000 })
+
+        const autoConnectCheckbox = homePage
+            .locator('label', { hasText: 'Auto-connect' })
+            .locator('input[type="checkbox"]')
+        await expect(autoConnectCheckbox).toBeChecked()
+        await autoConnectCheckbox.uncheck({ force: true })
+
+        // Leave and reopen the same saved config — a fresh Workspace instance
+        // whose binding() must read the persisted preference from disk, not
+        // just carry over an in-memory flag from the previous instance.
+        await homePage.getByRole('button', { name: 'EX-Installer' }).click()
+        await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
+        await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /Device connected/, { timeout: 5_000 })
+        await expect(homePage.getByText('Device Monitor', { exact: true })).not.toBeVisible()
+
+        const autoConnectCheckboxAfterReload = homePage
+            .locator('label', { hasText: 'Auto-connect' })
+            .locator('input[type="checkbox"]')
+        await expect(autoConnectCheckboxAfterReload).not.toBeChecked()
     })
 
 })
