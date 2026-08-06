@@ -2,6 +2,7 @@ import { IDialogService } from '@aurelia/dialog'
 import { resolve } from 'aurelia'
 import { route } from '@aurelia/router'
 import { ConfigEditorState } from './models/config-editor-state'
+import { UsbService } from './services/usb.service'
 
 @route({
     routes: [
@@ -14,6 +15,7 @@ import { ConfigEditorState } from './models/config-editor-state'
 export class App {
     private readonly configEditorState = resolve(ConfigEditorState)
     private readonly dialogService = resolve(IDialogService)
+    private readonly usb = resolve(UsbService)
     private _unsubCloseRequested: (() => void) | null = null
 
     bound(): void {
@@ -22,6 +24,12 @@ export class App {
                 void this._handleCloseRequested()
             })
         }
+        // Kick off the USB/serial-port scan as early as possible — not awaited,
+        // since nothing here should block startup on it. UsbService.initialize()
+        // is idempotent and caches its result, so by the time a device picker or
+        // the servo calibration dialog calls it later, the scan (or its hotplug
+        // subscriptions) is already in place instead of starting cold.
+        void this.usb.initialize()
     }
 
     unbinding(): void {
