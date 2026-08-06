@@ -59,11 +59,6 @@
                             ${errorMessage}
                         </div>
 
-                        <div if.bind="editBuffer && state.getCrossTypeIdWarning(editBuffer.id, 'Turnout')"
-                            class="px-3 py-2 bg-amber-950/60 border border-amber-500/40 rounded-md text-amber-300 text-sm">
-                            ${state.getCrossTypeIdWarning(editBuffer.id, 'Turnout')}
-                        </div>
-
                         <!-- Input form: SERVO_TURNOUT -->
                         <div if.bind="editBuffer.type === 'SERVO'"
                             class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
@@ -293,7 +288,7 @@
                                     Summary</h3>
                                 <button click.trigger="openServoCalibration()"
                                     class="px-2.5 py-1 text-xs font-medium rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors">
-                                    Calibrate Servo&hellip;
+                                    Test/Calibrate Servo&hellip;
                                 </button>
                             </div>
 
