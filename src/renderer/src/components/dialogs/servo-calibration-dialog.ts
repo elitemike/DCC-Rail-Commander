@@ -63,6 +63,8 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
     profile: TurnoutProfile = 'Slow'
     errorMessage = ''
     sendError: string | null = null
+    /** Exact string last written to the port — surfaced in the UI so "nothing happened" is diagnosable (command not sent vs. sent-but-ignored by the firmware). */
+    lastSentCommand: string | null = null
     portStatus: PortStatus = 'connecting'
     /** When unchecked, drag/edit changes are queued instead of auto-sent — sendPendingMove() flushes them on demand. */
     liveUpdateEnabled = true
@@ -106,6 +108,15 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
 
     get turnoutLabel(): string {
         return this.turnout.description ? `${this.turnout.description} (${this.turnout.id})` : `Turnout ${this.turnout.id}`
+    }
+
+    /** Midpoint of the two calibrated endpoints, rounded to the nearest whole servo position. */
+    get midPosition(): number {
+        return Math.round((this.closedPosition + this.thrownPosition) / 2)
+    }
+
+    get canTestMove(): boolean {
+        return this.portStatus === 'connected'
     }
 
     activate(model: ServoCalibrationModel): void {
@@ -296,6 +307,17 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
         void this._sendLiveMove(value)
     }
 
+    /**
+     * Sends a one-off move to a fixed position (Close/Mid/Throw quick-test buttons) —
+     * independent of liveUpdateEnabled and the drag/edit pending-move queue. Unlike
+     * drag/type moves (always 'Instant', for responsiveness), this uses the selected
+     * Profile so it previews the actual movement the saved turnout will produce.
+     */
+    testMove(position: number): void {
+        if (!this.canTestMove) return
+        void this._sendLiveMove(clampServoPosition(position), this.profile)
+    }
+
     /** Writes a NumericTextBox's value, recording it so the matching `change` echo is consumed instead of treated as user input. */
     private _setNumBoxValue(field: Endpoint, value: number): void {
         const box = field === 'closed' ? this.sfClosedNum : this.sfThrownNum
@@ -327,12 +349,13 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
         }
     }
 
-    private async _sendLiveMove(position: number): Promise<void> {
+    private async _sendLiveMove(position: number, profile: TurnoutProfile | number = 'Instant'): Promise<void> {
         if (!this.devicePort || this.portStatus !== 'connected') return
-        const cmd = buildServoDiagnosticCommand(this.turnout.pin, position, 'Instant')
+        const cmd = buildServoDiagnosticCommand(this.turnout.pin, position, profile)
         try {
             await this.usb.write(this.devicePort, cmd + '\n')
             this.sendError = null
+            this.lastSentCommand = cmd
         } catch (err) {
             this.sendError = `Failed to move servo: ${(err as Error).message}`
         }
