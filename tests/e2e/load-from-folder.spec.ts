@@ -325,6 +325,46 @@ test.describe('Load from Folder — device header present in config.h', () => {
         expect(savedConfig).not.toContain('/dev/ttyTest0')
     })
 
+    test('a rescanned port survives leaving and reopening the same saved config', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: updateSavedConfig() refreshed configFiles but never
+        // devicePort/deviceFqbn/deviceName on the SavedConfiguration entry. Both
+        // home.ts's loadConfig() and workspace.ts's switchToConfig() rebuild
+        // state.selectedDevice straight from those saved fields, so even though
+        // rescanPort() correctly updated the live session (and config.h on disk),
+        // the *next* time this same config was opened the port badge reverted to
+        // whatever port was saved when the config was first created — as if the
+        // rescan had never happened.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        await mockListBoards(electronApp, [rescannedDevice])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM9',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByTitle('Change port — click to rescan connected boards').click()
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await homePage.getByRole('button', { name: 'Use This Board' }).click()
+        await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
+
+        // Leave, then reopen the same saved config from the home screen.
+        await homePage.getByRole('button', { name: 'EX-Installer' }).click()
+        await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
+        await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        // The port badge must reflect the rescanned port, not the one the config was created with.
+        await expect(homePage.getByTitle('Change port — click to rescan connected boards')).toContainText('/dev/ttyACM9')
+    })
+
 })
 
 // ── Tests: missing config.h error ────────────────────────────────────────────

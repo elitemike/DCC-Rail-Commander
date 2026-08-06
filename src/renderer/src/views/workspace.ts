@@ -400,8 +400,17 @@ export class Workspace {
         if (!id) return
         const idx = this.state.savedConfigurations.findIndex((c) => c.id === id)
         if (idx === -1) return
+        const device = this.state.selectedDevice
         this.state.savedConfigurations[idx] = {
             ...this.state.savedConfigurations[idx],
+            // Keep the saved copy's device identity in sync with the live one —
+            // switchToConfig() rebuilds state.selectedDevice straight from these
+            // fields, so without this, rescanning/reconciling a port only "took"
+            // for the rest of the current session: the next time this config was
+            // switched to (menu, or app restart re-loading the active config),
+            // devicePort would revert to whatever was saved when the config was
+            // first created, even though config.h on disk already had the new port.
+            ...(device ? { deviceName: device.name, devicePort: device.port, deviceFqbn: device.fqbn } : {}),
             configFiles: this.state.configFiles.map((f) => ({ ...f })),
             lastModified: new Date().toISOString(),
         }
