@@ -1,6 +1,6 @@
 /**
- * E2E tests: Servo calibration modal — live drag preview, swap, and Save
- * writing the accepted positions back into myTurnouts.h.
+ * E2E tests: Servo calibration modal — stepper fine-tune live moves, swap,
+ * and Save writing the accepted positions back into myTurnouts.h.
  *
  * Uses the mock serial transport (src/main/mock-serial-transport.ts) so
  * usb:open-port / usb:write-to-port round trips work under --mock-device
@@ -71,6 +71,14 @@ function numericInput(page: import('@playwright/test').Page, label: string) {
         .locator('input.e-numerictextbox')
 }
 
+/** The NumericTextBox's up-arrow stepper — the only control that fine-tunes with a live move. */
+function spinUpButton(page: import('@playwright/test').Page, label: string) {
+    return dialog(page)
+        .locator('label', { hasText: label })
+        .locator('..')
+        .locator('.e-spin-up')
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test.describe('Servo Calibration', () => {
@@ -82,7 +90,7 @@ test.describe('Servo Calibration', () => {
         await expect(numericInput(page, 'Thrown position')).toHaveValue('410')
     })
 
-    test('editing the thrown position sends a live move command through the mock transport', async ({ workspacePage: page }) => {
+    test('typing a thrown position does not send a live move command', async ({ workspacePage: page }) => {
         await trackServoEvents(page)
         await openCalibrationDialog(page)
         await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
@@ -91,43 +99,29 @@ test.describe('Servo Calibration', () => {
         await thrownInput.fill('300')
         await thrownInput.press('Tab')
 
-        // Debounce is ~220ms; give it room plus the mock transport's own delay.
-        await expect(async () => {
-            const events = await getServoEvents(page)
-            expect(events.some(e => e.includes('SERVO 25 300'))).toBe(true)
-        }).toPass({ timeout: 3_000 })
+        // Give any (unwanted) live move time to arrive, then assert none did —
+        // typing only sets the candidate value, it never moves the servo.
+        await page.waitForTimeout(500)
+        const events = await getServoEvents(page)
+        expect(events.some(e => e.includes('SERVO'))).toBe(false)
+        await expect(thrownInput).toHaveValue('300')
     })
 
-    test('unchecking live update queues changes for a manual "Move Servo" send', async ({ workspacePage: page }) => {
+    test('clicking the stepper arrow fine-tunes the servo live, one point at a time', async ({ workspacePage: page }) => {
         await trackServoEvents(page)
         await openCalibrationDialog(page)
         await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
 
-        const liveUpdateCheckbox = dialog(page)
-            .locator('label', { hasText: 'Live update while dragging' })
-            .locator('input[type="checkbox"]')
-        await expect(liveUpdateCheckbox).toBeChecked()
-        await liveUpdateCheckbox.uncheck({ force: true })
-
-        const moveButton = dialog(page).getByRole('button', { name: 'Move Servo' })
-        await expect(moveButton).toBeDisabled()
-
         const thrownInput = numericInput(page, 'Thrown position')
-        await thrownInput.fill('320')
-        await thrownInput.press('Tab')
+        await expect(thrownInput).toHaveValue('410')
 
-        // Give the (now-disabled) debounce window time to pass — nothing should have been sent.
-        await page.waitForTimeout(500)
-        let events = await getServoEvents(page)
-        expect(events.some(e => e.includes('SERVO'))).toBe(false)
-        await expect(moveButton).toBeEnabled()
+        await spinUpButton(page, 'Thrown position').click()
 
-        await moveButton.click()
+        await expect(thrownInput).toHaveValue('411')
         await expect(async () => {
-            events = await getServoEvents(page)
-            expect(events.some(e => e.includes('SERVO 25 320'))).toBe(true)
+            const events = await getServoEvents(page)
+            expect(events.some(e => e.includes('SERVO 25 411'))).toBe(true)
         }).toPass({ timeout: 3_000 })
-        await expect(moveButton).toBeDisabled()
     })
 
     test('Close/Mid/Throw quick-test buttons send fixed live move commands using the selected profile', async ({ workspacePage: page }) => {
@@ -165,18 +159,16 @@ test.describe('Servo Calibration', () => {
         await expect(dialog(page).getByText('Last sent:')).toContainText('<D SERVO 25 205 4>')
     })
 
-    test('dragging/typing still moves the servo instantly regardless of the selected profile', async ({ workspacePage: page }) => {
+    test('the stepper fine-tune move is always Instant, regardless of the selected profile', async ({ workspacePage: page }) => {
         await openCalibrationDialog(page)
         await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
 
         const profileSelect = dialog(page).locator('select')
         await profileSelect.selectOption('Bounce')
 
-        const thrownInput = numericInput(page, 'Thrown position')
-        await thrownInput.fill('300')
-        await thrownInput.press('Tab')
+        await spinUpButton(page, 'Thrown position').click()
 
-        await expect(dialog(page).getByText('Last sent:')).toContainText('<D SERVO 25 300 0>', { timeout: 3_000 })
+        await expect(dialog(page).getByText('Last sent:')).toContainText('<D SERVO 25 411 0>', { timeout: 3_000 })
     })
 
     test('Close/Mid/Throw buttons are disabled when no device is connected', async ({ electronApp, workspacePage: page }) => {

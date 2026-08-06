@@ -2,7 +2,6 @@ import { resolve } from 'aurelia'
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
 import { Slider, NumericTextBox } from '@syncfusion/ej2-inputs'
 import type { SliderChangeEventArgs } from '@syncfusion/ej2-inputs'
-import { CheckBox } from '@syncfusion/ej2-buttons'
 import { UsbService } from '../../services/usb.service'
 import type { ServoTurnout, TurnoutProfile } from '../../utils/myAutomationParser'
 import {
@@ -13,8 +12,6 @@ import {
     clampServoPosition,
     validateServoPosition,
     buildServoDiagnosticCommand,
-    createDebouncer,
-    type Debouncer,
 } from '../../utils/servoCommands'
 
 export interface ServoCalibrationModel {
@@ -33,10 +30,14 @@ type Endpoint = 'closed' | 'thrown'
 
 /**
  * Live servo calibration modal, opened from the turnout editor for SERVO
- * turnouts only. Drives the real servo over the existing serial connection
- * as the user drags a dual-handle range slider (or edits the paired numeric
- * boxes), then writes the accepted Closed/Thrown positions back into the
- * turnout on Save.
+ * turnouts only. The range slider is for coarse positioning only — dragging
+ * it never moves the physical servo, it just sets the candidate Closed/Thrown
+ * values. Fine-tuning the servo live is only possible one step at a time, via
+ * the numeric fields' spin-button/arrow-key stepper (see `_isStepperEvent`);
+ * typing an arbitrary value into a numeric field behaves like the slider —
+ * value only, no live move. Close/Mid/Throw send a one-off move to preview
+ * the currently-set values. Accepted Closed/Thrown positions are written back
+ * into the turnout on Save.
  *
  * The Slider (type 'Range') always keeps its two handles ordered low ≤ high
  * and won't let a drag cross them, but activeAngle/inactiveAngle aren't
@@ -66,13 +67,8 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
     /** Exact string last written to the port — surfaced in the UI so "nothing happened" is diagnosable (command not sent vs. sent-but-ignored by the firmware). */
     lastSentCommand: string | null = null
     portStatus: PortStatus = 'connecting'
-    /** When unchecked, drag/edit changes are queued instead of auto-sent — sendPendingMove() flushes them on demand. */
-    liveUpdateEnabled = true
-    /** Drives the "Move Servo" button's disabled state — true once a change is queued while liveUpdateEnabled is off. */
-    hasPendingMove = false
 
     private portOpenedByUs = false
-    private _pendingMove: { field: Endpoint; value: number } | null = null
     private _prevLow = 0
     private _prevHigh = 0
     /**
@@ -96,15 +92,10 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
     sliderEl!: HTMLElement
     closedNumEl!: HTMLInputElement
     thrownNumEl!: HTMLInputElement
-    liveUpdateEl!: HTMLInputElement
 
     private sfSlider?: Slider
     private sfClosedNum?: NumericTextBox
     private sfThrownNum?: NumericTextBox
-    private sfLiveUpdate?: CheckBox
-
-    private readonly _closedDebouncer: Debouncer<[number]> = createDebouncer((v) => void this._sendLiveMove(v), 220)
-    private readonly _thrownDebouncer: Debouncer<[number]> = createDebouncer((v) => void this._sendLiveMove(v), 220)
 
     get turnoutLabel(): string {
         return this.turnout.description ? `${this.turnout.description} (${this.turnout.id})` : `Turnout ${this.turnout.id}`
@@ -172,7 +163,7 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
                     this._closedNumPendingValue = null
                     return
                 }
-                if (args.value != null) this._onNumericChange('closed', args.value)
+                if (args.value != null) this._onNumericChange('closed', args.value, this._isStepperEvent(args.event))
             },
         })
         this.sfClosedNum.appendTo(this.closedNumEl)
@@ -187,36 +178,16 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
                     this._thrownNumPendingValue = null
                     return
                 }
-                if (args.value != null) this._onNumericChange('thrown', args.value)
+                if (args.value != null) this._onNumericChange('thrown', args.value, this._isStepperEvent(args.event))
             },
         })
         this.sfThrownNum.appendTo(this.thrownNumEl)
-
-        this.sfLiveUpdate = new CheckBox({
-            label: 'Live update while dragging',
-            checked: this.liveUpdateEnabled,
-            change: (args) => {
-                this.liveUpdateEnabled = args.checked
-                // Flush anything queued while manual mode was on, now that
-                // drag/edit changes go straight through again.
-                if (this.liveUpdateEnabled && this._pendingMove) {
-                    const { field, value } = this._pendingMove
-                    this._pendingMove = null
-                    this.hasPendingMove = false
-                    this._debounceLiveMove(field, value)
-                }
-            },
-        })
-        this.sfLiveUpdate.appendTo(this.liveUpdateEl)
     }
 
     detaching(): void {
-        this._closedDebouncer.cancel()
-        this._thrownDebouncer.cancel()
         this.sfSlider?.destroy()
         this.sfClosedNum?.destroy()
         this.sfThrownNum?.destroy()
-        this.sfLiveUpdate?.destroy()
         if (this.portOpenedByUs && this.devicePort) {
             this.usb.closePort(this.devicePort).catch(() => { /* best-effort */ })
         }
@@ -267,15 +238,20 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
         this._prevHigh = v1
     }
 
+    /** Handles a slider drag — coarse positioning only, never moves the physical servo. */
     private _applyFieldFromDrag(field: Endpoint, value: number): void {
         if (field === 'closed') this.closedPosition = value
         else this.thrownPosition = value
         this._setNumBoxValue(field, value)
-        this._debounceLiveMove(field, value)
     }
 
-    /** Handles typing an exact value — this is the only path that can invert which end is lower. */
-    private _onNumericChange(field: Endpoint, value: number): void {
+    /**
+     * Handles a NumericTextBox change — this is the only path that can invert which end is
+     * lower. `isStepperMove` distinguishes the spin-button/arrow-key ±1 step (fine-tune: sends
+     * a live move so the servo can be dialed in one point at a time) from typing an arbitrary
+     * value or a programmatic write (value only, same as a slider drag).
+     */
+    private _onNumericChange(field: Endpoint, value: number, isStepperMove: boolean): void {
         const v = clampServoPosition(value)
         if (field === 'closed') this.closedPosition = v
         else this.thrownPosition = v
@@ -285,33 +261,26 @@ export class ServoCalibrationDialog implements IDialogCustomElementViewModel {
         this._prevHigh = Math.max(this.closedPosition, this.thrownPosition)
         this._setSliderValue(this._prevLow, this._prevHigh)
 
-        this._debounceLiveMove(field, v)
+        if (isStepperMove) void this._sendLiveMove(v)
     }
 
-    private _debounceLiveMove(field: Endpoint, value: number): void {
-        if (this.liveUpdateEnabled) {
-            const debouncer = field === 'closed' ? this._closedDebouncer : this._thrownDebouncer
-            debouncer.call(value)
-        } else {
-            this._pendingMove = { field, value }
-            this.hasPendingMove = true
-        }
-    }
-
-    /** Sends the most recent queued drag/edit change — only reachable when liveUpdateEnabled is off. */
-    sendPendingMove(): void {
-        if (!this._pendingMove) return
-        const { value } = this._pendingMove
-        this._pendingMove = null
-        this.hasPendingMove = false
-        void this._sendLiveMove(value)
+    /**
+     * A NumericTextBox's spin-button click or focused-arrow-key press both increment/decrement
+     * by exactly one step and reach `change` via the underlying DOM event that triggered them
+     * (a mousedown/mouseup on the spin button, or a keydown for the arrow key) — see
+     * NumericTextBox.prototype.mouseDownOnSpinner/keyDownHandler. Typing followed by blur/Enter
+     * instead reaches `change` via the input's native 'change' event, and a programmatic
+     * `.value =` write (our own echo-suppression) carries no event at all.
+     */
+    private _isStepperEvent(event: Event | undefined): boolean {
+        return event?.type === 'mousedown' || event?.type === 'mouseup' || event?.type === 'keydown'
     }
 
     /**
      * Sends a one-off move to a fixed position (Close/Mid/Throw quick-test buttons) —
-     * independent of liveUpdateEnabled and the drag/edit pending-move queue. Unlike
-     * drag/type moves (always 'Instant', for responsiveness), this uses the selected
-     * Profile so it previews the actual movement the saved turnout will produce.
+     * independent of the numeric-stepper fine-tune path above. Unlike stepper moves
+     * (always 'Instant', for responsiveness), this uses the selected Profile so it
+     * previews the actual movement the saved turnout will produce.
      */
     testMove(position: number): void {
         if (!this.canTestMove) return

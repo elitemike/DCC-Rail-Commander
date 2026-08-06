@@ -71,28 +71,3 @@ export function buildDefineServoTurnoutCommand(turnout: {
 }): string {
     return `<T ${turnout.id} SERVO ${turnout.pin} ${turnout.activeAngle} ${turnout.inactiveAngle} ${resolveProfileNumber(turnout.profile)}>`
 }
-
-export interface Debouncer<TArgs extends unknown[]> {
-    call: (...args: TArgs) => void
-    cancel: () => void
-}
-
-/** Cancel-and-restart debounce. Each call resets the timer; only the last call's args fire. */
-export function createDebouncer<TArgs extends unknown[]>(fn: (...args: TArgs) => void, ms: number): Debouncer<TArgs> {
-    let timer: ReturnType<typeof setTimeout> | null = null
-    return {
-        call: (...args: TArgs) => {
-            if (timer !== null) clearTimeout(timer)
-            timer = setTimeout(() => {
-                timer = null
-                fn(...args)
-            }, ms)
-        },
-        cancel: () => {
-            if (timer !== null) {
-                clearTimeout(timer)
-                timer = null
-            }
-        },
-    }
-}

@@ -14,7 +14,7 @@ const BASE_TURNOUT: ServoTurnout = {
     inactiveAngle: 205,
     profile: 'Slow',
     description: 'Main Line Junction',
-    defaultState: 'NORMAL',
+    defaultState: 'CLOSED',
 }
 
 function makeDialog(turnout: ServoTurnout = BASE_TURNOUT) {
@@ -22,8 +22,6 @@ function makeDialog(turnout: ServoTurnout = BASE_TURNOUT) {
 
     const dialogOk = vi.fn()
     const dialogCancel = vi.fn()
-    const closedDebouncerCall = vi.fn()
-    const thrownDebouncerCall = vi.fn()
 
     Object.assign(dialog, {
         $dialog: { ok: dialogOk, cancel: dialogCancel },
@@ -38,19 +36,14 @@ function makeDialog(turnout: ServoTurnout = BASE_TURNOUT) {
         sendError: null,
         portStatus: 'connected',
         portOpenedByUs: false,
-        liveUpdateEnabled: true,
-        hasPendingMove: false,
-        _pendingMove: null,
         _prevLow: Math.min(turnout.inactiveAngle, turnout.activeAngle),
         _prevHigh: Math.max(turnout.inactiveAngle, turnout.activeAngle),
         sfSlider: undefined,
         sfClosedNum: undefined,
         sfThrownNum: undefined,
-        _closedDebouncer: { call: closedDebouncerCall, cancel: vi.fn() },
-        _thrownDebouncer: { call: thrownDebouncerCall, cancel: vi.fn() },
     })
 
-    return { dialog, dialogOk, dialogCancel, closedDebouncerCall, thrownDebouncerCall }
+    return { dialog, dialogOk, dialogCancel }
 }
 
 // ── swap() ────────────────────────────────────────────────────────────────────
@@ -66,13 +59,15 @@ describe('ServoCalibrationDialog.swap', () => {
         expect(dialog.lowLabel).toBe('thrown')
     })
 
-    it('does not queue a live move command', () => {
-        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+    it('does not send a live move', async () => {
+        const { dialog } = makeDialog()
 
         dialog.swap()
+        await Promise.resolve()
 
-        expect(closedDebouncerCall).not.toHaveBeenCalled()
-        expect(thrownDebouncerCall).not.toHaveBeenCalled()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).not.toHaveBeenCalled()
     })
 
     it('swapping twice restores the original values', () => {
@@ -136,13 +131,13 @@ describe('ServoCalibrationDialog.cancel', () => {
     })
 })
 
-// ── Slider <-> field sync (private _onSliderChange) ─────────────────────────
+// ── Slider drag (private _onSliderChange) — coarse positioning only ─────────
 // Accessed via a loosely-typed alias since these are private implementation
 // details, exercised the same way the public drag interaction would trigger them.
 
 describe('ServoCalibrationDialog slider drag sync', () => {
     it('moving the low handle updates the field currently mapped to lowLabel', () => {
-        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+        const { dialog } = makeDialog()
         // BASE_TURNOUT: inactive(closed)=205 < active(thrown)=410, so lowLabel === 'closed'
         expect(dialog.lowLabel).toBe('closed')
 
@@ -151,24 +146,20 @@ describe('ServoCalibrationDialog slider drag sync', () => {
 
         expect(dialog.closedPosition).toBe(150)
         expect(dialog.thrownPosition).toBe(410)
-        expect(closedDebouncerCall).toHaveBeenCalledWith(150)
-        expect(thrownDebouncerCall).not.toHaveBeenCalled()
     })
 
     it('moving the high handle updates the field mapped to the other end', () => {
-        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+        const { dialog } = makeDialog()
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(dialog as any)._onSliderChange({ value: [205, 450] })
 
         expect(dialog.closedPosition).toBe(205)
         expect(dialog.thrownPosition).toBe(450)
-        expect(thrownDebouncerCall).toHaveBeenCalledWith(450)
-        expect(closedDebouncerCall).not.toHaveBeenCalled()
     })
 
     it('respects lowLabel = thrown (post-swap) when mapping handles to fields', () => {
-        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+        const { dialog } = makeDialog()
         dialog.swap() // closed=410, thrown=205, lowLabel='thrown'
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(dialog as any)._prevLow = 205
@@ -181,12 +172,25 @@ describe('ServoCalibrationDialog slider drag sync', () => {
         // Low handle now represents 'thrown' since lowLabel flipped after swap.
         expect(dialog.thrownPosition).toBe(150)
         expect(dialog.closedPosition).toBe(410)
-        expect(thrownDebouncerCall).toHaveBeenCalledWith(150)
-        expect(closedDebouncerCall).not.toHaveBeenCalled()
+    })
+
+    it('never sends a live move, regardless of how far the handle moves', async () => {
+        const { dialog } = makeDialog()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(dialog as any)._onSliderChange({ value: [0, 512] })
+        await Promise.resolve()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).not.toHaveBeenCalled()
     })
 })
 
-// ── Numeric entry can invert ordering (private _onNumericChange) ────────────
+// ── Numeric entry (private _onNumericChange) ─────────────────────────────────
+// isStepperMove (3rd arg) mirrors what _isStepperEvent derives from the
+// NumericTextBox change event: true for spin-button/arrow-key steps, false
+// for typing a value directly.
 
 describe('ServoCalibrationDialog numeric entry sync', () => {
     it('typing a closed value greater than thrown flips lowLabel and re-syncs the slider', () => {
@@ -196,12 +200,74 @@ describe('ServoCalibrationDialog numeric entry sync', () => {
         ;(dialog as any).sfSlider = sfSlider
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(dialog as any)._onNumericChange('closed', 460)
+        ;(dialog as any)._onNumericChange('closed', 460, false)
 
         expect(dialog.closedPosition).toBe(460)
         expect(dialog.thrownPosition).toBe(410)
         expect(dialog.lowLabel).toBe('thrown')
         expect(sfSlider.value).toEqual([410, 460])
+    })
+
+    it('typing a value directly (isStepperMove=false) does not send a live move', async () => {
+        const { dialog } = makeDialog()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(dialog as any)._onNumericChange('closed', 260, false)
+        await Promise.resolve()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).not.toHaveBeenCalled()
+    })
+
+    it('a stepper move (isStepperMove=true) sends an Instant live move to the new value', async () => {
+        const { dialog } = makeDialog()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(dialog as any)._onNumericChange('closed', 206, true)
+        await Promise.resolve()
+        await Promise.resolve()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 206 0>\n')
+    })
+})
+
+// ── _isStepperEvent ───────────────────────────────────────────────────────────
+
+describe('ServoCalibrationDialog._isStepperEvent', () => {
+    it('treats spin-button mousedown/mouseup as a stepper move', () => {
+        const { dialog } = makeDialog()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isStepperEvent = (dialog as any)._isStepperEvent.bind(dialog)
+
+        expect(isStepperEvent({ type: 'mousedown' })).toBe(true)
+        expect(isStepperEvent({ type: 'mouseup' })).toBe(true)
+    })
+
+    it('treats a focused arrow-key keydown as a stepper move', () => {
+        const { dialog } = makeDialog()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isStepperEvent = (dialog as any)._isStepperEvent.bind(dialog)
+
+        expect(isStepperEvent({ type: 'keydown' })).toBe(true)
+    })
+
+    it('does not treat typing (native change event) as a stepper move', () => {
+        const { dialog } = makeDialog()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isStepperEvent = (dialog as any)._isStepperEvent.bind(dialog)
+
+        expect(isStepperEvent({ type: 'change' })).toBe(false)
+    })
+
+    it('does not treat a programmatic write (no event) as a stepper move', () => {
+        const { dialog } = makeDialog()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isStepperEvent = (dialog as any)._isStepperEvent.bind(dialog)
+
+        expect(isStepperEvent(undefined)).toBe(false)
     })
 })
 
@@ -223,8 +289,8 @@ describe('ServoCalibrationDialog test-move triggers', () => {
         expect(dialog.canTestMove).toBe(false)
     })
 
-    it('testMove sends the position directly, bypassing the debouncer, using the selected profile', async () => {
-        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+    it('testMove sends the position directly, using the selected profile', async () => {
+        const { dialog } = makeDialog()
         // BASE_TURNOUT.profile is 'Slow' (numeric 3) — testMove must send that, not 'Instant'.
 
         dialog.testMove(dialog.midPosition)
@@ -234,8 +300,6 @@ describe('ServoCalibrationDialog test-move triggers', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
         expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 308 3>\n')
-        expect(closedDebouncerCall).not.toHaveBeenCalled()
-        expect(thrownDebouncerCall).not.toHaveBeenCalled()
     })
 
     it('testMove reflects a changed profile selection', async () => {
@@ -251,7 +315,7 @@ describe('ServoCalibrationDialog test-move triggers', () => {
         expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 205 4>\n')
     })
 
-    it('drag/typed moves still send Instant regardless of the selected profile', async () => {
+    it('stepper moves still send Instant regardless of the selected profile', async () => {
         const { dialog } = makeDialog()
         dialog.profile = 'Bounce'
 
@@ -272,78 +336,5 @@ describe('ServoCalibrationDialog test-move triggers', () => {
         dialog.testMove(dialog.midPosition)
 
         expect(usbWrite).not.toHaveBeenCalled()
-    })
-})
-
-// ── Manual ("live update" off) move flow ─────────────────────────────────────
-
-describe('ServoCalibrationDialog manual move flow', () => {
-    it('defaults to live update enabled', () => {
-        const { dialog } = makeDialog()
-        expect(dialog.liveUpdateEnabled).toBe(true)
-    })
-
-    it('queues a change instead of sending it when live update is off', () => {
-        const { dialog, closedDebouncerCall } = makeDialog()
-        dialog.liveUpdateEnabled = false
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(dialog as any)._debounceLiveMove('closed', 300)
-
-        expect(closedDebouncerCall).not.toHaveBeenCalled()
-        expect(dialog.hasPendingMove).toBe(true)
-    })
-
-    it('sendPendingMove writes the queued command and clears the pending flag', async () => {
-        const { dialog } = makeDialog()
-        dialog.liveUpdateEnabled = false
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(dialog as any)._debounceLiveMove('thrown', 300)
-        expect(dialog.hasPendingMove).toBe(true)
-
-        dialog.sendPendingMove()
-        expect(dialog.hasPendingMove).toBe(false)
-
-        // _sendLiveMove is async (fire-and-forget from sendPendingMove) — flush microtasks.
-        await Promise.resolve()
-        await Promise.resolve()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
-        expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 300 0>\n')
-    })
-
-    it('sendPendingMove is a no-op when nothing is queued', () => {
-        const { dialog } = makeDialog()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
-
-        dialog.sendPendingMove()
-
-        expect(usbWrite).not.toHaveBeenCalled()
-        expect(dialog.hasPendingMove).toBe(false)
-    })
-
-    it('re-enabling live update flushes a queued change through the debouncer', () => {
-        const { dialog, closedDebouncerCall } = makeDialog()
-        dialog.liveUpdateEnabled = false
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(dialog as any)._debounceLiveMove('closed', 300)
-        expect(dialog.hasPendingMove).toBe(true)
-
-        // Simulate the CheckBox's change handler flow.
-        dialog.liveUpdateEnabled = true
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pending = (dialog as any)._pendingMove
-        if (pending) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ;(dialog as any)._pendingMove = null
-            dialog.hasPendingMove = false
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ;(dialog as any)._debounceLiveMove(pending.field, pending.value)
-        }
-
-        expect(dialog.hasPendingMove).toBe(false)
-        expect(closedDebouncerCall).toHaveBeenCalledWith(300)
     })
 })
