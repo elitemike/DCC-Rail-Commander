@@ -41,6 +41,9 @@ const MOCK_DEVICE: ArduinoCliBoardInfo = {
  */
 const CONFIG_H_WITH_DEVICE = `${buildDeviceHeader(MOCK_DEVICE)}\n${MOCK_CONFIG_H}`
 
+/** Device header with a known FQBN but no port — triggers the portOnly device picker. */
+const CONFIG_H_WITH_DEVICE_NO_PORT = `${buildDeviceHeader({ ...MOCK_DEVICE, port: '' })}\n${MOCK_CONFIG_H}`
+
 /** Roster file WITHOUT generator header — simulates an externally created file. */
 const EXTERNAL_ROSTER_H = [
     'ROSTER(3, "Thomas", "LIGHT/HORN/*WHISTLE/BELL")',
@@ -363,6 +366,36 @@ test.describe('Load from Folder — device header present in config.h', () => {
 
         // The port badge must reflect the rescanned port, not the one the config was created with.
         await expect(homePage.getByTitle('Change port — click to rescan connected boards')).toContainText('/dev/ttyACM9')
+    })
+
+    test('port picker does not auto-select an unrelated board when the known device is not connected', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: previously this fell back to preselecting boards[0] — an
+        // unrelated board the user never actually chose — whenever the FQBN from
+        // config.h didn't match anything currently connected.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE_NO_PORT, 'utf-8')
+
+        // Only an Uno is connected — config.h's device is a Mega, so nothing matches.
+        await mockListBoards(electronApp, [])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM5',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-UNO-0001',
+            vendorId: '2341',
+            productId: '0043',
+        }])
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Load from Folder').first().click()
+
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await expect(homePage.getByText("wasn't found among the connected boards", { exact: false })).toBeVisible()
+        await expect(homePage.getByText('Arduino Uno')).toBeVisible()
+
+        // Nothing pre-selected — "Use This Board" must stay disabled until the user picks one.
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeDisabled()
+
+        await homePage.getByText('Arduino Uno').click()
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
     })
 
 })
