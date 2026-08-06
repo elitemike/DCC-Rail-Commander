@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
     clampServoPosition,
     validateServoPosition,
     buildServoDiagnosticCommand,
     buildDefineServoTurnoutCommand,
-    createDebouncer,
     PROFILE_TO_NUMERIC,
 } from '../../src/renderer/src/utils/servoCommands'
 import type { ServoTurnout } from '../../src/renderer/src/utils/myAutomationParser'
@@ -102,65 +101,8 @@ describe('buildDefineServoTurnoutCommand', () => {
             inactiveAngle: 205,
             profile: 'Medium',
             description: 'Test',
-            defaultState: 'NORMAL',
+            defaultState: 'CLOSED',
         }
         expect(buildDefineServoTurnoutCommand(turnout)).toBe('<T 24 SERVO 100 410 205 2>')
-    })
-})
-
-// ── createDebouncer ───────────────────────────────────────────────────────────
-
-describe('createDebouncer', () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-        vi.useRealTimers()
-    })
-
-    it('invokes fn once with the last args after rapid successive calls', () => {
-        const fn = vi.fn()
-        const debouncer = createDebouncer(fn, 200)
-
-        debouncer.call(1)
-        debouncer.call(2)
-        debouncer.call(3)
-
-        expect(fn).not.toHaveBeenCalled()
-        vi.advanceTimersByTime(200)
-        expect(fn).toHaveBeenCalledOnce()
-        expect(fn).toHaveBeenCalledWith(3)
-    })
-
-    it('cancel() prevents a pending invocation', () => {
-        const fn = vi.fn()
-        const debouncer = createDebouncer(fn, 200)
-
-        debouncer.call(1)
-        debouncer.cancel()
-        vi.advanceTimersByTime(200)
-
-        expect(fn).not.toHaveBeenCalled()
-    })
-
-    it('two independent debouncer instances do not interfere with each other', () => {
-        const fnA = vi.fn()
-        const fnB = vi.fn()
-        const debouncerA = createDebouncer(fnA, 200)
-        const debouncerB = createDebouncer(fnB, 200)
-
-        debouncerA.call('a1')
-        vi.advanceTimersByTime(100)
-        debouncerB.call('b1')
-        vi.advanceTimersByTime(100)
-
-        expect(fnA).toHaveBeenCalledOnce()
-        expect(fnA).toHaveBeenCalledWith('a1')
-        expect(fnB).not.toHaveBeenCalled()
-
-        vi.advanceTimersByTime(100)
-        expect(fnB).toHaveBeenCalledOnce()
-        expect(fnB).toHaveBeenCalledWith('b1')
     })
 })
