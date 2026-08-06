@@ -130,6 +130,77 @@ test.describe('Servo Calibration', () => {
         await expect(moveButton).toBeDisabled()
     })
 
+    test('Close/Mid/Throw quick-test buttons send fixed live move commands using the selected profile', async ({ workspacePage: page }) => {
+        await openCalibrationDialog(page)
+        await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
+
+        // Seeded turnout: closed=205, thrown=410, profile=Slow (3) -> mid = round((205+410)/2) = 308.
+        // Asserted against the dialog's own "Last sent" readout (the mock transport's echoed
+        // response strips the profile digit, so it can't be used to verify this — see
+        // mock-serial-transport.ts's `_synthesizeResponse`).
+        const lastSent = dialog(page).getByText('Last sent:')
+
+        await dialog(page).getByRole('button', { name: 'Close', exact: true }).click()
+        await expect(lastSent).toContainText('<D SERVO 25 205 3>')
+
+        await dialog(page).getByRole('button', { name: 'Mid', exact: true }).click()
+        await expect(lastSent).toContainText('<D SERVO 25 308 3>')
+
+        await dialog(page).getByRole('button', { name: 'Throw', exact: true }).click()
+        await expect(lastSent).toContainText('<D SERVO 25 410 3>')
+
+        // None of these change the calibrated endpoints themselves.
+        await expect(numericInput(page, 'Closed position')).toHaveValue('205')
+        await expect(numericInput(page, 'Thrown position')).toHaveValue('410')
+    })
+
+    test('changing the profile changes what the test-move buttons send', async ({ workspacePage: page }) => {
+        await openCalibrationDialog(page)
+        await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
+
+        const profileSelect = dialog(page).locator('select')
+        await profileSelect.selectOption('Bounce')
+
+        await dialog(page).getByRole('button', { name: 'Close', exact: true }).click()
+        await expect(dialog(page).getByText('Last sent:')).toContainText('<D SERVO 25 205 4>')
+    })
+
+    test('dragging/typing still moves the servo instantly regardless of the selected profile', async ({ workspacePage: page }) => {
+        await openCalibrationDialog(page)
+        await expect(dialog(page).getByText('Connected', { exact: false })).toBeVisible({ timeout: 5_000 })
+
+        const profileSelect = dialog(page).locator('select')
+        await profileSelect.selectOption('Bounce')
+
+        const thrownInput = numericInput(page, 'Thrown position')
+        await thrownInput.fill('300')
+        await thrownInput.press('Tab')
+
+        await expect(dialog(page).getByText('Last sent:')).toContainText('<D SERVO 25 300 0>', { timeout: 3_000 })
+    })
+
+    test('Close/Mid/Throw buttons are disabled when no device is connected', async ({ electronApp, workspacePage: page }) => {
+        // Force usb:open-port to fail so the dialog lands on portStatus 'error'
+        // (mirrors what happens when the real port can't be opened).
+        await electronApp.evaluate((_electronApp) => {
+            const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
+            ipcMain.removeHandler('usb:open-port')
+            ipcMain.handle('usb:open-port', () => {
+                throw new Error('forced failure for test')
+            })
+        })
+
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await page.getByRole('button', { name: 'Calibrate Servo…' }).click()
+        await expect(dialog(page).getByText('Calibrate Servo', { exact: true })).toBeVisible()
+        await expect(dialog(page).getByText('Could not connect', { exact: false })).toBeVisible({ timeout: 5_000 })
+
+        await expect(dialog(page).getByRole('button', { name: 'Close', exact: true })).toBeDisabled()
+        await expect(dialog(page).getByRole('button', { name: 'Mid', exact: true })).toBeDisabled()
+        await expect(dialog(page).getByRole('button', { name: 'Throw', exact: true })).toBeDisabled()
+    })
+
     test('swap exchanges the two values without sending a live move', async ({ workspacePage: page }) => {
         await trackServoEvents(page)
         await openCalibrationDialog(page)

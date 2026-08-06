@@ -205,6 +205,76 @@ describe('ServoCalibrationDialog numeric entry sync', () => {
     })
 })
 
+// ── Quick test-move triggers (Close / Mid / Throw) ───────────────────────────
+
+describe('ServoCalibrationDialog test-move triggers', () => {
+    it('midPosition rounds the average of closed and thrown', () => {
+        const { dialog } = makeDialog()
+        dialog.closedPosition = 205
+        dialog.thrownPosition = 410
+        expect(dialog.midPosition).toBe(308) // (205+410)/2 = 307.5 -> rounds to 308
+    })
+
+    it('canTestMove is true only when the port is connected', () => {
+        const { dialog } = makeDialog()
+        expect(dialog.canTestMove).toBe(true)
+
+        dialog.portStatus = 'unavailable'
+        expect(dialog.canTestMove).toBe(false)
+    })
+
+    it('testMove sends the position directly, bypassing the debouncer, using the selected profile', async () => {
+        const { dialog, closedDebouncerCall, thrownDebouncerCall } = makeDialog()
+        // BASE_TURNOUT.profile is 'Slow' (numeric 3) — testMove must send that, not 'Instant'.
+
+        dialog.testMove(dialog.midPosition)
+        await Promise.resolve()
+        await Promise.resolve()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 308 3>\n')
+        expect(closedDebouncerCall).not.toHaveBeenCalled()
+        expect(thrownDebouncerCall).not.toHaveBeenCalled()
+    })
+
+    it('testMove reflects a changed profile selection', async () => {
+        const { dialog } = makeDialog()
+        dialog.profile = 'Bounce'
+
+        dialog.testMove(dialog.closedPosition)
+        await Promise.resolve()
+        await Promise.resolve()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 205 4>\n')
+    })
+
+    it('drag/typed moves still send Instant regardless of the selected profile', async () => {
+        const { dialog } = makeDialog()
+        dialog.profile = 'Bounce'
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (dialog as any)._sendLiveMove(300)
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+        expect(usbWrite).toHaveBeenCalledWith('/dev/ttyACM1', '<D SERVO 25 300 0>\n')
+    })
+
+    it('testMove is a no-op when the port is not connected', () => {
+        const { dialog } = makeDialog()
+        dialog.portStatus = 'unavailable'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const usbWrite = (dialog as any).usb.write as ReturnType<typeof vi.fn>
+
+        dialog.testMove(dialog.midPosition)
+
+        expect(usbWrite).not.toHaveBeenCalled()
+    })
+})
+
 // ── Manual ("live update" off) move flow ─────────────────────────────────────
 
 describe('ServoCalibrationDialog manual move flow', () => {
