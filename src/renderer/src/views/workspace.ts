@@ -21,6 +21,7 @@ import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
+import { CheckBox } from '@syncfusion/ej2-buttons'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 
 export class Workspace {
@@ -69,6 +70,17 @@ export class Workspace {
 
     // ── Device monitor ────────────────────────────────────────────────────────
     showMonitor = false
+    /** Persisted app-wide preference (not per-device) — whether checkDeviceConnection() is allowed to auto-open the Monitor on connect. Loaded in binding(), toggled via the checkbox next to the Monitor button. */
+    autoConnectMonitor = true
+    autoConnectMonitorEl!: HTMLInputElement
+    private sfAutoConnectMonitor?: CheckBox
+
+    // ── Live device connection status (port badge) ────────────────────────────
+    /** Whether the selected device currently answers at its recorded port — drives the port badge and auto-opening the Monitor. */
+    deviceConnectionStatus: 'checking' | 'connected' | 'disconnected' | 'unknown' = 'unknown'
+    private _connectionCheckTimer: ReturnType<typeof setTimeout> | null = null
+    private _unsubUsbAttached: (() => void) | null = null
+    private _unsubUsbDetached: (() => void) | null = null
 
     // ── Bottom panel / splitter ──────────────────────────────────────────────
     private splitterObj: Splitter | null = null
@@ -114,6 +126,69 @@ export class Workspace {
         // Fire-and-forget: a git call that can be slow (or fail entirely
         // offline) and must never block the rest of the view from rendering.
         void this.loadVersions()
+        this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
+        // Fire-and-forget: re-scans serial ports/boards to confirm the
+        // selected device is actually plugged in, updating the port badge
+        // and (on a fresh connect, if autoConnectMonitor is on) auto-opening
+        // the Monitor.
+        void this.checkDeviceConnection()
+    }
+
+    /** Persists the auto-connect-Monitor preference — called from the checkbox next to the Monitor button. */
+    setAutoConnectMonitor(enabled: boolean): void {
+        this.autoConnectMonitor = enabled
+        void this.preferences.set('autoConnectMonitor', enabled)
+    }
+
+    /**
+     * Re-scans connected serial ports/boards and checks whether the currently
+     * selected device is actually live at its recorded port — the same
+     * mergeDetectedBoards() lookup rescanPort()/ensureLivePort() already use,
+     * just read-only here (never corrects the stored port itself).
+     *
+     * On a transition into 'connected' — not on every repeat check while
+     * already connected — the Monitor is auto-opened if it isn't already
+     * showing and autoConnectMonitor (a persisted app preference, not
+     * per-device) is on. Gating on the transition (rather than "is
+     * connected") means a user who's manually closed the Monitor won't have
+     * it pop back open on an unrelated hotplug event while the device was
+     * already live.
+     */
+    async checkDeviceConnection(): Promise<void> {
+        const device = this.state.selectedDevice
+        if (!device?.port) {
+            this.deviceConnectionStatus = 'disconnected'
+            return
+        }
+        const wasConnected = this.deviceConnectionStatus === 'connected'
+        this.deviceConnectionStatus = 'checking'
+        try {
+            await this.usb.initialize()
+            await this.usb.refresh()
+            let cliBoards: ArduinoCliBoardInfo[] = []
+            try {
+                cliBoards = await this.cli.listBoards()
+            } catch { /* fall back silently to the raw serial-port list */ }
+            const connected = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
+            const isLive = connected.some((b) => b.port === device.port)
+            this.deviceConnectionStatus = isLive ? 'connected' : 'disconnected'
+            if (isLive && !wasConnected && !this.showMonitor && this.autoConnectMonitor) {
+                this.showMonitor = true
+                this.activeBottomTab = 'monitor'
+                this.openBottomPanel()
+            }
+        } catch {
+            this.deviceConnectionStatus = 'disconnected'
+        }
+    }
+
+    /** Debounces bursts of USB attach/detach events (e.g. a hub enumerating several devices at once) into a single re-check. */
+    private _scheduleConnectionCheck(): void {
+        if (this._connectionCheckTimer) clearTimeout(this._connectionCheckTimer)
+        this._connectionCheckTimer = setTimeout(() => {
+            this._connectionCheckTimer = null
+            void this.checkDeviceConnection()
+        }, 400)
     }
 
     private seedVersionsFromSelected(): void {
@@ -192,6 +267,20 @@ export class Workspace {
             },
         })
         this.sfVersion.appendTo(this.versionEl)
+
+        this.sfAutoConnectMonitor = new CheckBox({
+            label: 'Auto-connect',
+            checked: this.autoConnectMonitor,
+            change: (args) => this.setAutoConnectMonitor(args.checked),
+        })
+        this.sfAutoConnectMonitor.appendTo(this.autoConnectMonitorEl)
+
+        // Re-check whenever a USB device is plugged/unplugged — covers both
+        // the selected board coming online after the workspace already loaded,
+        // and it going away mid-session. Debounced since a hub can fire several
+        // attach events back-to-back.
+        this._unsubUsbAttached = window.usb?.onAttached(() => this._scheduleConnectionCheck()) ?? null
+        this._unsubUsbDetached = window.usb?.onDetached(() => this._scheduleConnectionCheck()) ?? null
     }
 
     detaching(): void {
@@ -199,6 +288,16 @@ export class Workspace {
         this.splitterObj = null
         this.sfVersion?.destroy()
         this.sfVersion = undefined
+        this.sfAutoConnectMonitor?.destroy()
+        this.sfAutoConnectMonitor = undefined
+        if (this._connectionCheckTimer) {
+            clearTimeout(this._connectionCheckTimer)
+            this._connectionCheckTimer = null
+        }
+        this._unsubUsbAttached?.()
+        this._unsubUsbDetached?.()
+        this._unsubUsbAttached = null
+        this._unsubUsbDetached = null
     }
 
     /**
@@ -633,6 +732,27 @@ export class Workspace {
         const device = this.state.selectedDevice
         if (!device || !this.state.scratchPath) return
 
+        // The Monitor holds the port open for live traffic, but arduino-cli/
+        // esptool needs exclusive access to it during upload. Close it (if
+        // open) and remember to bring it back afterwards — success or
+        // failure — so watching the monitor doesn't mean manually closing
+        // and reopening it around every upload. Switching to the Output tab
+        // too avoids leaving the bottom panel showing a blank Monitor pane
+        // for the duration (its tab button itself is hidden while closed).
+        const monitorWasOpen = this.showMonitor
+        const wasOnMonitorTab = this.activeBottomTab === 'monitor'
+        if (monitorWasOpen) {
+            this.showMonitor = false
+            this.activeBottomTab = 'output'
+        }
+        try {
+            if (await this.usb.isPortOpen(device.port)) {
+                await this.usb.closePort(device.port)
+            }
+        } catch {
+            // Best-effort — ensureLivePort()/the upload call itself will surface a real problem.
+        }
+
         this.isCompiling = true
         this.compileError = null
         this.progressPercent = 75
@@ -677,6 +797,10 @@ export class Workspace {
             })
         } finally {
             this.isCompiling = false
+            if (monitorWasOpen) {
+                this.showMonitor = true
+                if (wasOnMonitorTab) this.activeBottomTab = 'monitor'
+            }
         }
     }
 
@@ -725,6 +849,8 @@ export class Workspace {
         // repoPath just changed to a different device's repo — refresh the
         // version list for it (fire-and-forget, same reasoning as binding()).
         void this.loadVersions()
+        this.deviceConnectionStatus = 'unknown'
+        void this.checkDeviceConnection()
     }
 
     async addNewDevice(): Promise<void> {
@@ -806,6 +932,9 @@ export class Workspace {
             content: `Now using ${device.port}.`,
             cssClass: 'e-toast-success',
         })
+
+        this.deviceConnectionStatus = 'unknown'
+        void this.checkDeviceConnection()
     }
 
     /** True when a device with both an FQBN and a port is selected. */
