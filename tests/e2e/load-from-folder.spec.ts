@@ -19,7 +19,7 @@ import { tmpdir } from 'os'
 const { ELECTRON_RUN_AS_NODE: _ern, ...ELECTRON_ENV } = process.env
 import { buildGeneratorHeader } from '../../src/renderer/src/utils/myAutomationParser'
 import { buildDeviceHeader } from '../../src/renderer/src/utils/configHeaderParser'
-import type { ArduinoCliBoardInfo } from '../../src/types/ipc'
+import type { ArduinoCliBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
 // ── Mock file content ─────────────────────────────────────────────────────────
 
@@ -113,17 +113,19 @@ async function mockListBoards(app: ElectronApplication, boards: ArduinoCliBoardI
 }
 
 /**
- * Mocks the `usb:list-serial-ports` IPC channel to return no ports, overriding
- * the fake devices `--mock-device` normally supplies. Combined with an empty
- * mockListBoards(), this reproduces the genuine "nothing connected" state the
- * device-picker dialog's empty-state / troubleshooting UI is meant for.
+ * Mocks the `usb:list-serial-ports` IPC channel, overriding the fake devices
+ * `--mock-device` normally supplies. Defaults to no ports at all — combined
+ * with an empty mockListBoards(), that reproduces the genuine "nothing
+ * connected" state the device-picker dialog's empty-state / troubleshooting
+ * UI is meant for. Pass an explicit list to simulate specific unrelated
+ * devices being connected instead.
  */
-async function mockNoSerialPorts(app: ElectronApplication): Promise<void> {
-    await app.evaluate((_electronApp) => {
+async function mockSerialPorts(app: ElectronApplication, ports: SerialDeviceInfo[] = []): Promise<void> {
+    await app.evaluate((_electronApp, portList: SerialDeviceInfo[]) => {
         const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
         ipcMain.removeHandler('usb:list-serial-ports')
-        ipcMain.handle('usb:list-serial-ports', () => [])
-    })
+        ipcMain.handle('usb:list-serial-ports', () => portList)
+    }, ports)
 }
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -273,6 +275,56 @@ test.describe('Load from Folder — device header present in config.h', () => {
         expect(savedConfig).not.toContain('/dev/ttyUSB0')
     })
 
+    test('manually rescanning the port (port badge) updates the raw config.h, not just in-memory state', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: rescanPort() wrote the new port into configFiles, but
+        // saveFiles() -> configEditorState.syncAll() re-derived config.h from
+        // ConfigEditorState's own stale cached copy (configHContent), which still
+        // had *a* device header on it, so it silently overwrote the fresh port
+        // with the old one — the raw file (and the on-disk save) never changed.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        // Force the config.h Raw view to actually load its (stale) cached content
+        // before rescanning, same as a real session where the user has already
+        // looked at/edited other fields — this is what made configHContent stale.
+        await homePage.getByText('Device Settings', { exact: true }).first().click()
+
+        // Now a *different* board answers on a new port for the manual rescan.
+        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        await mockListBoards(electronApp, [rescannedDevice])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM9',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByTitle('Change port — click to rescan connected boards').click()
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
+        await homePage.getByRole('button', { name: 'Use This Board' }).click()
+
+        await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
+        // The port badge itself must reflect the new port immediately.
+        await expect(homePage.getByTitle('Change port — click to rescan connected boards')).toContainText('/dev/ttyACM9')
+
+        // The Raw editor (bound to ConfigEditorState.configHContent) must also show it —
+        // this is exactly the field that went stale and clobbered the save.
+        await homePage.getByRole('button', { name: 'Raw' }).click()
+        await expect(homePage.locator('div.monaco-editor')).toBeVisible({ timeout: 5_000 })
+        await homePage.waitForTimeout(400)
+        await expect(homePage.locator('div.monaco-editor')).toContainText('/dev/ttyACM9')
+
+        // And it must have actually been written to disk (saveFiles() runs inside rescanPort()).
+        const savedConfig = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
+        expect(savedConfig).toContain('/dev/ttyACM9')
+        expect(savedConfig).not.toContain('/dev/ttyTest0')
+    })
+
 })
 
 // ── Tests: missing config.h error ────────────────────────────────────────────
@@ -364,7 +416,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         writeFileSync(join(sourceFolder, 'config.h'), MOCK_CONFIG_H, 'utf-8')
         await mockSelectDirectory(electronApp, sourceFolder)
         await mockListBoards(electronApp, [])
-        await mockNoSerialPorts(electronApp)
+        await mockSerialPorts(electronApp)
 
         await homePage.getByText('Load from Folder').first().click()
         await expect(homePage.getByText('Select Your Board')).toBeVisible({ timeout: 8_000 })

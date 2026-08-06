@@ -601,7 +601,15 @@ export class Workspace {
 
         device.port = reconciled.port
         const configH = this.state.configFiles.find((f) => f.name === 'config.h')
-        if (configH) configH.content = injectDeviceHeader(configH.content, device)
+        if (configH) {
+            configH.content = injectDeviceHeader(configH.content, device)
+            // ConfigEditorState.configHContent is a separate cached copy (it's what
+            // the Raw editor and saveFiles()'s syncAll() actually read/write) —
+            // without this, syncAll() below would see its own stale copy still has
+            // *a* device header and keep it as-is, silently discarding the port we
+            // just wrote into configH.content.
+            this.configEditorState.configHContent = configH.content
+        }
         await this.updateSavedConfig()
         await this.saveFiles()
 
@@ -775,6 +783,10 @@ export class Workspace {
         const configH = this.state.configFiles.find(f => f.name === 'config.h')
         if (configH) {
             configH.content = injectDeviceHeader(configH.content, device)
+            // See the matching comment in ensureLivePort() — without this,
+            // saveFiles()'s syncAll() below clobbers the port we just wrote with
+            // ConfigEditorState's stale cached copy of config.h.
+            this.configEditorState.configHContent = configH.content
         }
         await this.updateSavedConfig()
         // Also write to disk so it survives a reload
