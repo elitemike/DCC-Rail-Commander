@@ -271,6 +271,16 @@ describe('parseDeviceFromHeader', () => {
         const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
         expect(parsed!.port).toBe('COM3')
     })
+
+    it('parses an empty port as "" rather than swallowing the next line', () => {
+        // Regression: the Port regex used to be `\s*` (matches \n too), so with an
+        // empty value it ran past the line break and captured the following
+        // "//   FQBN:     ..." line's text as the "port" instead of "".
+        const device: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: '' }
+        const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
+        expect(parsed!.port).toBe('')
+        expect(parsed!.fqbn).toBe(SAMPLE_DEVICE.fqbn)
+    })
 })
 
 describe('injectDeviceHeader', () => {

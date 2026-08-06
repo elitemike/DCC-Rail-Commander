@@ -52,12 +52,15 @@ export function parseDeviceFromHeader(text: string): ArduinoCliBoardInfo | null 
     // Restrict parsing to only the header block to avoid accidental matches
     const headerBlock = text.slice(firstIdx, secondIdx + DEVICE_HEADER_TAG.length)
 
-    // Be permissive about whitespace so different editors / platforms don't break parsing
-    const nameMatch = /^\/\/\s*Name:\s*(.+)$/m.exec(headerBlock)
+    // Be permissive about whitespace so different editors / platforms don't break parsing.
+    // Only horizontal whitespace ([ \t]), never \s — \s also matches newlines, so with a
+    // *empty* field value (only Port supports that) a plain \s* would swallow the line break
+    // and keep matching into the next line's "//   Xxx:" text as if it were the value.
+    const nameMatch = /^\/\/[ \t]*Name:[ \t]*(.+)$/m.exec(headerBlock)
     // Port is allowed to be empty (board may not have been connected when the header was written)
-    const portMatch = /^\/\/\s*Port:\s*(.*)$/m.exec(headerBlock)
-    const fqbnMatch = /^\/\/\s*FQBN:\s*(.+)$/m.exec(headerBlock)
-    const protocolMatch = /^\/\/\s*Protocol:\s*(.+)$/m.exec(headerBlock)
+    const portMatch = /^\/\/[ \t]*Port:[ \t]*(.*)$/m.exec(headerBlock)
+    const fqbnMatch = /^\/\/[ \t]*FQBN:[ \t]*(.+)$/m.exec(headerBlock)
+    const protocolMatch = /^\/\/[ \t]*Protocol:[ \t]*(.+)$/m.exec(headerBlock)
 
     if (!nameMatch || !fqbnMatch) return null
 
