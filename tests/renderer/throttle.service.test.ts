@@ -244,37 +244,6 @@ describe('ThrottleService power + e-stop', () => {
 
 // ── incoming <l> broadcast parsing ───────────────────────────────────────────
 
-// ── polling for changes made by other throttles ──────────────────────────────
-
-describe('ThrottleService._pollAll', () => {
-    it('re-requests full state for every acquired cab (catches external <F> changes, which DCC-EX never broadcasts)', async () => {
-        const { service, write } = makeService()
-        service.acquire(3)
-        service.acquire(5)
-        write.mockClear()
-
-        ;(service as unknown as { _pollAll(): void })._pollAll()
-        await flush(service)
-
-        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<t 3>\n')
-        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<t 5>\n')
-    })
-
-    it('also re-requests track power state (<s>), even with nothing acquired', async () => {
-        const { service, write } = makeService()
-        ;(service as unknown as { _pollAll(): void })._pollAll()
-        await flush(service)
-        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<s>\n')
-    })
-
-    it('does NOT poll turnout states — that runs on its own, slower timer (see _pollTurnouts)', async () => {
-        const { service, write } = makeService()
-        ;(service as unknown as { _pollAll(): void })._pollAll()
-        await flush(service)
-        expect(write).not.toHaveBeenCalledWith('/dev/ttyACM1', '<T>\n')
-    })
-})
-
 describe('ThrottleService._pollTurnouts', () => {
     it('re-requests turnout states (<T>)', async () => {
         vi.useFakeTimers()

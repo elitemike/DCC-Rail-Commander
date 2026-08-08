@@ -72,7 +72,10 @@ export class MockSerialTransport {
             this.cabState.set(cab, existing)
             return `<l ${cab} 0 ${existing.speedByte} ${existing.functmap}>\n`
         }
-        // Function: <F cab funct state> — no reply on real hardware; track functmap for later <t cab> queries.
+        // Function: <F cab funct state> — real DCC-EX broadcasts the cab's
+        // updated <l> state to every connected client on a function change,
+        // same as it does for <t>, so mirror that here rather than staying
+        // silent until the next <t cab> poll.
         const functionMatch = cmd.match(/^<F (\d+) (\d+) ([01])>$/)
         if (functionMatch) {
             const [, cabStr, funcStr, stateStr] = functionMatch
@@ -82,7 +85,7 @@ export class MockSerialTransport {
             const existing = this.cabState.get(cab) ?? { speedByte: 128, functmap: 0 }
             const functmap = on ? existing.functmap | (1 << func) : existing.functmap & ~(1 << func)
             this.cabState.set(cab, { ...existing, functmap })
-            return null
+            return `<l ${cab} 0 ${existing.speedByte} ${functmap}>\n`
         }
         // Turnout throw/close: <T id 1|0> — set + echo back as an <H> broadcast.
         const turnoutMatch = cmd.match(/^<T (\d+) ([01])>$/)
@@ -107,7 +110,7 @@ export class MockSerialTransport {
         if (cmd === '<0>') { this.trackPowerOn = false; return '<p0>\n' }
         // Status request: real DCC-EX <s> replies with several lines; the
         // mock only needs to echo the current power state for ThrottleService's
-        // initial-state seed / periodic poll.
+        // initial-state seed.
         if (cmd === '<s>') return this.trackPowerOn ? '<p1>\n' : '<p0>\n'
         // Emergency stop all — no formal reply.
         if (cmd === '<!>') return null

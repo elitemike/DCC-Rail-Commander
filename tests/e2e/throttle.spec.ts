@@ -230,13 +230,13 @@ test('release (×) does nothing if the confirmation is cancelled', async ({ work
 })
 
 test('a function changed by another throttle (e.g. WiFi app, JMRI, a physical cab) shows up on our card', async ({ workspacePage: page }) => {
-    // DCC-EX only broadcasts <l> in response to a <t> (speed/direction) command —
-    // an <F> (function) command from ANOTHER throttle produces no broadcast at
-    // all, so this can only be caught by ThrottleService's periodic <t cab> poll
-    // (see POLL_INTERVAL_MS in throttle.service.ts). Simulate "another throttle"
-    // by sending the raw <F> command through the existing serial-monitor console
-    // instead of through our own throttle card — it goes over the exact same
-    // (mocked) serial connection, indistinguishable from a real external throttle.
+    // DCC-EX broadcasts <l cab reg speedByte functmap> to every connected
+    // client whenever a cab's function state changes, same as it does for
+    // speed/direction — confirmed against real hardware. Simulate "another
+    // throttle" by sending the raw <F> command through the existing
+    // serial-monitor console instead of through our own throttle card — it
+    // goes over the exact same (mocked) serial connection, indistinguishable
+    // from a real external throttle.
     await openThrottleSection(page)
     await addFromRoster(page, 'Percy (5)')
     const card = cardFor(page, 'Cab 5')
@@ -254,8 +254,7 @@ test('a function changed by another throttle (e.g. WiFi app, JMRI, a physical ca
     await page.keyboard.type('<F 5 1 1>')
     await page.keyboard.press('Enter')
 
-    // Give the poll cycle (2s) time to run and pull the change back.
-    await expect(hornButton).toHaveClass(/e-active/, { timeout: 5_000 })
+    await expect(hornButton).toHaveClass(/e-active/)
 })
 
 test('track power toggle shows the actual state and requires confirmation only to turn off', async ({ workspacePage: page }) => {

@@ -53,22 +53,16 @@ export interface RouteStatusEntry {
 }
 
 /**
- * How often each acquired cab's full state (speed/direction/functions) is
- * re-requested via `<t cab>`. Needed because DCC-EX only *broadcasts* an
- * `<l>` update when a `<t>` (speed/direction) command runs — a `<F>`
- * (function) command from another throttle produces no broadcast at all, so
- * without this poll we'd never learn that someone else toggled a function on
- * a loco we're also watching.
- */
-const POLL_INTERVAL_MS = 2000
-
-/**
- * How often turnout states are re-queried (`<T>`). Turnouts change far less
- * often than loco speed, and unlike a loco's speed poll a `<T>` reply covers
- * every turnout at once — a short interval only adds needless serial traffic
- * that can crowd out time-sensitive commands (e.g. a throw/close a user just
- * clicked). Kept on its own, slower timer rather than folded into
- * POLL_INTERVAL_MS's cycle.
+ * How often turnout states are re-queried (`<T>`). Locos don't need an
+ * equivalent poll: DCC-EX broadcasts `<l cab reg speedByte functmap>` to
+ * every connected client whenever a cab's speed *or* function state changes,
+ * regardless of which throttle (this app, another instance, WiFi/JMRI, a
+ * physical cab) issued the `<t>`/`<F>` command — confirmed by capturing the
+ * broadcast in the serial monitor for an `<F>`-only change. So the one-off
+ * `<t cab>` sent from acquire() to seed a newly-acquired cab's current state
+ * is enough; live changes after that arrive on their own. Turnouts get their
+ * own timer here because a `<T>` reply usefully covers every turnout at once,
+ * unlike a per-cab request.
  */
 const TURNOUT_POLL_INTERVAL_MS = 10_000
 
@@ -92,8 +86,9 @@ const TURNOUT_UNKNOWN_GRACE_MS = 3000
  * per acquired cab; "acquire" is purely local bookkeeping — DCC-EX has no
  * device-side throttle-session concept, any number of cabs can be driven
  * concurrently over one connection, including other throttles entirely
- * outside this app (WiFi apps, JMRI, physical cabs) — see POLL_INTERVAL_MS
- * for how their changes make it back into our state.
+ * outside this app (WiFi apps, JMRI, physical cabs) — their speed/function
+ * changes reach us the same way ours do, via the `<l>` broadcast (see
+ * TURNOUT_POLL_INTERVAL_MS for why locos don't need a poll but turnouts do).
  *
  * All writes go through a single queue so concurrent throttle cards never
  * interleave bytes on the one open port.
@@ -102,7 +97,6 @@ export class ThrottleService {
     private readonly state = resolve(InstallerState)
     private readonly usb = resolve(UsbService)
     private readonly configEditorState = resolve(ConfigEditorState)
-    private pollTimer?: ReturnType<typeof setInterval>
 
     /**
      * Mutated via push()/splice() rather than reassigned, and each cab's
@@ -114,7 +108,7 @@ export class ThrottleService {
      */
     readonly throttles: ThrottleCabState[] = []
 
-    /** Track power state — null until the first `<p0>`/`<p1>` line arrives (seeded by the `<s>` sent from initialize()/_pollAll()). */
+    /** Track power state — null until the first `<p0>`/`<p1>` line arrives (seeded by the `<s>` sent from initialize()). */
     trackPower: boolean | null = null
 
     /**
@@ -145,7 +139,6 @@ export class ThrottleService {
         this._seedTurnoutAndRouteStatuses()
         void this._send('<s>') // seed the initial track-power state
         this._queryTurnouts()
-        this.pollTimer = setInterval(() => this._pollAll(), POLL_INTERVAL_MS)
         this.turnoutPollTimer = setInterval(() => this._pollTurnouts(), TURNOUT_POLL_INTERVAL_MS)
     }
 
@@ -190,20 +183,10 @@ export class ThrottleService {
     dispose(): void {
         this.unsubData?.()
         this.unsubData = undefined
-        if (this.pollTimer) clearInterval(this.pollTimer)
-        this.pollTimer = undefined
         if (this.turnoutPollTimer) clearInterval(this.turnoutPollTimer)
         this.turnoutPollTimer = undefined
         if (this.assumeClosedTimer) clearTimeout(this.assumeClosedTimer)
         this.assumeClosedTimer = undefined
-    }
-
-    /** Re-requests every acquired cab's full state, plus track power — see POLL_INTERVAL_MS. */
-    private _pollAll(): void {
-        void this._send('<s>')
-        for (const t of this.throttles) {
-            void this._send(`<t ${t.cab}>`)
-        }
     }
 
     /** Re-requests turnout states — see TURNOUT_POLL_INTERVAL_MS. */
