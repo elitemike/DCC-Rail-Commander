@@ -435,17 +435,6 @@ export class ConfigEditorState {
         })
     }
 
-    getCrossTypeIdWarning(id: number, currentType: AliasTargetType): string {
-        const conflictingTypes = Array.from(new Set(
-            this.getObjectIdReferences(id)
-                .map(reference => reference.type)
-                .filter(type => type !== currentType),
-        ))
-
-        if (conflictingTypes.length === 0) return ''
-        return `ID ${id} is also used by ${conflictingTypes.join(', ')} objects.`
-    }
-
     validateAliasTargetId(id: number): { ok: true } | { ok: false; reason: string } {
         // Alias lookup is context-driven (command/editor target type), so
         // cross-type ID reuse is valid and should not be rejected.
@@ -711,7 +700,7 @@ export class ConfigEditorState {
             if (defaultThrownIds.size > 0) {
                 this.turnouts = this.turnouts.map(t => ({
                     ...t,
-                    defaultState: defaultThrownIds.has(t.id) ? 'THROWN' : 'NORMAL',
+                    defaultState: defaultThrownIds.has(t.id) ? 'THROWN' : 'CLOSED',
                 }))
             }
         }

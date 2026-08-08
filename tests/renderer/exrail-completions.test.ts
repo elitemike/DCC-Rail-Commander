@@ -15,7 +15,7 @@ const COMPLETION_DATA = {
         { name: 'SHUTTLE_RUN', value: '66', aliasType: 'Sequence' as const },
     ],
     roster: [{ dccAddress: 3, name: 'Thomas', functions: [], comment: '' }],
-    turnouts: [{ id: 200, type: 'SERVO' as const, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow' as const, description: 'Main Line Junction', defaultState: 'NORMAL' as const }],
+    turnouts: [{ id: 200, type: 'SERVO' as const, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow' as const, description: 'Main Line Junction', defaultState: 'CLOSED' as const }],
     sensors: [{ id: 40, pin: 17, description: 'Yard Occupancy' }],
     routes: [{ id: 12, description: 'Coal Yard Exit', body: '  THROW(200)' }],
     sequences: [{ id: 66, body: '  FWD(30)' }],

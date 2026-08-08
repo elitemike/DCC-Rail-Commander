@@ -59,11 +59,6 @@
                             ${errorMessage}
                         </div>
 
-                        <div if.bind="editBuffer && state.getCrossTypeIdWarning(editBuffer.id, 'Turnout')"
-                            class="px-3 py-2 bg-amber-950/60 border border-amber-500/40 rounded-md text-amber-300 text-sm">
-                            ${state.getCrossTypeIdWarning(editBuffer.id, 'Turnout')}
-                        </div>
-
                         <!-- Input form: SERVO_TURNOUT -->
                         <div if.bind="editBuffer.type === 'SERVO'"
                             class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
@@ -288,8 +283,14 @@
                         <!-- Configuration summary + visual angle bar (SERVO only) -->
                         <div if.bind="editBuffer.type === 'SERVO'"
                             class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
-                            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Configuration
-                                Summary</h3>
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Configuration
+                                    Summary</h3>
+                                <button click.trigger="openServoCalibration()"
+                                    class="px-2.5 py-1 text-xs font-medium rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                                    Test/Calibrate Servo&hellip;
+                                </button>
+                            </div>
 
                             <div class="flex flex-wrap gap-4 mb-4">
                                 <div class="flex flex-col gap-0.5">

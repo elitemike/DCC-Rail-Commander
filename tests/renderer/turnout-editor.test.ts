@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { TurnoutEditorCustomElement } from '../../src/renderer/src/components/turnout-editor'
+import { TurnoutEditorCustomElement } from '../../src/renderer/src/components/visual-editors/turnout-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ describe('TurnoutEditorCustomElement default state', () => {
                 profile: 'Slow',
                 description: 'Main Line Junction',
                 comment: '',
-                defaultState: 'NORMAL',
+                defaultState: 'CLOSED',
             },
         })
 
@@ -190,7 +190,7 @@ describe('TurnoutEditorCustomElement alias integration', () => {
                 subAddr: 1,
                 description: 'Yard Exit',
                 comment: '',
-                defaultState: 'NORMAL',
+                defaultState: 'CLOSED',
             })
 
         expect(editor.aliasInput).toBe('MAIN_YARD')
@@ -206,7 +206,7 @@ describe('TurnoutEditorCustomElement alias integration', () => {
             profile: 'Slow' as const,
             description: 'Main Line Junction',
             comment: '',
-            defaultState: 'NORMAL' as const,
+            defaultState: 'CLOSED' as const,
         }
         const updateTurnoutEntry = vi.fn()
         const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
