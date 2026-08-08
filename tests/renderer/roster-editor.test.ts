@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { RosterEditorCustomElement } from '../../src/renderer/src/components/roster-editor'
+import { RosterEditorCustomElement } from '../../src/renderer/src/components/visual-editors/roster-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
 import {
     deriveDefineGroups,
