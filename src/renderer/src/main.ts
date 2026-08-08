@@ -43,6 +43,8 @@ import { TrackManagerFormCustomElement } from './components/config-forms/track-m
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
 import { ThrottlePanelCustomElement } from './components/throttle/throttle-panel'
 import { ThrottleCardCustomElement } from './components/throttle/throttle-card'
+import { TurnoutsViewCustomElement } from './components/throttle/turnouts-view'
+import { RoutesViewCustomElement } from './components/throttle/routes-view'
 
 registerLicense(syncfusionLicense)
 
@@ -98,6 +100,8 @@ new Aurelia()
         IOExpanderConfigFormCustomElement,
         ThrottlePanelCustomElement,
         ThrottleCardCustomElement,
+        TurnoutsViewCustomElement,
+        RoutesViewCustomElement,
     )
     .app(App)
     .start()

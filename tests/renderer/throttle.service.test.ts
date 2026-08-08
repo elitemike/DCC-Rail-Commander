@@ -1,28 +1,55 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
     ThrottleService,
     decodeSpeedByte,
     decodeFunctionMap,
     MAX_FUNCTIONS,
     type ThrottleCabState,
+    type TurnoutStatus,
+    type RouteStatusEntry,
 } from '../../src/renderer/src/services/throttle.service'
+import type { Turnout, RouteEntry } from '../../src/renderer/src/utils/myAutomationParser'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-function makeService(port: string | null = '/dev/ttyACM1') {
+function makeService(
+    port: string | null = '/dev/ttyACM1',
+    configOverrides: { turnouts?: Turnout[]; routes?: RouteEntry[] } = {},
+) {
     const service = Object.create(ThrottleService.prototype) as ThrottleService
     const write = vi.fn().mockResolvedValue(undefined)
 
     Object.assign(service, {
         state: { selectedDevice: port ? { port } : null },
         usb: { write },
+        configEditorState: {
+            turnouts: configOverrides.turnouts ?? [],
+            routes: configOverrides.routes ?? [],
+        },
         throttles: [] as ThrottleCabState[],
         trackPower: null as boolean | null,
+        turnoutStatuses: [] as TurnoutStatus[],
+        routeStatuses: [] as RouteStatusEntry[],
         writeQueue: Promise.resolve(),
     })
 
     return { service, write }
 }
+
+function makeTurnout(id: number): Turnout {
+    return { id, description: `Turnout ${id}`, defaultState: 'CLOSED', type: 'PIN', pin: 1 }
+}
+
+function makeRoute(id: number, body: string): RouteEntry {
+    return { id, description: `Route ${id}`, body }
+}
+
+// Several tests below use fake timers to drive the UNKNOWN -> CLOSED grace
+// period without actually waiting — always restore real timers afterward so
+// a failure mid-test can't leak fake-timer state into later test files.
+afterEach(() => {
+    vi.useRealTimers()
+})
 
 /** Awaits the service's internal write queue directly, so assertions don't race pending `_send()` chains (e.g. the one `acquire()` already queued). */
 async function flush(service: ThrottleService): Promise<void> {
@@ -238,6 +265,188 @@ describe('ThrottleService._pollAll', () => {
         ;(service as unknown as { _pollAll(): void })._pollAll()
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<s>\n')
+    })
+
+    it('does NOT poll turnout states — that runs on its own, slower timer (see _pollTurnouts)', async () => {
+        const { service, write } = makeService()
+        ;(service as unknown as { _pollAll(): void })._pollAll()
+        await flush(service)
+        expect(write).not.toHaveBeenCalledWith('/dev/ttyACM1', '<T>\n')
+    })
+})
+
+describe('ThrottleService._pollTurnouts', () => {
+    it('re-requests turnout states (<T>)', async () => {
+        vi.useFakeTimers()
+        const { service, write } = makeService()
+        ;(service as unknown as { _pollTurnouts(): void })._pollTurnouts()
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T>\n')
+    })
+})
+
+// ── UNKNOWN -> CLOSED grace period ──────────────────────────────────────────
+
+describe('ThrottleService — assumes still-UNKNOWN turnouts are CLOSED after a grace period', () => {
+    it('flips every UNKNOWN entry to CLOSED once TURNOUT_UNKNOWN_GRACE_MS elapses after a <T> query', () => {
+        vi.useFakeTimers()
+        const { service } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(5), makeTurnout(6)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+        ;(service as unknown as { _queryTurnouts(): void })._queryTurnouts()
+
+        expect(service.turnoutStatuses.map((s) => s.state)).toEqual(['UNKNOWN', 'UNKNOWN'])
+        vi.advanceTimersByTime(3000)
+        expect(service.turnoutStatuses.map((s) => s.state)).toEqual(['CLOSED', 'CLOSED'])
+    })
+
+    it('does not override a state already learned from a real <H> broadcast', () => {
+        vi.useFakeTimers()
+        const { service } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(5)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+        ;(service as unknown as { _queryTurnouts(): void })._queryTurnouts()
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 5 1>')
+
+        vi.advanceTimersByTime(3000)
+        expect(service.turnoutStatuses[0].state).toBe('THROWN')
+    })
+
+    it('recomputes route status once turnouts are assumed CLOSED', () => {
+        vi.useFakeTimers()
+        const { service } = makeService('/dev/ttyACM1', {
+            turnouts: [makeTurnout(201)],
+            routes: [makeRoute(1, 'CLOSE(201)\nDONE')],
+        })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+        ;(service as unknown as { _queryTurnouts(): void })._queryTurnouts()
+
+        expect(service.routeStatuses[0].status).toBe('UNKNOWN')
+        vi.advanceTimersByTime(3000)
+        expect(service.routeStatuses[0].status).toBe('MATCHED')
+    })
+})
+
+// ── turnout status seeding ──────────────────────────────────────────────────
+
+describe('ThrottleService._seedTurnoutAndRouteStatuses', () => {
+    it('creates one UNKNOWN entry per configured turnout/route, without duplicating existing entries', () => {
+        const { service } = makeService('/dev/ttyACM1', {
+            turnouts: [makeTurnout(5), makeTurnout(6)],
+            routes: [makeRoute(1, 'THROW(5)\nDONE')],
+        })
+
+        const seed = (service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses.bind(service)
+        seed()
+        expect(service.turnoutStatuses).toEqual([
+            { id: 5, state: 'UNKNOWN' },
+            { id: 6, state: 'UNKNOWN' },
+        ])
+        expect(service.routeStatuses).toEqual([{ id: 1, status: 'UNKNOWN' }])
+
+        const before = service.turnoutStatuses[0]
+        seed() // idempotent — must not duplicate or replace existing entries
+        expect(service.turnoutStatuses).toHaveLength(2)
+        expect(service.turnoutStatuses[0]).toBe(before)
+    })
+})
+
+// ── incoming <H> turnout broadcast parsing + route recompute ───────────────
+
+describe('ThrottleService._handleLine — turnout broadcasts', () => {
+    it('updates the matching turnout status from a <H id state> broadcast', () => {
+        const { service } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(200)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 200 1>')
+        expect(service.turnoutStatuses[0]).toMatchObject({ id: 200, state: 'THROWN' })
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 200 0>')
+        expect(service.turnoutStatuses[0]).toMatchObject({ id: 200, state: 'CLOSED' })
+    })
+
+    it('mutates the existing entry in place rather than replacing it', () => {
+        const { service } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(200)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+        const before = service.turnoutStatuses[0]
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 200 1>')
+        expect(service.turnoutStatuses[0]).toBe(before)
+    })
+
+    it('leaves unrelated turnout entries untouched', () => {
+        const { service } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(1), makeTurnout(2)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 1 1>')
+        expect(service.turnoutStatuses.find((s) => s.id === 2)).toMatchObject({ id: 2, state: 'UNKNOWN' })
+    })
+
+    it('recomputes route status for routes referencing the changed turnout', () => {
+        const { service } = makeService('/dev/ttyACM1', {
+            turnouts: [makeTurnout(5)],
+            routes: [makeRoute(1, 'THROW(5)\nDONE'), makeRoute(2, 'CLOSE(9)\nDONE')],
+        })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+        const unrelated = service.routeStatuses.find((r) => r.id === 2)
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 5 1>')
+
+        expect(service.routeStatuses.find((r) => r.id === 1)).toMatchObject({ id: 1, status: 'MATCHED' })
+        expect(service.routeStatuses.find((r) => r.id === 2)).toBe(unrelated)
+        expect(service.routeStatuses.find((r) => r.id === 2)).toMatchObject({ status: 'UNKNOWN' })
+    })
+})
+
+describe('ThrottleService.throwTurnout / closeTurnout', () => {
+    it('sends <T id 1> and does not optimistically mutate local state', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(5)] })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+
+        service.throwTurnout(5)
+        expect(service.turnoutStatuses[0].state).toBe('UNKNOWN')
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 5 1>\n')
+    })
+
+    it('sends <T id 0> for closeTurnout', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', { turnouts: [makeTurnout(5)] })
+        service.closeTurnout(5)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 5 0>\n')
+    })
+})
+
+describe('ThrottleService.triggerRoute', () => {
+    it('sends </ START id>', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', { routes: [makeRoute(1, 'THROW(5)\nDONE')] })
+        service.triggerRoute(1)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '</ START 1>\n')
+    })
+
+    it('also replays the route body as explicit <T id state> commands, so the mock (no EXRAIL interpreter) actually updates turnout state', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', {
+            routes: [makeRoute(1, 'THROW(5)\nCLOSE(6)\nDONE')],
+        })
+        service.triggerRoute(1)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 5 1>\n')
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 6 0>\n')
+    })
+
+    it('sends only </ START id> when the route id has no configured turnouts', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', { routes: [makeRoute(1, 'DELAY(500)\nDONE')] })
+        service.triggerRoute(1)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '</ START 1>\n')
+        expect(write).toHaveBeenCalledTimes(1)
+    })
+
+    it('is a no-op beyond </ START id> for an unknown route id', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', { routes: [] })
+        service.triggerRoute(99)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '</ START 99>\n')
+        expect(write).toHaveBeenCalledTimes(1)
     })
 })
 

@@ -41,35 +41,74 @@
             E-Stop All</button>
     </div>
 
-    <!-- Add throttle -->
-    <div class="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0 flex-wrap">
-        <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Add Throttle</span>
-
-        <div class="w-32"><input ref="addModeEl" type="text" data-testid="throttle-add-mode" /></div>
-
-        <div class="w-56" class.bind="addMode === 'roster' ? '' : 'hidden'">
-            <input ref="rosterDropdownEl" type="text" data-testid="throttle-roster-select" />
-        </div>
-        <div class="w-24" class.bind="addMode === 'address' ? '' : 'hidden'">
-            <input ref="freeformAddressEl" type="text" data-testid="throttle-address-input" />
-        </div>
-
-        <button click.trigger="addSelected()"
-            disabled.bind="addMode === 'roster' && selectedRosterAddress == null" data-testid="throttle-add"
-            class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white transition-colors">Add</button>
+    <!-- Tab strip: Throttles | Turnouts | Routes | Both -->
+    <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
+        <button click.trigger="setTab('throttles')" data-testid="throttle-tab-throttles"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+            class.bind="activeTab === 'throttles' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+            Throttles
+        </button>
+        <button click.trigger="setTab('turnouts')" data-testid="throttle-tab-turnouts"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+            class.bind="activeTab === 'turnouts' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+            Turnouts
+        </button>
+        <button click.trigger="setTab('routes')" data-testid="throttle-tab-routes"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+            class.bind="activeTab === 'routes' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+            Routes
+        </button>
+        <button click.trigger="setTab('both')" data-testid="throttle-tab-both"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+            class.bind="activeTab === 'both' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+            Both
+        </button>
     </div>
 
-    <!-- Throttle grid -->
-    <div class="flex-1 overflow-y-auto p-4">
-        <div if.bind="throttleService.throttles.length === 0" class="text-gray-500 text-sm text-center py-12">
-            No throttles yet — add a loco from the roster or by DCC address above.
+    <!-- ── Throttles tab ──────────────────────────────────────────────── -->
+    <template if.bind="activeTab === 'throttles'">
+        <!-- Add throttle -->
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0 flex-wrap">
+            <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Add Throttle</span>
+
+            <div class="w-32"><input ref="addModeEl" type="text" data-testid="throttle-add-mode" /></div>
+
+            <div class="w-56" class.bind="addMode === 'roster' ? '' : 'hidden'">
+                <input ref="rosterDropdownEl" type="text" data-testid="throttle-roster-select" />
+            </div>
+            <div class="w-24" class.bind="addMode === 'address' ? '' : 'hidden'">
+                <input ref="freeformAddressEl" type="text" data-testid="throttle-address-input" />
+            </div>
+
+            <button click.trigger="addSelected()"
+                disabled.bind="addMode === 'roster' && selectedRosterAddress == null" data-testid="throttle-add"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white transition-colors">Add</button>
         </div>
-        <div if.bind="throttleService.throttles.length > 0" class="grid gap-5"
-            style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
-            <throttle-card repeat.for="t of throttleService.throttles" cab.bind="t" data-testid="throttle-card"
-                roster-functions.bind="rosterFunctionsFor(t.cab)"
-                is-roster-match.bind="isRosterLoco(t.cab)"></throttle-card>
+
+        <!-- Throttle grid -->
+        <div class="flex-1 overflow-y-auto p-4">
+            <div if.bind="throttleService.throttles.length === 0" class="text-gray-500 text-sm text-center py-12">
+                No throttles yet — add a loco from the roster or by DCC address above.
+            </div>
+            <div if.bind="throttleService.throttles.length > 0" class="grid gap-5"
+                style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+                <throttle-card repeat.for="t of throttleService.throttles" cab.bind="t" data-testid="throttle-card"
+                    roster-functions.bind="rosterFunctionsFor(t.cab)"
+                    is-roster-match.bind="isRosterLoco(t.cab)"></throttle-card>
+            </div>
         </div>
+    </template>
+
+    <!-- ── Turnouts tab ───────────────────────────────────────────────── -->
+    <turnouts-view if.bind="activeTab === 'turnouts'"></turnouts-view>
+
+    <!-- ── Routes tab ─────────────────────────────────────────────────── -->
+    <routes-view if.bind="activeTab === 'routes'"></routes-view>
+
+    <!-- ── Both tab: routes on top, turnouts below ───────────────────── -->
+    <div if.bind="activeTab === 'both'" class="flex flex-col flex-1 min-h-0 overflow-y-auto">
+        <routes-view></routes-view>
+        <turnouts-view></turnouts-view>
     </div>
 
 </div>

@@ -38,6 +38,8 @@ export class MockSerialTransport {
     private readonly cabState = new Map<number, { speedByte: number; functmap: number }>()
     /** DCC-EX defaults to power OFF at boot until a throttle explicitly turns it on. */
     private trackPowerOn = false
+    /** turnout id -> last known state (0=CLOSED, 1=THROWN); only populated once a `<T id state>` command names that id. */
+    private readonly turnoutState = new Map<number, 0 | 1>()
 
     private _synthesizeResponse(raw: string): string | null {
         const cmd = raw.trim()
@@ -82,6 +84,24 @@ export class MockSerialTransport {
             this.cabState.set(cab, { ...existing, functmap })
             return null
         }
+        // Turnout throw/close: <T id 1|0> — set + echo back as an <H> broadcast.
+        const turnoutMatch = cmd.match(/^<T (\d+) ([01])>$/)
+        if (turnoutMatch) {
+            const [, idStr, stateStr] = turnoutMatch
+            const id = Number(idStr)
+            const state = Number(stateStr) as 0 | 1
+            this.turnoutState.set(id, state)
+            return `<H ${id} ${state}>\n`
+        }
+        // Turnout query-all: <T> — one <H id state> line per turnout state seen so far.
+        if (cmd === '<T>') {
+            if (this.turnoutState.size === 0) return null
+            return Array.from(this.turnoutState.entries())
+                .map(([id, state]) => `<H ${id} ${state}>`)
+                .join('\n') + '\n'
+        }
+        // Route/automation trigger: </ START id> — no formal ack on real hardware.
+        if (/^<\/ START \d+>$/.test(cmd)) return null
         // Track power: <1> / <0>
         if (cmd === '<1>') { this.trackPowerOn = true; return '<p1>\n' }
         if (cmd === '<0>') { this.trackPowerOn = false; return '<p0>\n' }

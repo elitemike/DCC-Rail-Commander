@@ -298,3 +298,108 @@ test('E-Stop All is clickable without raising errors', async ({ workspacePage: p
     // No assertion beyond "didn't throw" — it's a fire-and-forget serial write.
     await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
 })
+
+/**
+ * Turnouts/Routes/Both tabs: MOCK_TURNOUTS_H defines turnouts 200 ("Main Line
+ * Junction") and 201 ("Yard Entry"); MOCK_ROUTES_H defines route 1 ("Main
+ * Route") as THROW(200)/CLOSE(201) — see fixtures.ts.
+ */
+
+function turnoutRow(page: Page, id: number): Locator {
+    return page.locator(`[data-testid="turnout-row"][data-turnout-id="${id}"]`)
+}
+
+function routeRow(page: Page, id: number): Locator {
+    return page.locator(`[data-testid="route-row"][data-route-id="${id}"]`)
+}
+
+test('tab switching works while full screen — never leaves full screen or the throttle section', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    const panelRoot = page.getByTestId('throttle-panel-root')
+
+    await page.getByTestId('throttle-fullscreen-toggle').click()
+    await expect(panelRoot).toHaveClass(/fixed/)
+
+    for (const tab of ['turnouts', 'routes', 'both', 'throttles'] as const) {
+        await page.getByTestId(`throttle-tab-${tab}`).click()
+        await expect(panelRoot).toHaveClass(/fixed/)
+        await expect.poll(() => page.evaluate(() => window.electronWindow.isFullScreen())).toBe(true)
+    }
+
+    await expect(turnoutRow(page, 200)).toHaveCount(0) // Throttles tab active again — turnouts-view unmounted
+    await page.getByTestId('throttle-fullscreen-toggle').click()
+    await expect(panelRoot).not.toHaveClass(/fixed/)
+})
+
+test('Turnouts tab shows configured turnouts, starting Unknown, and the toggle button drives the mock device', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-tab-turnouts').click()
+
+    await expect(turnoutRow(page, 200)).toContainText('Main Line Junction')
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'UNKNOWN')
+
+    await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Unknown -> Thrown
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'THROWN', { timeout: 5_000 })
+
+    await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Thrown -> Closed
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
+})
+
+test('Routes tab status reflects the live states of the turnouts it references', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-tab-turnouts').click()
+
+    // Drive turnout 201 to CLOSED (matches route's CLOSE(201)) and
+    // 200 to THROWN (matches route's THROW(200)) so the route becomes MATCHED.
+    await turnoutRow(page, 201).getByTestId('turnout-toggle-button').click() // Unknown -> Thrown
+    await turnoutRow(page, 201).getByTestId('turnout-toggle-button').click() // Thrown -> Closed
+    await expect(turnoutRow(page, 201)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
+    await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Unknown -> Thrown
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'THROWN', { timeout: 5_000 })
+
+    await page.getByTestId('throttle-tab-routes').click()
+    await expect(routeRow(page, 1)).toContainText('Main Route')
+    const badge = routeRow(page, 1).getByTestId('route-status-badge')
+    await expect(badge).toHaveAttribute('data-status', 'MATCHED', { timeout: 5_000 })
+    await expect(badge).toHaveText('Active')
+
+    // Flip turnout 200 to CLOSED — now mismatches the route's THROW(200).
+    await page.getByTestId('throttle-tab-turnouts').click()
+    await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Thrown -> Closed
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
+
+    await page.getByTestId('throttle-tab-routes').click()
+    await expect(badge).toHaveAttribute('data-status', 'MISMATCHED', { timeout: 5_000 })
+    await expect(badge).toHaveText('Inactive')
+})
+
+test('Routes tab Trigger button actually sets the turnouts the route references (mock has no EXRAIL interpreter)', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-tab-routes').click()
+
+    const badge = routeRow(page, 1).getByTestId('route-status-badge')
+    await expect(badge).toHaveAttribute('data-status', 'UNKNOWN')
+
+    // Route 1 is THROW(200)/CLOSE(201) — see MOCK_ROUTES_H in fixtures.ts.
+    await routeRow(page, 1).getByTestId('route-trigger-button').click()
+    await expect(badge).toHaveAttribute('data-status', 'MATCHED', { timeout: 5_000 })
+    await expect(badge).toHaveText('Active')
+
+    await page.getByTestId('throttle-tab-turnouts').click()
+    await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'THROWN', { timeout: 5_000 })
+    await expect(turnoutRow(page, 201)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
+})
+
+test('Both tab shows routes above turnouts', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-tab-both').click()
+
+    await expect(routeRow(page, 1)).toBeVisible()
+    await expect(turnoutRow(page, 200)).toBeVisible()
+
+    const routesBox = await routeRow(page, 1).boundingBox()
+    const turnoutsBox = await turnoutRow(page, 200).boundingBox()
+    expect(routesBox).not.toBeNull()
+    expect(turnoutsBox).not.toBeNull()
+    expect(routesBox!.y).toBeLessThan(turnoutsBox!.y)
+})
