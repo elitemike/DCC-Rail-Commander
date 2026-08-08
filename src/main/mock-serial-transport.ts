@@ -36,6 +36,8 @@ export class MockSerialTransport {
 
     /** cab -> last known {speedByte, functmap}, so a bare `<t cab>` status request has something to echo back. */
     private readonly cabState = new Map<number, { speedByte: number; functmap: number }>()
+    /** DCC-EX defaults to power OFF at boot until a throttle explicitly turns it on. */
+    private trackPowerOn = false
 
     private _synthesizeResponse(raw: string): string | null {
         const cmd = raw.trim()
@@ -81,8 +83,12 @@ export class MockSerialTransport {
             return null
         }
         // Track power: <1> / <0>
-        if (cmd === '<1>') return '<p1>\n'
-        if (cmd === '<0>') return '<p0>\n'
+        if (cmd === '<1>') { this.trackPowerOn = true; return '<p1>\n' }
+        if (cmd === '<0>') { this.trackPowerOn = false; return '<p0>\n' }
+        // Status request: real DCC-EX <s> replies with several lines; the
+        // mock only needs to echo the current power state for ThrottleService's
+        // initial-state seed / periodic poll.
+        if (cmd === '<s>') return this.trackPowerOn ? '<p1>\n' : '<p0>\n'
         // Emergency stop all — no formal reply.
         if (cmd === '<!>') return null
         return null

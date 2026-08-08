@@ -17,6 +17,7 @@ function makeService(port: string | null = '/dev/ttyACM1') {
         state: { selectedDevice: port ? { port } : null },
         usb: { write },
         throttles: [] as ThrottleCabState[],
+        trackPower: null as boolean | null,
         writeQueue: Promise.resolve(),
     })
 
@@ -182,16 +183,19 @@ describe('ThrottleService.setFunction', () => {
 // ── power / e-stop ───────────────────────────────────────────────────────────
 
 describe('ThrottleService power + e-stop', () => {
-    it('powerOn sends <1>', async () => {
+    it('powerOn sends <1> and optimistically sets trackPower', async () => {
         const { service, write } = makeService()
+        expect(service.trackPower).toBeNull()
         service.powerOn()
+        expect(service.trackPower).toBe(true)
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<1>\n')
     })
 
-    it('powerOff sends <0>', async () => {
+    it('powerOff sends <0> and optimistically sets trackPower', async () => {
         const { service, write } = makeService()
         service.powerOff()
+        expect(service.trackPower).toBe(false)
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<0>\n')
     })
@@ -229,11 +233,11 @@ describe('ThrottleService._pollAll', () => {
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<t 5>\n')
     })
 
-    it('is a no-op when nothing is acquired', async () => {
+    it('also re-requests track power state (<s>), even with nothing acquired', async () => {
         const { service, write } = makeService()
         ;(service as unknown as { _pollAll(): void })._pollAll()
         await flush(service)
-        expect(write).not.toHaveBeenCalled()
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<s>\n')
     })
 })
 
@@ -260,13 +264,35 @@ describe('ThrottleService._handleLine', () => {
         expect(service.throttles[0].speed).toBe(0)
     })
 
-    it('ignores lines that are not <l ...> responses', () => {
+    it('ignores lines that are not <l ...> responses or power lines', () => {
         const { service } = makeService()
         service.acquire(3)
         const before = { ...service.throttles[0] }
 
-        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<p1>')
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<i DCCEX ...>')
 
+        expect(service.throttles[0]).toEqual(before)
+    })
+})
+
+describe('ThrottleService._handleLine — track power', () => {
+    it('sets trackPower true on <p1>', () => {
+        const { service } = makeService()
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<p1>')
+        expect(service.trackPower).toBe(true)
+    })
+
+    it('sets trackPower false on <p0>', () => {
+        const { service } = makeService()
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<p0>')
+        expect(service.trackPower).toBe(false)
+    })
+
+    it('does not touch acquired cab state when parsing a power line', () => {
+        const { service } = makeService()
+        service.acquire(3)
+        const before = { ...service.throttles[0] }
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<p1>')
         expect(service.throttles[0]).toEqual(before)
     })
 })

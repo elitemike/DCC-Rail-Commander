@@ -3,13 +3,22 @@
 
     <!-- Header: track power + e-stop -->
     <div class="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0 flex-wrap">
-        <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold mr-1">Track Power</span>
-        <button click.trigger="powerOn()" data-testid="throttle-power-on"
-            class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-700/40 hover:bg-green-700/60 border border-green-500/50 text-green-300 transition-colors">Power
-            On</button>
-        <button click.trigger="powerOff()" data-testid="throttle-power-off"
-            class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 transition-colors">Power
-            Off</button>
+        <button click.trigger="togglePower()" data-testid="throttle-power-toggle"
+            title.bind="throttleService.trackPower === true ? 'Turn track power off' : 'Turn track power on'"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+            class.bind="throttleService.trackPower === true
+                ? 'bg-green-700/40 hover:bg-green-700/60 border-green-500/50 text-green-300'
+                : throttleService.trackPower === false
+                    ? 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300'
+                    : 'bg-white/5 border-white/10 text-gray-500'">
+            <span class="w-1.5 h-1.5 rounded-full shrink-0"
+                class.bind="throttleService.trackPower === true ? 'bg-emerald-400'
+                    : throttleService.trackPower === false ? 'bg-red-400'
+                    : 'bg-gray-500 animate-pulse'"></span>
+            ${throttleService.trackPower === true ? 'Track Power: ON'
+                : throttleService.trackPower === false ? 'Track Power: OFF'
+                : 'Track Power: —'}
+        </button>
 
         <div class="flex-1"></div>
 
