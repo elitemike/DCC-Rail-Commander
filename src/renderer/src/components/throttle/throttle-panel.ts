@@ -13,7 +13,7 @@ const ADD_MODE_OPTIONS = [
     { text: 'Address', value: 'address' },
 ] as const
 
-export type ThrottlePanelTab = 'throttles' | 'turnouts' | 'routes' | 'both'
+export type ThrottlePanelTab = 'throttles' | 'turnoutsRoutes'
 
 /**
  * Track power / E-Stop-All + "add throttle" controls, and the grid of

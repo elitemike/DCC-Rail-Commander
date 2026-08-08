@@ -320,7 +320,7 @@ test('tab switching works while full screen — never leaves full screen or the 
     await page.getByTestId('throttle-fullscreen-toggle').click()
     await expect(panelRoot).toHaveClass(/fixed/)
 
-    for (const tab of ['turnouts', 'routes', 'both', 'throttles'] as const) {
+    for (const tab of ['turnouts-routes', 'throttles'] as const) {
         await page.getByTestId(`throttle-tab-${tab}`).click()
         await expect(panelRoot).toHaveClass(/fixed/)
         await expect.poll(() => page.evaluate(() => window.electronWindow.isFullScreen())).toBe(true)
@@ -331,9 +331,30 @@ test('tab switching works while full screen — never leaves full screen or the 
     await expect(panelRoot).not.toHaveClass(/fixed/)
 })
 
-test('Turnouts tab shows configured turnouts, starting Unknown, and the toggle button drives the mock device', async ({ workspacePage: page }) => {
+test('Turnouts/Routes tab shows Routes above Turnouts, each under its own label', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
-    await page.getByTestId('throttle-tab-turnouts').click()
+    await page.getByTestId('throttle-tab-turnouts-routes').click()
+
+    await expect(page.getByTestId('routes-section-label')).toBeVisible()
+    await expect(page.getByTestId('turnouts-section-label')).toBeVisible()
+    await expect(routeRow(page, 1)).toBeVisible()
+    await expect(turnoutRow(page, 200)).toBeVisible()
+
+    const routesLabelBox = await page.getByTestId('routes-section-label').boundingBox()
+    const turnoutsLabelBox = await page.getByTestId('turnouts-section-label').boundingBox()
+    const routeRowBox = await routeRow(page, 1).boundingBox()
+    const turnoutRowBox = await turnoutRow(page, 200).boundingBox()
+    expect(routesLabelBox).not.toBeNull()
+    expect(turnoutsLabelBox).not.toBeNull()
+    // Routes label, then route rows, then Turnouts label, then turnout rows — in that vertical order.
+    expect(routesLabelBox!.y).toBeLessThan(routeRowBox!.y)
+    expect(routeRowBox!.y).toBeLessThan(turnoutsLabelBox!.y)
+    expect(turnoutsLabelBox!.y).toBeLessThan(turnoutRowBox!.y)
+})
+
+test('Turnouts/Routes tab: turnout starts Unknown, and the toggle button drives the mock device', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-tab-turnouts-routes').click()
 
     await expect(turnoutRow(page, 200)).toContainText('Main Line Junction')
     await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'UNKNOWN')
@@ -345,9 +366,9 @@ test('Turnouts tab shows configured turnouts, starting Unknown, and the toggle b
     await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
 })
 
-test('Routes tab status reflects the live states of the turnouts it references', async ({ workspacePage: page }) => {
+test('Turnouts/Routes tab: route status reflects the live states of the turnouts it references', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
-    await page.getByTestId('throttle-tab-turnouts').click()
+    await page.getByTestId('throttle-tab-turnouts-routes').click()
 
     // Drive turnout 201 to CLOSED (matches route's CLOSE(201)) and
     // 200 to THROWN (matches route's THROW(200)) so the route becomes MATCHED.
@@ -357,25 +378,21 @@ test('Routes tab status reflects the live states of the turnouts it references',
     await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Unknown -> Thrown
     await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'THROWN', { timeout: 5_000 })
 
-    await page.getByTestId('throttle-tab-routes').click()
     await expect(routeRow(page, 1)).toContainText('Main Route')
     const badge = routeRow(page, 1).getByTestId('route-status-badge')
     await expect(badge).toHaveAttribute('data-status', 'MATCHED', { timeout: 5_000 })
     await expect(badge).toHaveText('Active')
 
     // Flip turnout 200 to CLOSED — now mismatches the route's THROW(200).
-    await page.getByTestId('throttle-tab-turnouts').click()
     await turnoutRow(page, 200).getByTestId('turnout-toggle-button').click() // Thrown -> Closed
     await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
-
-    await page.getByTestId('throttle-tab-routes').click()
     await expect(badge).toHaveAttribute('data-status', 'MISMATCHED', { timeout: 5_000 })
     await expect(badge).toHaveText('Inactive')
 })
 
-test('Routes tab Trigger button actually sets the turnouts the route references (mock has no EXRAIL interpreter)', async ({ workspacePage: page }) => {
+test('Turnouts/Routes tab: Trigger button actually sets the turnouts the route references (mock has no EXRAIL interpreter)', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
-    await page.getByTestId('throttle-tab-routes').click()
+    await page.getByTestId('throttle-tab-turnouts-routes').click()
 
     const badge = routeRow(page, 1).getByTestId('route-status-badge')
     await expect(badge).toHaveAttribute('data-status', 'UNKNOWN')
@@ -385,21 +402,6 @@ test('Routes tab Trigger button actually sets the turnouts the route references 
     await expect(badge).toHaveAttribute('data-status', 'MATCHED', { timeout: 5_000 })
     await expect(badge).toHaveText('Active')
 
-    await page.getByTestId('throttle-tab-turnouts').click()
     await expect(turnoutRow(page, 200)).toHaveAttribute('data-state', 'THROWN', { timeout: 5_000 })
     await expect(turnoutRow(page, 201)).toHaveAttribute('data-state', 'CLOSED', { timeout: 5_000 })
-})
-
-test('Both tab shows routes above turnouts', async ({ workspacePage: page }) => {
-    await openThrottleSection(page)
-    await page.getByTestId('throttle-tab-both').click()
-
-    await expect(routeRow(page, 1)).toBeVisible()
-    await expect(turnoutRow(page, 200)).toBeVisible()
-
-    const routesBox = await routeRow(page, 1).boundingBox()
-    const turnoutsBox = await turnoutRow(page, 200).boundingBox()
-    expect(routesBox).not.toBeNull()
-    expect(turnoutsBox).not.toBeNull()
-    expect(routesBox!.y).toBeLessThan(turnoutsBox!.y)
 })
