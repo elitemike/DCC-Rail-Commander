@@ -1,0 +1,24 @@
+<template>
+    <div class="flex-1 overflow-y-auto p-4">
+        <div if.bind="throttleService.turnoutStatuses.length === 0" class="text-gray-500 text-sm text-center py-12">
+            No turnouts configured.
+        </div>
+        <div if.bind="throttleService.turnoutStatuses.length > 0" class="flex flex-col gap-2">
+            <div repeat.for="status of throttleService.turnoutStatuses" data-testid="turnout-row"
+                data-turnout-id.bind="status.id" data-state.bind="status.state"
+                class="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/10">
+                <span class="flex-1 min-w-0">
+                    <span class="block text-sm font-medium text-gray-100 truncate">${turnoutFor(status.id).description}</span>
+                    <span class="block text-xs text-gray-500">#${status.id} &middot; ${turnoutFor(status.id).type}</span>
+                </span>
+                <button type="button" click.trigger="toggle(status)" data-testid="turnout-toggle-button"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors shrink-0 focus:outline-none"
+                    class.bind="status.state === 'THROWN'
+                        ? 'bg-amber-700/60 text-amber-200 border-amber-500/50'
+                        : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'">
+                    ${status.state === 'UNKNOWN' ? 'Unknown' : status.state === 'THROWN' ? 'Thrown' : 'Closed'}
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

@@ -13,6 +13,8 @@ const ADD_MODE_OPTIONS = [
     { text: 'Address', value: 'address' },
 ] as const
 
+export type ThrottlePanelTab = 'throttles' | 'turnouts' | 'routes' | 'both'
+
 /**
  * Track power / E-Stop-All + "add throttle" controls, and the grid of
  * acquired throttle-cards. Only rendered by workspace.html while the
@@ -29,6 +31,8 @@ export class ThrottlePanelCustomElement {
     freeformAddress = 3
     /** Expands the whole panel (all acquired throttle cards) to fill the window — not any single card. */
     isFullscreen = false
+    /** Purely local — switching tabs never touches isFullscreen, so it works without leaving full screen. */
+    activeTab: ThrottlePanelTab = 'throttles'
 
     addModeEl!: HTMLInputElement
     rosterDropdownEl!: HTMLInputElement
@@ -142,6 +146,10 @@ export class ThrottlePanelCustomElement {
     private acquireFreeform(): void {
         if (!this.freeformAddress || this.freeformAddress < 1) return
         this.throttleService.acquire(this.freeformAddress)
+    }
+
+    setTab(tab: ThrottlePanelTab): void {
+        this.activeTab = tab
     }
 
     toggleFullscreen(): void {

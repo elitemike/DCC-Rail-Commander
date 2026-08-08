@@ -47,6 +47,14 @@ export const MOCK_TURNOUTS_H = [
     'SERVO_TURNOUT(201, 26, 410, 205, Fast, "Yard Entry")',
 ].join('\n')
 
+/** References turnout 200 (THROW) and 201 (CLOSE) — matches MOCK_TURNOUTS_H's ids for throttle route-status E2E tests. */
+export const MOCK_ROUTES_H = [
+    'ROUTE(1, "Main Route")',
+    'THROW(200)',
+    'CLOSE(201)',
+    'DONE',
+].join('\n')
+
 export const MOCK_CONFIG_H = [
     '// config.h — mock test configuration',
     '#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD',
@@ -140,6 +148,7 @@ async function launchApp(mockCompile: boolean): Promise<{ app: ElectronApplicati
     mkdirSync(scratchPath, { recursive: true })
     writeFileSync(join(scratchPath, 'myRoster.h'), MOCK_ROSTER_H, 'utf-8')
     writeFileSync(join(scratchPath, 'myTurnouts.h'), MOCK_TURNOUTS_H, 'utf-8')
+    writeFileSync(join(scratchPath, 'myRoutes.h'), MOCK_ROUTES_H, 'utf-8')
     writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
     writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_SKETCH_INO, 'utf-8')
 
@@ -160,6 +169,7 @@ async function launchApp(mockCompile: boolean): Promise<{ app: ElectronApplicati
             { name: 'config.h', content: MOCK_CONFIG_H },
             { name: 'myRoster.h', content: MOCK_ROSTER_H },
             { name: 'myTurnouts.h', content: MOCK_TURNOUTS_H },
+            { name: 'myRoutes.h', content: MOCK_ROUTES_H },
         ],
         lastModified: new Date().toISOString(),
     }
