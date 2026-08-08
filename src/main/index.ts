@@ -110,6 +110,19 @@ function createWindow(): BrowserWindow {
         win.destroy()
     })
 
+    // ── Native full screen (hides OS title bar / chrome entirely) ────────────
+    // Used by the Throttle panel's full-screen toggle so operating a bank of
+    // throttles can use the whole display, not just the app's content area.
+    ipcMain.handle('window:set-fullscreen', (_event, value: boolean) => {
+        win.setFullScreen(value)
+    })
+    ipcMain.handle('window:is-fullscreen', () => win.isFullScreen())
+    // Keep the renderer in sync if the user exits native full screen via an
+    // OS-level shortcut (Esc, the green traffic-light button, F11, etc.)
+    // rather than the in-app toggle.
+    win.on('enter-full-screen', () => win.webContents.send('window:fullscreen-changed', true))
+    win.on('leave-full-screen', () => win.webContents.send('window:fullscreen-changed', false))
+
     // F5 or Ctrl+R / Cmd+R → reload the renderer
     // F12 or Ctrl+Shift+I / Cmd+Option+I → toggle DevTools
     win.webContents.on('before-input-event', (event, input) => {

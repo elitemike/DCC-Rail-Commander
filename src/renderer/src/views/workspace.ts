@@ -41,6 +41,18 @@ export class Workspace {
     activeFileIndex = 0
     filePanel?: FileEditorPanelCustomElement
 
+    // ── Left-nav section (Throttle vs Configuration) ──────────────────────────
+    activeSection: 'throttle' | 'config' = 'config'
+
+    /** Throttle is only reachable while the selected device is live at its port. */
+    get showThrottleSection(): boolean {
+        return this.deviceConnectionStatus === 'connected'
+    }
+
+    selectThrottleSection(): void {
+        this.activeSection = 'throttle'
+    }
+
     readonly friendlyName = friendlyName
 
     isMock = false
@@ -384,6 +396,7 @@ export class Workspace {
     setActiveFile(index: number): void {
         this.activeFile && this.syncContent()
         this.activeFileIndex = index
+        this.activeSection = 'config'
     }
 
     syncContent(): void {

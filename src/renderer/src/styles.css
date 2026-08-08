@@ -50,7 +50,8 @@ sensors-editor,
 signals-editor,
 routes-editor,
 sequences-editor,
-aliases-editor {
+aliases-editor,
+throttle-panel {
     display: flex;
     flex-direction: column;
     flex: 1 1 0%;
@@ -63,6 +64,24 @@ aliases-editor {
 compile-progress {
     display: block;
     width: 100%;
+}
+
+/* ── Throttle card function grid — imperatively-created SF Button widgets ── */
+.throttle-fn-btn {
+    width: 100%;
+    font-size: 0.8rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Matches the emerald "on" accent used elsewhere in the app (e.g. e-toast-success). */
+.throttle-fn-btn.e-active {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    color: #fff !important;
 }
 
 /* ── @aurelia/dialog native <dialog> reset ─────────────────────────────── */
