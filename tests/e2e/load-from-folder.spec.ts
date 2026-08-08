@@ -19,7 +19,7 @@ import { tmpdir } from 'os'
 const { ELECTRON_RUN_AS_NODE: _ern, ...ELECTRON_ENV } = process.env
 import { buildGeneratorHeader } from '../../src/renderer/src/utils/myAutomationParser'
 import { buildDeviceHeader } from '../../src/renderer/src/utils/configHeaderParser'
-import type { ArduinoCliBoardInfo } from '../../src/types/ipc'
+import type { ArduinoCliBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
 // ── Mock file content ─────────────────────────────────────────────────────────
 
@@ -40,6 +40,9 @@ const MOCK_DEVICE: ArduinoCliBoardInfo = {
  * Tests using this skip the device picker dialog entirely.
  */
 const CONFIG_H_WITH_DEVICE = `${buildDeviceHeader(MOCK_DEVICE)}\n${MOCK_CONFIG_H}`
+
+/** Device header with a known FQBN but no port — triggers the portOnly device picker. */
+const CONFIG_H_WITH_DEVICE_NO_PORT = `${buildDeviceHeader({ ...MOCK_DEVICE, port: '' })}\n${MOCK_CONFIG_H}`
 
 /** Roster file WITHOUT generator header — simulates an externally created file. */
 const EXTERNAL_ROSTER_H = [
@@ -113,17 +116,19 @@ async function mockListBoards(app: ElectronApplication, boards: ArduinoCliBoardI
 }
 
 /**
- * Mocks the `usb:list-serial-ports` IPC channel to return no ports, overriding
- * the fake devices `--mock-device` normally supplies. Combined with an empty
- * mockListBoards(), this reproduces the genuine "nothing connected" state the
- * device-picker dialog's empty-state / troubleshooting UI is meant for.
+ * Mocks the `usb:list-serial-ports` IPC channel, overriding the fake devices
+ * `--mock-device` normally supplies. Defaults to no ports at all — combined
+ * with an empty mockListBoards(), that reproduces the genuine "nothing
+ * connected" state the device-picker dialog's empty-state / troubleshooting
+ * UI is meant for. Pass an explicit list to simulate specific unrelated
+ * devices being connected instead.
  */
-async function mockNoSerialPorts(app: ElectronApplication): Promise<void> {
-    await app.evaluate((_electronApp) => {
+async function mockSerialPorts(app: ElectronApplication, ports: SerialDeviceInfo[] = []): Promise<void> {
+    await app.evaluate((_electronApp, portList: SerialDeviceInfo[]) => {
         const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
         ipcMain.removeHandler('usb:list-serial-ports')
-        ipcMain.handle('usb:list-serial-ports', () => [])
-    })
+        ipcMain.handle('usb:list-serial-ports', () => portList)
+    }, ports)
 }
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -273,6 +278,203 @@ test.describe('Load from Folder — device header present in config.h', () => {
         expect(savedConfig).not.toContain('/dev/ttyUSB0')
     })
 
+    test('manually rescanning the port (port badge) updates the raw config.h, not just in-memory state', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: rescanPort() wrote the new port into configFiles, but
+        // saveFiles() -> configEditorState.syncAll() re-derived config.h from
+        // ConfigEditorState's own stale cached copy (configHContent), which still
+        // had *a* device header on it, so it silently overwrote the fresh port
+        // with the old one — the raw file (and the on-disk save) never changed.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        // Force the config.h Raw view to actually load its (stale) cached content
+        // before rescanning, same as a real session where the user has already
+        // looked at/edited other fields — this is what made configHContent stale.
+        await homePage.getByText('Device Settings', { exact: true }).first().click()
+
+        // Now a *different* board answers on a new port for the manual rescan.
+        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        await mockListBoards(electronApp, [rescannedDevice])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM9',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByTestId('port-badge').click()
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
+        await homePage.getByRole('button', { name: 'Use This Board' }).click()
+
+        await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
+        // The port badge itself must reflect the new port immediately.
+        await expect(homePage.getByTestId('port-badge')).toContainText('/dev/ttyACM9')
+
+        // The Raw editor (bound to ConfigEditorState.configHContent) must also show it —
+        // this is exactly the field that went stale and clobbered the save.
+        await homePage.getByRole('button', { name: 'Raw' }).click()
+        await expect(homePage.locator('div.monaco-editor')).toBeVisible({ timeout: 5_000 })
+        await homePage.waitForTimeout(400)
+        await expect(homePage.locator('div.monaco-editor')).toContainText('/dev/ttyACM9')
+
+        // And it must have actually been written to disk (saveFiles() runs inside rescanPort()).
+        const savedConfig = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
+        expect(savedConfig).toContain('/dev/ttyACM9')
+        expect(savedConfig).not.toContain('/dev/ttyTest0')
+    })
+
+    test('a rescanned port survives leaving and reopening the same saved config', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: updateSavedConfig() refreshed configFiles but never
+        // devicePort/deviceFqbn/deviceName on the SavedConfiguration entry. Both
+        // home.ts's loadConfig() and workspace.ts's switchToConfig() rebuild
+        // state.selectedDevice straight from those saved fields, so even though
+        // rescanPort() correctly updated the live session (and config.h on disk),
+        // the *next* time this same config was opened the port badge reverted to
+        // whatever port was saved when the config was first created — as if the
+        // rescan had never happened.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        await mockListBoards(electronApp, [rescannedDevice])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM9',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByTestId('port-badge').click()
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await homePage.getByRole('button', { name: 'Use This Board' }).click()
+        await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
+
+        // Leave, then reopen the same saved config from the home screen.
+        await homePage.getByRole('button', { name: 'EX-Installer' }).click()
+        await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
+        await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        // The port badge must reflect the rescanned port, not the one the config was created with.
+        await expect(homePage.getByTestId('port-badge')).toContainText('/dev/ttyACM9')
+    })
+
+    test('port picker does not auto-select an unrelated board when the known device is not connected', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: previously this fell back to preselecting boards[0] — an
+        // unrelated board the user never actually chose — whenever the FQBN from
+        // config.h didn't match anything currently connected.
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE_NO_PORT, 'utf-8')
+
+        // Only an Uno is connected — config.h's device is a Mega, so nothing matches.
+        await mockListBoards(electronApp, [])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyACM5',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-UNO-0001',
+            vendorId: '2341',
+            productId: '0043',
+        }])
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Load from Folder').first().click()
+
+        await expect(homePage.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 8_000 })
+        await expect(homePage.getByText("wasn't found among the connected boards", { exact: false })).toBeVisible()
+        await expect(homePage.getByText('Arduino Uno')).toBeVisible()
+
+        // Nothing pre-selected — "Use This Board" must stay disabled until the user picks one.
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeDisabled()
+
+        await homePage.getByText('Arduino Uno').click()
+        await expect(homePage.getByRole('button', { name: 'Use This Board' })).toBeEnabled()
+    })
+
+    test('port badge shows connected and the Monitor auto-opens when the device answers on load', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await mockListBoards(electronApp, [MOCK_DEVICE])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyTest0',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /Device connected/, { timeout: 5_000 })
+        // The Monitor should have opened itself — no manual "Monitor" click.
+        // "Device Monitor" is the serial-monitor panel's own header text —
+        // unambiguous, unlike "Monitor" which also matches the toolbar toggle
+        // button and the bottom-panel tab button.
+        await expect(homePage.getByText('Device Monitor', { exact: true })).toBeVisible({ timeout: 5_000 })
+    })
+
+    test('port badge shows not-detected and the Monitor stays closed when the device does not answer', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        // Nothing connected matches /dev/ttyTest0.
+        await mockListBoards(electronApp, [])
+        await mockSerialPorts(electronApp, [])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /not detected/, { timeout: 5_000 })
+        await expect(homePage.getByText('Device Monitor', { exact: true })).not.toBeVisible()
+    })
+
+    test('turning off Auto-connect is a persisted preference — Monitor stays closed on the next load', async ({ electronApp, homePage, sourceFolder }) => {
+        writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8') // port: /dev/ttyTest0
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await mockListBoards(electronApp, [MOCK_DEVICE])
+        await mockSerialPorts(electronApp, [{
+            path: '/dev/ttyTest0',
+            manufacturer: 'Arduino (www.arduino.cc)',
+            serialNumber: 'DEV-MEGA-0001',
+            vendorId: '2341',
+            productId: '0042',
+        }])
+
+        await homePage.getByText('Load from Folder').first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByText('Device Monitor', { exact: true })).toBeVisible({ timeout: 5_000 })
+
+        const autoConnectCheckbox = homePage
+            .locator('label', { hasText: 'Auto-connect' })
+            .locator('input[type="checkbox"]')
+        await expect(autoConnectCheckbox).toBeChecked()
+        await autoConnectCheckbox.uncheck({ force: true })
+
+        // Leave and reopen the same saved config — a fresh Workspace instance
+        // whose binding() must read the persisted preference from disk, not
+        // just carry over an in-memory flag from the previous instance.
+        await homePage.getByRole('button', { name: 'EX-Installer' }).click()
+        await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
+        await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
+        await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+
+        await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /Device connected/, { timeout: 5_000 })
+        await expect(homePage.getByText('Device Monitor', { exact: true })).not.toBeVisible()
+
+        const autoConnectCheckboxAfterReload = homePage
+            .locator('label', { hasText: 'Auto-connect' })
+            .locator('input[type="checkbox"]')
+        await expect(autoConnectCheckboxAfterReload).not.toBeChecked()
+    })
+
 })
 
 // ── Tests: missing config.h error ────────────────────────────────────────────
@@ -364,7 +566,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         writeFileSync(join(sourceFolder, 'config.h'), MOCK_CONFIG_H, 'utf-8')
         await mockSelectDirectory(electronApp, sourceFolder)
         await mockListBoards(electronApp, [])
-        await mockNoSerialPorts(electronApp)
+        await mockSerialPorts(electronApp)
 
         await homePage.getByText('Load from Folder').first().click()
         await expect(homePage.getByText('Select Your Board')).toBeVisible({ timeout: 8_000 })

@@ -298,19 +298,6 @@ test.describe('Roster Editor', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('#define BLUE_ENGINE "3" // type: Roster')
     })
 
-    test('shows a warning when roster ID is reused by another object type', async ({ workspacePage: page }) => {
-        await openRosterEditor(page)
-        await page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
-
-        const dccInput = page
-            .locator('div:has(> label:has-text("DCC Address")) input[type="number"]')
-            .first()
-        await dccInput.fill('200')
-        await dccInput.blur()
-
-        await expect(page.getByText('ID 200 is also used by Turnout objects.')).toBeVisible()
-    })
-
     // ── Invalid lines: commenting + toast ────────────────────────────────────
 
     test('invalid ROSTER line is commented out when switching to visual', async ({ workspacePage: page }) => {

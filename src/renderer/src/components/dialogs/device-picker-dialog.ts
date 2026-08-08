@@ -11,7 +11,9 @@ import type { ArduinoCliBoardInfo } from '../../../../types/ipc'
  * or when a device is known but its port is empty after resolution.
  *
  * Model (optional):
- *   { initialFqbn?: string }  — base FQBN to pre-select the matching board
+ *   { initialFqbn?: string }  — base FQBN to pre-select the matching board. If no
+ *                               connected board matches, nothing is pre-selected
+ *                               (never silently falls back to an unrelated board).
  *   { portOnly?: boolean }    — when true, the header copy says "Select Port" rather
  *                               than "Select Your Board" (device identity is already known)
  *
@@ -31,6 +33,8 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
     scanError: string | null = null
     portOnly = false
     showTroubleshooting = false
+    /** True once a scan has completed with initialFqbn set but no board matched it — drives the "not found" hint. */
+    previousDeviceNotFound = false
 
     private initialFqbn = ''
 
@@ -50,6 +54,7 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
         this.scanError = null
         this.boards = []
         this.selectedBoard = null
+        this.previousDeviceNotFound = false
         try {
             await this.usb.initialize()
             await this.usb.refresh()
@@ -65,13 +70,22 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
 
             this.boards = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
             if (this.boards.length > 0) {
-                // Pre-select the board whose base FQBN matches initialFqbn, if provided;
-                // otherwise default to the first board in the list.
-                const baseFqbn = (fqbn: string) => fqbn.split(':').slice(0, 3).join(':')
-                const preselect = this.initialFqbn
-                    ? this.boards.find(b => baseFqbn(b.fqbn) === baseFqbn(this.initialFqbn)) ?? this.boards[0]
-                    : this.boards[0]
-                this.selectedBoard = preselect
+                if (this.initialFqbn) {
+                    // Pre-select the board whose base FQBN matches the previously
+                    // configured device. If nothing matches, leave selectedBoard
+                    // unset rather than silently falling back to boards[0] — that
+                    // would let the user confirm a board they never actually chose
+                    // (see reconcileDevicePort in configHeaderParser.ts, which
+                    // applies the same "match or leave alone" rule for uploads).
+                    const baseFqbn = (fqbn: string) => fqbn.split(':').slice(0, 3).join(':')
+                    const match = this.boards.find(b => baseFqbn(b.fqbn) === baseFqbn(this.initialFqbn))
+                    this.selectedBoard = match ?? null
+                    this.previousDeviceNotFound = !match
+                } else {
+                    // No prior device to match against — default to the first
+                    // detected board purely as a convenience for a first-time pick.
+                    this.selectedBoard = this.boards[0]
+                }
             }
         } catch {
             this.scanError = 'Board scan failed. Check that your device drivers are installed and the board is connected.'

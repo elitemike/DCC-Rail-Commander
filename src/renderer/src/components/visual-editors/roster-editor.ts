@@ -456,7 +456,6 @@ export class RosterEditorCustomElement {
     editBuffer: Roster | null = null
     editBufferIndex: number | null = null
     errorMessage = ''
-    warningMessage = ''
     aliasInput = ''
 
     get roster(): Roster[] {
@@ -477,7 +476,6 @@ export class RosterEditorCustomElement {
         this.dccAddressInput = String(entry.dccAddress)
         this.aliasInput = this.state.getPrimaryAliasNameForId(entry.dccAddress)
         this.errorMessage = ''
-        this.warningMessage = this.state.getCrossTypeIdWarning?.(entry.dccAddress, 'Roster') ?? ''
         this.loadAppendedFunctions()
     }
 
@@ -486,7 +484,6 @@ export class RosterEditorCustomElement {
         this.editBufferIndex = null
         this.aliasInput = ''
         this.errorMessage = ''
-        this.warningMessage = ''
         this.appendedFunctionsList = []
     }
 
@@ -514,12 +511,10 @@ export class RosterEditorCustomElement {
             )
             if (!aliasResult.ok) {
                 this.errorMessage = aliasResult.reason
-                this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.dccAddress, 'Roster') ?? ''
                 return
             }
         }
         this.errorMessage = ''
-        this.warningMessage = this.state.getCrossTypeIdWarning?.(this.editBuffer.dccAddress, 'Roster') ?? ''
         // Only rebuild the tree when data actually changed; pure selection switches
         // (no edits) call commitBuffer too but produce no visible change, and
         // triggering a refresh on every click breaks SF's own selection management.
@@ -533,7 +528,6 @@ export class RosterEditorCustomElement {
         const n = parseInt(this.dccAddressInput, 10)
         if (!isNaN(n) && this.editBuffer) {
             this.editBuffer.dccAddress = n
-            this.warningMessage = this.state.getCrossTypeIdWarning?.(n, 'Roster') ?? ''
         }
     }
 

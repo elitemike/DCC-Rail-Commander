@@ -140,7 +140,7 @@ describe('header round-trip with roster data', () => {
         const turnouts = parseTurnoutFromFile(full)
         expect(turnouts).toHaveLength(1)
         expect(turnouts[0].id).toBe(200)
-        expect(turnouts[0].defaultState).toBe('NORMAL')
+        expect(turnouts[0].defaultState).toBe('CLOSED')
     })
 
     it('extracts default thrown turnout IDs from AUTOSTART THROW lines', () => {
@@ -270,6 +270,16 @@ describe('parseDeviceFromHeader', () => {
         const device: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: 'COM3' }
         const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
         expect(parsed!.port).toBe('COM3')
+    })
+
+    it('parses an empty port as "" rather than swallowing the next line', () => {
+        // Regression: the Port regex used to be `\s*` (matches \n too), so with an
+        // empty value it ran past the line break and captured the following
+        // "//   FQBN:     ..." line's text as the "port" instead of "".
+        const device: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: '' }
+        const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
+        expect(parsed!.port).toBe('')
+        expect(parsed!.fqbn).toBe(SAMPLE_DEVICE.fqbn)
     })
 })
 

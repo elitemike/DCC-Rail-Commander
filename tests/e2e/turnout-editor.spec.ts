@@ -103,8 +103,11 @@ test.describe('Turnout Editor', () => {
     test('adding entry via visual appears in raw tab', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        // Click + to add a new turnout
+        // Click + to add a new turnout — new entries are always SERVO, so the
+        // calibration modal opens immediately; dismiss it to get to the form.
         await page.getByTitle('Add new turnout').click()
+        await expect(page.getByRole('dialog').getByText('Calibrate Servo', { exact: true })).toBeVisible()
+        await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 
         // The new entry form should open — find and fill the description field
         const descInput = page.locator('label', { hasText: /Description/i })
@@ -136,14 +139,14 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('file-editor-panel div.monaco-editor')).toContainText('THROW(200)')
     })
 
-    test('setting default state back to NORMAL removes THROW from myAutomation.h', async ({ workspacePage: page }) => {
+    test('setting default state back to CLOSED removes THROW from myAutomation.h', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
         const defaultStateSelect = page.locator('#turnout-splitter').getByRole('combobox').nth(1)
         await defaultStateSelect.selectOption('THROWN')
-        await defaultStateSelect.selectOption('NORMAL')
+        await defaultStateSelect.selectOption('CLOSED')
 
         await openAutomationEditor(page)
 

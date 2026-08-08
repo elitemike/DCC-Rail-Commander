@@ -15,7 +15,7 @@ import type { ExrailCompletionData } from '../../src/renderer/src/utils/exrail-c
 
 const DATA: ExrailCompletionData = {
     roster: [{ dccAddress: 3, name: 'Thomas', functions: [], comment: '' }],
-    turnouts: [{ id: 200, description: 'Main Junction', defaultState: 'NORMAL', type: 'DCC', addr: 1, subAddr: 0 }],
+    turnouts: [{ id: 200, description: 'Main Junction', defaultState: 'CLOSED', type: 'DCC', addr: 1, subAddr: 0 }],
     sensors: [{ id: 30, pin: 2, description: 'Occupancy' }],
     routes: [{ id: 1, description: 'Main to Siding', body: '' }],
     sequences: [{ id: 5, body: '' }],
