@@ -34,6 +34,9 @@ export class MockSerialTransport {
         this._broadcast('usb:closed', { path })
     }
 
+    /** cab -> last known {speedByte, functmap}, so a bare `<t cab>` status request has something to echo back. */
+    private readonly cabState = new Map<number, { speedByte: number; functmap: number }>()
+
     private _synthesizeResponse(raw: string): string | null {
         const cmd = raw.trim()
         const servoMatch = cmd.match(/^<D SERVO (\d+) (\d+)(?: (\d+))?>$/)
@@ -43,6 +46,45 @@ export class MockSerialTransport {
         }
         const defineMatch = cmd.match(/^<T \d+ SERVO/)
         if (defineMatch) return `<O>\n`
+
+        // Throttle: <t cab speed dir> — set + echo back as a <l> broadcast.
+        const throttleMatch = cmd.match(/^<t (\d+) (\d+) ([01])>$/)
+        if (throttleMatch) {
+            const [, cabStr, speedStr, dirStr] = throttleMatch
+            const cab = Number(cabStr)
+            const speed = Number(speedStr)
+            const dir = Number(dirStr)
+            const speedByte = speed === 0 ? (dir ? 128 : 0) : (dir ? 128 : 0) + speed + 1
+            const existing = this.cabState.get(cab)
+            const functmap = existing?.functmap ?? 0
+            this.cabState.set(cab, { speedByte, functmap })
+            return `<l ${cab} 0 ${speedByte} ${functmap}>\n`
+        }
+        // Throttle status request: <t cab> — echo whatever we last recorded (0 speed if never set).
+        const throttleStatusMatch = cmd.match(/^<t (\d+)>$/)
+        if (throttleStatusMatch) {
+            const cab = Number(throttleStatusMatch[1])
+            const existing = this.cabState.get(cab) ?? { speedByte: 128, functmap: 0 }
+            this.cabState.set(cab, existing)
+            return `<l ${cab} 0 ${existing.speedByte} ${existing.functmap}>\n`
+        }
+        // Function: <F cab funct state> — no reply on real hardware; track functmap for later <t cab> queries.
+        const functionMatch = cmd.match(/^<F (\d+) (\d+) ([01])>$/)
+        if (functionMatch) {
+            const [, cabStr, funcStr, stateStr] = functionMatch
+            const cab = Number(cabStr)
+            const func = Number(funcStr)
+            const on = stateStr === '1'
+            const existing = this.cabState.get(cab) ?? { speedByte: 128, functmap: 0 }
+            const functmap = on ? existing.functmap | (1 << func) : existing.functmap & ~(1 << func)
+            this.cabState.set(cab, { ...existing, functmap })
+            return null
+        }
+        // Track power: <1> / <0>
+        if (cmd === '<1>') return '<p1>\n'
+        if (cmd === '<0>') return '<p0>\n'
+        // Emergency stop all — no formal reply.
+        if (cmd === '<!>') return null
         return null
     }
 

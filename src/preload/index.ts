@@ -261,6 +261,18 @@ const windowApi = {
 
     forceClose: (): Promise<void> =>
         ipcRenderer.invoke('window:force-close'),
+
+    setFullScreen: (value: boolean): Promise<void> =>
+        ipcRenderer.invoke('window:set-fullscreen', value),
+
+    isFullScreen: (): Promise<boolean> =>
+        ipcRenderer.invoke('window:is-fullscreen'),
+
+    onFullScreenChanged: (cb: (value: boolean) => void) => {
+        const handler = (_event: unknown, value: boolean) => cb(value)
+        ipcRenderer.on('window:fullscreen-changed', handler)
+        return () => ipcRenderer.off('window:fullscreen-changed', handler)
+    },
 }
 
 contextBridge.exposeInMainWorld('electronWindow', windowApi)

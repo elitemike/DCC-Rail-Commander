@@ -15,6 +15,7 @@ import { PreferencesService } from './services/preferences.service'
 import { PythonService } from './services/python.service'
 import { UsbService } from './services/usb.service'
 import { ToastService } from './services/toast.service'
+import { ThrottleService } from './services/throttle.service'
 
 // State
 import { InstallerState } from './models/installer-state'
@@ -40,6 +41,8 @@ import { SerialMonitorCustomElement } from './components/serial-monitor'
 import { CommandstationConfigFormCustomElement } from './components/config-forms/commandstation-config-form'
 import { TrackManagerFormCustomElement } from './components/config-forms/track-manager-form'
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
+import { ThrottlePanelCustomElement } from './components/throttle/throttle-panel'
+import { ThrottleCardCustomElement } from './components/throttle/throttle-card'
 
 registerLicense(syncfusionLicense)
 
@@ -72,6 +75,7 @@ new Aurelia()
         Registration.singleton(PythonService, PythonService),
         Registration.singleton(UsbService, UsbService),
         Registration.singleton(ToastService, ToastService),
+        Registration.singleton(ThrottleService, ThrottleService),
         Registration.singleton(InstallerState, InstallerState),
         Registration.singleton(ConfigEditorState, ConfigEditorState),
         // Config editor custom elements
@@ -92,6 +96,8 @@ new Aurelia()
         CommandstationConfigFormCustomElement,
         TrackManagerFormCustomElement,
         IOExpanderConfigFormCustomElement,
+        ThrottlePanelCustomElement,
+        ThrottleCardCustomElement,
     )
     .app(App)
     .start()

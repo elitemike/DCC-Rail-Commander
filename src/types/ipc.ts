@@ -187,6 +187,11 @@ export interface WindowElectronApi {
     onCloseRequested: (cb: () => void) => () => void
     /** Tell the main process to forcefully destroy the window. */
     forceClose: () => Promise<void>
+    /** Puts the OS window into (or out of) native full screen — hides the title bar entirely. */
+    setFullScreen: (value: boolean) => Promise<void>
+    isFullScreen: () => Promise<boolean>
+    /** Fires when native full screen is entered/exited by any means (in-app toggle or an OS-level shortcut). */
+    onFullScreenChanged: (cb: (value: boolean) => void) => () => void
 }
 
 declare global {
