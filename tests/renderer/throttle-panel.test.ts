@@ -4,7 +4,7 @@ import type { ConfigEditorState } from '../../src/renderer/src/models/config-edi
 import type { ThrottleService, ThrottleCabState } from '../../src/renderer/src/services/throttle.service'
 import type { Roster } from '../../src/renderer/src/utils/myAutomationParser'
 
-function makePanel(roster: Roster[] = [], throttles: ThrottleCabState[] = []) {
+function makePanel(roster: Roster[] = [], throttles: ThrottleCabState[] = [], confirmResult: 'ok' | 'cancel' = 'ok') {
     const panel = Object.create(ThrottlePanelCustomElement.prototype) as ThrottlePanelCustomElement
 
     const throttleService = {
@@ -17,15 +17,23 @@ function makePanel(roster: Roster[] = [], throttles: ThrottleCabState[] = []) {
 
     const configEditorState = { roster } as unknown as ConfigEditorState
 
+    // powerOff() confirms via ConfirmDialog before calling through — stub the
+    // dialog service so tests can drive both the confirm and cancel paths
+    // without a real Aurelia dialog stack.
+    const dialogService = {
+        open: vi.fn().mockResolvedValue({ dialog: { closed: Promise.resolve({ status: confirmResult }) } }),
+    }
+
     Object.assign(panel, {
         throttleService,
         configEditorState,
+        dialogService,
         addMode: 'roster',
         selectedRosterAddress: null,
         freeformAddress: 3,
     })
 
-    return { panel, throttleService, configEditorState }
+    return { panel, throttleService, configEditorState, dialogService }
 }
 
 const THOMAS: Roster = { dccAddress: 3, name: 'Thomas', functions: [], comment: '' }
@@ -128,13 +136,24 @@ describe('ThrottlePanelCustomElement.addSelected', () => {
 })
 
 describe('ThrottlePanelCustomElement power + e-stop', () => {
-    it('delegates powerOn/powerOff/emergencyStopAll to the service', () => {
+    it('powerOn/emergencyStopAll delegate straight to the service (no confirmation)', () => {
         const { panel, throttleService } = makePanel()
         panel.powerOn()
-        panel.powerOff()
         panel.emergencyStopAll()
         expect(throttleService.powerOn).toHaveBeenCalledOnce()
-        expect(throttleService.powerOff).toHaveBeenCalledOnce()
         expect(throttleService.emergencyStopAll).toHaveBeenCalledOnce()
+    })
+
+    it('powerOff() calls through to the service once the confirmation dialog is accepted', async () => {
+        const { panel, throttleService, dialogService } = makePanel([], [], 'ok')
+        await panel.powerOff()
+        expect(dialogService.open).toHaveBeenCalledOnce()
+        expect(throttleService.powerOff).toHaveBeenCalledOnce()
+    })
+
+    it('powerOff() does nothing if the confirmation is cancelled', async () => {
+        const { panel, throttleService } = makePanel([], [], 'cancel')
+        await panel.powerOff()
+        expect(throttleService.powerOff).not.toHaveBeenCalled()
     })
 })

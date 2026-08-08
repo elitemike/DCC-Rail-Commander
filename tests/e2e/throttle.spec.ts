@@ -258,11 +258,23 @@ test('a function changed by another throttle (e.g. WiFi app, JMRI, a physical ca
     await expect(hornButton).toHaveClass(/e-active/, { timeout: 5_000 })
 })
 
-test('Power On / Power Off / E-Stop All are clickable without raising errors', async ({ workspacePage: page }) => {
+test('Power On / Power Off (confirmed) / E-Stop All are clickable without raising errors', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
     await page.getByTestId('throttle-power-on').click()
+
     await page.getByTestId('throttle-power-off').click()
+    await expect(page.getByText('Power Off Track', { exact: true })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Power Off', exact: true }).click()
+
     await page.getByTestId('throttle-estop-all').click()
     // No assertion beyond "didn't throw" — these are fire-and-forget serial writes.
     await expect(page.getByText('Track Power')).toBeVisible()
+})
+
+test('Power Off does nothing if the confirmation is cancelled', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-power-off').click()
+    await expect(page.getByText('Power Off Track', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page.getByText('Power Off Track', { exact: true })).not.toBeVisible()
 })

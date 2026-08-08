@@ -1,4 +1,5 @@
 import { resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { NumericTextBox } from '@syncfusion/ej2-inputs'
 import { ThrottleService } from '../../services/throttle.service'
@@ -20,6 +21,7 @@ const ADD_MODE_OPTIONS = [
 export class ThrottlePanelCustomElement {
     readonly throttleService = resolve(ThrottleService)
     private readonly configEditorState = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
 
     readonly addModeOptions = ADD_MODE_OPTIONS
     addMode: 'roster' | 'address' = 'roster'
@@ -153,11 +155,30 @@ export class ThrottlePanelCustomElement {
         this.throttleService.powerOn()
     }
 
-    powerOff(): void {
+    async powerOff(): Promise<void> {
+        const confirmed = await this._confirm(
+            'Power Off Track',
+            'Cut track power? Every loco on the layout will stop immediately.',
+        )
+        if (!confirmed) return
         this.throttleService.powerOff()
     }
 
     emergencyStopAll(): void {
         this.throttleService.emergencyStopAll()
+    }
+
+    private async _confirm(title: string, message: string): Promise<boolean> {
+        try {
+            const { dialog } = await this.dialogService.open({
+                component: () =>
+                    import('../dialogs/confirm-dialog').then((m) => m.ConfirmDialog).catch(() => null),
+                model: { title, message, confirmLabel: 'Power Off', confirmClass: 'bg-red-600 hover:bg-red-500' },
+            })
+            const result = await dialog.closed
+            return (result as { status: string }).status === 'ok'
+        } catch {
+            return window.confirm(`${title}\n\n${message}`)
+        }
     }
 }
