@@ -41,27 +41,17 @@
             E-Stop All</button>
     </div>
 
-    <!-- Tab strip: Throttles | Turnouts | Routes | Both -->
+    <!-- Tab strip: Throttles | Turnouts/Routes -->
     <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
         <button click.trigger="setTab('throttles')" data-testid="throttle-tab-throttles"
             class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
             class.bind="activeTab === 'throttles' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
             Throttles
         </button>
-        <button click.trigger="setTab('turnouts')" data-testid="throttle-tab-turnouts"
+        <button click.trigger="setTab('turnoutsRoutes')" data-testid="throttle-tab-turnouts-routes"
             class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
-            class.bind="activeTab === 'turnouts' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
-            Turnouts
-        </button>
-        <button click.trigger="setTab('routes')" data-testid="throttle-tab-routes"
-            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
-            class.bind="activeTab === 'routes' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
-            Routes
-        </button>
-        <button click.trigger="setTab('both')" data-testid="throttle-tab-both"
-            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
-            class.bind="activeTab === 'both' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
-            Both
+            class.bind="activeTab === 'turnoutsRoutes' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+            Turnouts/Routes
         </button>
     </div>
 
@@ -99,15 +89,13 @@
         </div>
     </template>
 
-    <!-- ── Turnouts tab ───────────────────────────────────────────────── -->
-    <turnouts-view if.bind="activeTab === 'turnouts'"></turnouts-view>
-
-    <!-- ── Routes tab ─────────────────────────────────────────────────── -->
-    <routes-view if.bind="activeTab === 'routes'"></routes-view>
-
-    <!-- ── Both tab: routes on top, turnouts below ───────────────────── -->
-    <div if.bind="activeTab === 'both'" class="flex flex-col flex-1 min-h-0 overflow-y-auto">
+    <!-- ── Turnouts/Routes tab: routes on top, turnouts below ─────────── -->
+    <div if.bind="activeTab === 'turnoutsRoutes'" class="flex flex-col flex-1 min-h-0 overflow-y-auto">
+        <h3 data-testid="routes-section-label"
+            class="px-4 pt-4 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Routes</h3>
         <routes-view></routes-view>
+        <h3 data-testid="turnouts-section-label"
+            class="px-4 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Turnouts</h3>
         <turnouts-view></turnouts-view>
     </div>
 
