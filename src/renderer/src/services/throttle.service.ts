@@ -75,17 +75,21 @@ export class ThrottleService {
      */
     readonly throttles: ThrottleCabState[] = []
 
+    /** Track power state — null until the first `<p0>`/`<p1>` line arrives (seeded by the `<s>` sent from initialize()/_pollAll()). */
+    trackPower: boolean | null = null
+
     private unsubData?: () => void
     private readonly lineSplitter = createLineSplitter((line) => this._handleLine(line))
     private writeQueue: Promise<void> = Promise.resolve()
 
-    /** Starts listening for `<l ...>` broadcasts and polling for full state on the selected device's port. Safe to call more than once. */
+    /** Starts listening for `<l ...>`/`<p...>` broadcasts and polling for full state on the selected device's port. Safe to call more than once. */
     initialize(): void {
         if (this.unsubData || !window.usb) return
         this.unsubData = window.usb.onData(({ path, data }) => {
             if (path !== this.state.selectedDevice?.port) return
             this.lineSplitter.feed(data)
         })
+        void this._send('<s>') // seed the initial track-power state
         this.pollTimer = setInterval(() => this._pollAll(), POLL_INTERVAL_MS)
     }
 
@@ -96,8 +100,9 @@ export class ThrottleService {
         this.pollTimer = undefined
     }
 
-    /** Re-requests every acquired cab's full state — see POLL_INTERVAL_MS. */
+    /** Re-requests every acquired cab's full state, plus track power — see POLL_INTERVAL_MS. */
     private _pollAll(): void {
+        void this._send('<s>')
         for (const t of this.throttles) {
             void this._send(`<t ${t.cab}>`)
         }
@@ -152,10 +157,12 @@ export class ThrottleService {
     }
 
     powerOn(): void {
+        this.trackPower = true
         void this._send('<1>')
     }
 
     powerOff(): void {
+        this.trackPower = false
         void this._send('<0>')
     }
 
@@ -171,7 +178,11 @@ export class ThrottleService {
     }
 
     private _handleLine(line: string): void {
-        const match = LOCO_RESPONSE_RE.exec(line.trim())
+        const trimmed = line.trim()
+        if (trimmed === '<p1>') { this.trackPower = true; return }
+        if (trimmed === '<p0>') { this.trackPower = false; return }
+
+        const match = LOCO_RESPONSE_RE.exec(trimmed)
         if (!match) return
         const cab = Number(match[1])
         const t = this._find(cab)

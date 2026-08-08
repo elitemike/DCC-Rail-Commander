@@ -55,7 +55,7 @@ async function releaseCard(page: Page, card: Locator): Promise<void> {
 test('Throttle nav item appears once connected, and opens an empty panel', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
     await expect(page.getByText('No throttles yet', { exact: false })).toBeVisible()
-    await expect(page.getByText('Track Power')).toBeVisible()
+    await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
 })
 
 test('acquires a roster loco and a freeform address as separate cards in the grid', async ({ workspacePage: page }) => {
@@ -258,23 +258,43 @@ test('a function changed by another throttle (e.g. WiFi app, JMRI, a physical ca
     await expect(hornButton).toHaveClass(/e-active/, { timeout: 5_000 })
 })
 
-test('Power On / Power Off (confirmed) / E-Stop All are clickable without raising errors', async ({ workspacePage: page }) => {
+test('track power toggle shows the actual state and requires confirmation only to turn off', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
-    await page.getByTestId('throttle-power-on').click()
+    const powerToggle = page.getByTestId('throttle-power-toggle')
 
-    await page.getByTestId('throttle-power-off').click()
+    // The mock command station defaults to power OFF at boot, seeded via the
+    // <s> query ThrottleService.initialize() sends — real DCC-EX firmware
+    // does the same, so this reflects actual hardware state, not a guess.
+    await expect(powerToggle).toContainText('Track Power: OFF', { timeout: 5_000 })
+
+    // OFF -> ON needs no confirmation.
+    await powerToggle.click()
+    await expect(powerToggle).toContainText('Track Power: ON')
+
+    // ON -> OFF stops every loco on the layout — confirm first.
+    await powerToggle.click()
     await expect(page.getByText('Power Off Track', { exact: true })).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: 'Power Off', exact: true }).click()
-
-    await page.getByTestId('throttle-estop-all').click()
-    // No assertion beyond "didn't throw" — these are fire-and-forget serial writes.
-    await expect(page.getByText('Track Power')).toBeVisible()
+    await expect(powerToggle).toContainText('Track Power: OFF')
 })
 
-test('Power Off does nothing if the confirmation is cancelled', async ({ workspacePage: page }) => {
+test('cancelling the power-off confirmation leaves power on', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
-    await page.getByTestId('throttle-power-off').click()
+    const powerToggle = page.getByTestId('throttle-power-toggle')
+    await expect(powerToggle).toContainText('Track Power: OFF', { timeout: 5_000 })
+
+    await powerToggle.click()
+    await expect(powerToggle).toContainText('Track Power: ON')
+
+    await powerToggle.click()
     await expect(page.getByText('Power Off Track', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await expect(page.getByText('Power Off Track', { exact: true })).not.toBeVisible()
+    await expect(powerToggle).toContainText('Track Power: ON')
+})
+
+test('E-Stop All is clickable without raising errors', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-estop-all').click()
+    // No assertion beyond "didn't throw" — it's a fire-and-forget serial write.
+    await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
 })

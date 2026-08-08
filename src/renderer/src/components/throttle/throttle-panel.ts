@@ -168,6 +168,15 @@ export class ThrottlePanelCustomElement {
         this.throttleService.emergencyStopAll()
     }
 
+    /** Single button bound to the actual track-power state — turns power on directly, or off (with confirmation) if it's currently on. */
+    async togglePower(): Promise<void> {
+        if (this.throttleService.trackPower === true) {
+            await this.powerOff()
+        } else {
+            this.powerOn()
+        }
+    }
+
     private async _confirm(title: string, message: string): Promise<boolean> {
         try {
             const { dialog } = await this.dialogService.open({

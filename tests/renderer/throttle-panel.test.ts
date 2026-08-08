@@ -4,11 +4,17 @@ import type { ConfigEditorState } from '../../src/renderer/src/models/config-edi
 import type { ThrottleService, ThrottleCabState } from '../../src/renderer/src/services/throttle.service'
 import type { Roster } from '../../src/renderer/src/utils/myAutomationParser'
 
-function makePanel(roster: Roster[] = [], throttles: ThrottleCabState[] = [], confirmResult: 'ok' | 'cancel' = 'ok') {
+function makePanel(
+    roster: Roster[] = [],
+    throttles: ThrottleCabState[] = [],
+    confirmResult: 'ok' | 'cancel' = 'ok',
+    trackPower: boolean | null = null,
+) {
     const panel = Object.create(ThrottlePanelCustomElement.prototype) as ThrottlePanelCustomElement
 
     const throttleService = {
         throttles,
+        trackPower,
         acquire: vi.fn(),
         powerOn: vi.fn(),
         powerOff: vi.fn(),
@@ -154,6 +160,36 @@ describe('ThrottlePanelCustomElement power + e-stop', () => {
     it('powerOff() does nothing if the confirmation is cancelled', async () => {
         const { panel, throttleService } = makePanel([], [], 'cancel')
         await panel.powerOff()
+        expect(throttleService.powerOff).not.toHaveBeenCalled()
+    })
+})
+
+describe('ThrottlePanelCustomElement.togglePower', () => {
+    it('turns power on directly (no confirmation) when currently off', async () => {
+        const { panel, throttleService, dialogService } = makePanel([], [], 'ok', false)
+        await panel.togglePower()
+        expect(throttleService.powerOn).toHaveBeenCalledOnce()
+        expect(throttleService.powerOff).not.toHaveBeenCalled()
+        expect(dialogService.open).not.toHaveBeenCalled()
+    })
+
+    it('turns power on directly when state is unknown (null)', async () => {
+        const { panel, throttleService } = makePanel([], [], 'ok', null)
+        await panel.togglePower()
+        expect(throttleService.powerOn).toHaveBeenCalledOnce()
+    })
+
+    it('confirms before turning power off when currently on', async () => {
+        const { panel, throttleService, dialogService } = makePanel([], [], 'ok', true)
+        await panel.togglePower()
+        expect(dialogService.open).toHaveBeenCalledOnce()
+        expect(throttleService.powerOff).toHaveBeenCalledOnce()
+        expect(throttleService.powerOn).not.toHaveBeenCalled()
+    })
+
+    it('does not turn power off if the confirmation is cancelled', async () => {
+        const { panel, throttleService } = makePanel([], [], 'cancel', true)
+        await panel.togglePower()
         expect(throttleService.powerOff).not.toHaveBeenCalled()
     })
 })
