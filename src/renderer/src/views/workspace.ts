@@ -23,6 +23,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { CheckBox } from '@syncfusion/ej2-buttons'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
+import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
 
 export class Workspace {
     private readonly router = resolve(Router)
@@ -40,6 +41,7 @@ export class Workspace {
     // ── Active config file being edited ─────────────────────────────────────
     activeFileIndex = 0
     filePanel?: FileEditorPanelCustomElement
+    compileTerminal?: CompileOutputTerminalCustomElement
 
     // ── Left-nav section (Throttle vs Configuration) ──────────────────────────
     activeSection: 'throttle' | 'config' = 'config'
@@ -563,6 +565,7 @@ export class Workspace {
     // ── Compile & Upload ──────────────────────────────────────────────────────
     clearCompileLog(): void {
         this.compileLog = ''
+        this.compileTerminal?.reset()
         this.compileSuccess = null
         this.compileError = null
     }
@@ -588,6 +591,7 @@ export class Workspace {
 
         this.isCompiling = true
         this.compileLog = ''
+        this.compileTerminal?.reset()
         this.compileError = null
         this.compileSuccess = null
         this.progressPercent = 10
@@ -657,22 +661,28 @@ export class Workspace {
             }
 
             this.compileLog += `Compiling for ${fqbn}...\n`
+            this.compileTerminal?.write(`Compiling for ${fqbn}...\n`)
             this.progressPercent = 40
             let streamedLines = 0
             const unsubCompile = this.cli.subscribeToProgress(({ phase, message }) => {
                 if (phase === 'compile') {
                     this.compileLog += message + '\n'
+                    this.compileTerminal?.write(message + '\n')
                     streamedLines++
                 }
             })
             const result = await this.cli.compile(this.state.scratchPath!, fqbn)
             unsubCompile()
-            if (streamedLines === 0) this.compileLog += result.output ?? ''
+            if (streamedLines === 0) {
+                this.compileLog += result.output ?? ''
+                this.compileTerminal?.write(result.output ?? '')
+            }
             if (!result.success) throw new Error(result.error ?? 'Compilation failed')
 
             this.progressPercent = 70
             this.compileSuccess = true
             this.compileLog += '\n✓ Compile successful!'
+            this.compileTerminal?.write('\n✓ Compile successful!')
             this.toastService.show({
                 title: 'Compile Successful',
                 content: `Built for ${fqbn}.`,
@@ -779,22 +789,28 @@ export class Workspace {
             await this.ensureLivePort(device)
 
             this.compileLog += `\nUploading to ${device.port}...\n`
+            this.compileTerminal?.write(`\nUploading to ${device.port}...\n`)
             this.progressPercent = 80
             let streamedUploadLines = 0
             const unsubUpload = this.cli.subscribeToProgress(({ phase, message }) => {
                 if (phase === 'upload') {
                     this.compileLog += message + '\n'
+                    this.compileTerminal?.write(message + '\n')
                     streamedUploadLines++
                 }
             })
             const result = await this.cli.upload(this.state.scratchPath!, fqbn, device.port)
             unsubUpload()
-            if (streamedUploadLines === 0) this.compileLog += result.output ?? ''
+            if (streamedUploadLines === 0) {
+                this.compileLog += result.output ?? ''
+                this.compileTerminal?.write(result.output ?? '')
+            }
             if (!result.success) throw new Error(result.error ?? 'Upload failed')
 
             this.progressPercent = 100
             this.compileSuccess = true
             this.compileLog += '\n✓ Upload complete!'
+            this.compileTerminal?.write('\n✓ Upload complete!')
             this.toastService.show({
                 title: 'Upload Complete',
                 content: `Firmware uploaded to ${device.port}.`,
@@ -841,6 +857,7 @@ export class Workspace {
         this.state.activeConfigId = config.id
         this.activeFileIndex = 0
         this.compileLog = ''
+        this.compileTerminal?.reset()
         this.compileSuccess = null
         // Reset the version dropdown's dataSource to match the newly-switched
         // device right away, since loadVersions()'s fetch below is async.

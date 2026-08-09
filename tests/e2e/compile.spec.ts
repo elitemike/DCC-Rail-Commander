@@ -79,20 +79,22 @@ test.describe('Compile button', () => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
 
-        const outputPanel = workspacePage.locator('pre.whitespace-pre-wrap')
+        const outputPanel = workspacePage.locator('compile-output-terminal .xterm-accessibility-tree')
         await expect(outputPanel).toContainText('Compiling for')
         await expect(outputPanel).toContainText('program storage space')
         await expect(outputPanel).toContainText('✓ Compile successful!')
     })
 
-    test('Clear button hides the output panel', async ({ workspacePage }) => {
+    test('Clear button removes the compile output panel content', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
 
         await workspacePage.getByRole('button', { name: /Clear/ }).click()
 
         await expect(workspacePage.getByText('✓ Success')).not.toBeVisible()
-        await expect(workspacePage.locator('pre.whitespace-pre-wrap')).not.toBeVisible()
+        const outputPanel = workspacePage.locator('compile-output-terminal .xterm-accessibility-tree')
+        await expect(outputPanel).not.toContainText('Compiling for')
+        await expect(outputPanel).not.toContainText('Compile successful!')
     })
 
     test('a second compile after clearing also succeeds', async ({ workspacePage }) => {
@@ -142,11 +144,12 @@ test.describe('Compile button — real compiler', () => {
     })
 
     test('real compile output contains Compiling for', async ({ workspacePageNative }) => {
-        await workspacePageNative.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePageNative.getByText('✓ Success')).toBeVisible({ timeout: 120_000 })
+        const outputPanel = workspacePageNative.locator('compile-output-terminal .xterm-accessibility-tree')
 
-        const outputPanel = workspacePageNative.locator('pre.whitespace-pre-wrap')
-        await expect(outputPanel).toContainText('Compiling for')
+        await workspacePageNative.getByRole('button', { name: 'Compile' }).click()
+        await expect(outputPanel).toContainText('Compiling for', { timeout: 5_000 })
+
+        await expect(workspacePageNative.getByText('✓ Success')).toBeVisible({ timeout: 120_000 })
         await expect(outputPanel).toContainText('✓ Compile successful!')
     })
 })

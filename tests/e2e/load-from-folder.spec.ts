@@ -723,7 +723,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         const aliasesPath = join(sourceFolder, 'myAliases.h')
         expect(existsSync(aliasesPath)).toBe(true)
         const aliasesContent = readFileSync(aliasesPath, 'utf-8')
-        expect(aliasesContent).toContain('#define THOMAS_ALIAS "3" // type: Roster')
+        expect(aliasesContent).toContain('ALIAS(THOMAS_ALIAS, 3) // type: Roster')
     })
 
     test('Save persists roster alias when Save is clicked without leaving the alias field', async ({ electronApp, homePage, sourceFolder }) => {
@@ -749,7 +749,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         const aliasesPath = join(sourceFolder, 'myAliases.h')
         expect(existsSync(aliasesPath)).toBe(true)
         const aliasesContent = readFileSync(aliasesPath, 'utf-8')
-        expect(aliasesContent).toContain('#define THOMAS_ALIAS_NO_BLUR "3" // type: Roster')
+        expect(aliasesContent).toContain('ALIAS(THOMAS_ALIAS_NO_BLUR, 3) // type: Roster')
     })
 
     test('reopening saved config reads alias content from disk (not stale cache)', async ({ electronApp, homePage, sourceFolder }) => {
@@ -773,7 +773,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         await homePage.waitForTimeout(500)
 
         const aliasesPath = join(sourceFolder, 'myAliases.h')
-        writeFileSync(aliasesPath, '#define DISK_ALIAS "3" // type: Roster\n', 'utf-8')
+        writeFileSync(aliasesPath, 'ALIAS(DISK_ALIAS, 3) // type: Roster\n', 'utf-8')
 
         await homePage.getByRole('button', { name: 'EX-Installer' }).click()
         await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })

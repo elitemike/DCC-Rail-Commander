@@ -1,6 +1,7 @@
 import { resolve } from 'aurelia'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { UsbService } from '../services/usb.service'
 import { InstallerState } from '../models/installer-state'
 
@@ -503,6 +504,7 @@ export class SerialMonitorCustomElement {
 
         this.fitAddon = new FitAddon()
         this.term.loadAddon(this.fitAddon)
+        this.term.loadAddon(new CanvasAddon())
         this.term.open(this.terminalEl)
 
         requestAnimationFrame(() => {
