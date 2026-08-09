@@ -72,7 +72,7 @@ export class RosterEditorCustomElement {
     private readonly _aliasSubscriber = {
         handleChange: () => {
             if (this.editBuffer !== null) {
-                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress)
+                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress, 'Roster')
             }
         },
     }
@@ -80,7 +80,7 @@ export class RosterEditorCustomElement {
     attached(): void {
         // Refresh alias display in case aliases changed while this editor was inactive
         if (this.editBuffer !== null) {
-            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress)
+            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.dccAddress, 'Roster')
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
@@ -474,7 +474,7 @@ export class RosterEditorCustomElement {
             appendedFunctions: entry.appendedFunctions?.map(f => ({ ...f })),
         }
         this.dccAddressInput = String(entry.dccAddress)
-        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.dccAddress)
+        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.dccAddress, 'Roster')
         this.errorMessage = ''
         this.loadAppendedFunctions()
     }
@@ -498,7 +498,7 @@ export class RosterEditorCustomElement {
         }
         const existing = this.state.roster[this.editBufferIndex]
         const changed = !existing || JSON.stringify(existing) !== JSON.stringify(this.editBuffer)
-        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress) : ''
+        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress, 'Roster') : ''
         const aliasChanged = !!existing && (existing.dccAddress !== this.editBuffer.dccAddress || existingAliasName !== this.aliasInput.trim())
         this.state.updateRosterEntry(this.editBufferIndex, { ...this.editBuffer })
         if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {

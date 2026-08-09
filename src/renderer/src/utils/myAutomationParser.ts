@@ -165,8 +165,68 @@ export function parseAliasNumericValue(value: string): number | null {
     return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-export function getPrimaryAliasForId(aliases: AliasEntry[], id: number): AliasEntry | undefined {
-    return aliases.find(alias => parseAliasNumericValue(alias.value) === id);
+/**
+ * EXRAIL/macro command names — see https://dcc-ex.com/exrail/exrail-command-reference.html.
+ * An alias name colliding with one of these compiles into a broken redefinition.
+ */
+const EXRAIL_RESERVED_WORDS = new Set([
+    'ALIAS', 'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT',
+    'SEQUENCE', 'ROUTE', 'AUTOMATION', 'AUTOSTART',
+    'THROW', 'CLOSE', 'ONTHROW', 'ONCLOSE',
+    'SETLOCO', 'SENDLOCO', 'START', 'FOLLOW',
+    'IFOCCUPIED', 'IF', 'ELSE', 'ENDIF', 'AT', 'AFTER',
+    'FWD', 'REV', 'STOP', 'SPEED', 'ESTOP', 'POWERON', 'POWEROFF',
+    'DELAY', 'DELAYRANDOM', 'RESERVE', 'FREE', 'SET', 'RESET',
+    'BLINK', 'RED', 'AMBER', 'GREEN', 'ONBUTTON', 'ONSENSOR',
+    'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED',
+    'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE', 'IFROUTE_HIDDEN', 'IFROUTE_DISABLED',
+    'ROUTE_CAPTION', 'PRINT', 'DONE',
+]);
+
+const ALIAS_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Per https://dcc-ex.com/exrail/exrail-command-reference.html#aliases — an alias name must
+ * start with a letter or underscore, contain only letters/digits/underscores thereafter, and
+ * must not collide with an existing EXRAIL command name.
+ */
+export function validateAliasName(rawName: string): { ok: true } | { ok: false; reason: string } {
+    const trimmed = rawName.trim();
+    if (trimmed === '') return { ok: false, reason: 'Alias name is required.' };
+    if (!ALIAS_NAME_RE.test(trimmed)) {
+        return {
+            ok: false,
+            reason: `Alias name "${trimmed}" must start with a letter or underscore and contain only letters, numbers, and underscores.`,
+        };
+    }
+    if (EXRAIL_RESERVED_WORDS.has(trimmed.toUpperCase())) {
+        return { ok: false, reason: `"${trimmed}" is a reserved EXRAIL command name and cannot be used as an alias.` };
+    }
+    return { ok: true };
+}
+
+/**
+ * The ALIAS value is an optional plain integer (EX-RAIL auto-assigns one when omitted).
+ * A leading zero on a multi-digit value is flagged because C interprets it as octal —
+ * see the "Important Restriction" note on the ALIAS command reference page.
+ */
+export function validateAliasValue(rawValue: string): { ok: true } | { ok: false; reason: string } {
+    const trimmed = rawValue.trim();
+    if (trimmed === '') return { ok: true };
+    if (!/^\d+$/.test(trimmed)) {
+        return { ok: false, reason: `Alias value "${trimmed}" must be a whole number, or left blank to auto-assign one.` };
+    }
+    if (trimmed.length > 1 && trimmed.startsWith('0')) {
+        return {
+            ok: false,
+            reason: `Alias value "${trimmed}" has a leading zero, which C treats as octal — use "${Number(trimmed)}" instead.`,
+        };
+    }
+    return { ok: true };
+}
+
+export function getPrimaryAliasForId(aliases: AliasEntry[], id: number, type?: AliasTargetType): AliasEntry | undefined {
+    return aliases.find(alias => parseAliasNumericValue(alias.value) === id && (!type || alias.aliasType === type));
 }
 
 export function collectObjectIdReferences(id: number, data: ObjectIdCollections): ObjectIdReference[] {
@@ -306,23 +366,24 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
     return lines.join('\n').trim();
 }
 
+/** ALIAS(name[, value]) — see https://dcc-ex.com/exrail/exrail-command-reference.html#aliases */
 export function parseAliasesFromFile(fileContent: string): AliasEntry[] {
     const uncommented = fileContent
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const defRe = /^\s*#define\s+(\w+)\s+"?([^\"]*)"?\s*(?:\/\/\s*(.*))?$/gm;
+    const aliasRe = /\bALIAS\s*\(\s*([A-Za-z_]\w*)\s*(?:,\s*([^),]*))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     const out: AliasEntry[] = [];
     let m: RegExpExecArray | null;
-    while ((m = defRe.exec(uncommented)) !== null) {
-        out.push({ name: m[1], value: m[2], aliasType: parseAliasTypeComment(m[3]) });
+    while ((m = aliasRe.exec(uncommented)) !== null) {
+        out.push({ name: m[1], value: (m[2] ?? '').trim(), aliasType: parseAliasTypeComment(m[3]) });
     }
     return out;
 }
 
 export function serializeAliasesToFile(aliases: AliasEntry[]): string {
     return aliases.map(a => {
-        let line = `#define ${a.name} "${a.value}"`;
+        let line = a.value.trim() === '' ? `ALIAS(${a.name})` : `ALIAS(${a.name}, ${a.value})`;
         if (a.aliasType) line += ` // type: ${a.aliasType}`;
         return line;
     }).join('\n');
