@@ -6,19 +6,29 @@ export interface RouteTurnoutCommand {
     state: 'THROWN' | 'CLOSED'
 }
 
-const TOKEN_RE = /\b(THROW|CLOSE)\s*\(\s*(\d+)\s*\)/g
+/** Resolves a THROW/CLOSE argument that isn't a plain number (an ALIAS name) to a turnout id. Returns undefined if it can't be resolved. */
+export type TurnoutAliasResolver = (name: string) => number | undefined
+
+const TOKEN_RE = /\b(THROW|CLOSE)\s*\(\s*([A-Za-z_]\w*|\d+)\s*\)/g
 
 /**
- * Scans a route's raw EX-RAIL body for numeric THROW(id)/CLOSE(id) calls, in
- * order. Alias-referenced turnouts (THROW(myAlias)) aren't resolved and are
- * skipped. Shared by deriveRouteStatus (compare against live state) and
+ * Scans a route's raw EX-RAIL body for THROW(...)/CLOSE(...) calls, in
+ * order. Each argument is either a numeric turnout id or an ALIAS name —
+ * EX-RAIL routes can freely mix both. Numeric arguments resolve directly;
+ * alias arguments are resolved via `resolveAlias` — skipped if it's omitted
+ * or can't resolve the name, same as an unconfigured numeric id would be.
+ * Shared by deriveRouteStatus (compare against live state) and
  * ThrottleService.triggerRoute (replay as explicit <T id state> commands).
  */
-export function parseRouteTurnoutCommands(body: string): RouteTurnoutCommand[] {
-    return Array.from(body.matchAll(TOKEN_RE), (match) => ({
-        id: Number(match[2]),
-        state: match[1] === 'THROW' ? ('THROWN' as const) : ('CLOSED' as const),
-    }))
+export function parseRouteTurnoutCommands(body: string, resolveAlias?: TurnoutAliasResolver): RouteTurnoutCommand[] {
+    const out: RouteTurnoutCommand[] = []
+    for (const match of body.matchAll(TOKEN_RE)) {
+        const token = match[2]
+        const id = /^\d+$/.test(token) ? Number(token) : resolveAlias?.(token)
+        if (id === undefined) continue
+        out.push({ id, state: match[1] === 'THROW' ? 'THROWN' : 'CLOSED' })
+    }
+    return out
 }
 
 /**
@@ -30,11 +40,15 @@ export function parseRouteTurnoutCommands(body: string): RouteTurnoutCommand[] {
  * UNKNOWN; only when every referenced turnout is live and matches is the
  * route MATCHED.
  */
-export function deriveRouteStatus(body: string, liveStates: ReadonlyMap<number, TurnoutLiveState>): RouteStatus {
+export function deriveRouteStatus(
+    body: string,
+    liveStates: ReadonlyMap<number, TurnoutLiveState>,
+    resolveAlias?: TurnoutAliasResolver,
+): RouteStatus {
     let sawUnknown = false
     let sawAny = false
 
-    for (const { id, state: expected } of parseRouteTurnoutCommands(body)) {
+    for (const { id, state: expected } of parseRouteTurnoutCommands(body, resolveAlias)) {
         sawAny = true
         const live = liveStates.get(id) ?? 'UNKNOWN'
 

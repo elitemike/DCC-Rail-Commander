@@ -229,6 +229,12 @@ export function getPrimaryAliasForId(aliases: AliasEntry[], id: number, type?: A
     return aliases.find(alias => parseAliasNumericValue(alias.value) === id && (!type || alias.aliasType === type));
 }
 
+/** Reverse of getPrimaryAliasForId — resolves an alias name to its numeric target id, scoped to `type` if given (same type-scoping rule, to avoid cross-type ID bleed). */
+export function getAliasIdByName(aliases: AliasEntry[], name: string, type?: AliasTargetType): number | undefined {
+    const alias = aliases.find(a => a.name === name && (!type || a.aliasType === type));
+    return alias ? parseAliasNumericValue(alias.value) ?? undefined : undefined;
+}
+
 export function collectObjectIdReferences(id: number, data: ObjectIdCollections): ObjectIdReference[] {
     const references: ObjectIdReference[] = [];
 
