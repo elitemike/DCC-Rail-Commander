@@ -168,7 +168,7 @@ test('direction buttons update the highlighted state, and the speed stepper mirr
     await expect(speedStepper).toHaveValue('50')
 
     await card.getByRole('button', { name: 'Stop' }).click()
-    // The stepper is polled back into sync with cab.speed every 200ms.
+    // The stepper is synced to cab.speed via an Aurelia observer subscription.
     await expect(speedStepper).toHaveValue('0', { timeout: 2_000 })
 })
 
