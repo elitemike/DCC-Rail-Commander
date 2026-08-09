@@ -8,13 +8,13 @@ import {
     type TurnoutStatus,
     type RouteStatusEntry,
 } from '../../src/renderer/src/services/throttle.service'
-import type { Turnout, RouteEntry } from '../../src/renderer/src/utils/myAutomationParser'
+import type { Turnout, RouteEntry, AliasEntry } from '../../src/renderer/src/utils/myAutomationParser'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 function makeService(
     port: string | null = '/dev/ttyACM1',
-    configOverrides: { turnouts?: Turnout[]; routes?: RouteEntry[] } = {},
+    configOverrides: { turnouts?: Turnout[]; routes?: RouteEntry[]; aliases?: AliasEntry[] } = {},
 ) {
     const service = Object.create(ThrottleService.prototype) as ThrottleService
     const write = vi.fn().mockResolvedValue(undefined)
@@ -25,6 +25,7 @@ function makeService(
         configEditorState: {
             turnouts: configOverrides.turnouts ?? [],
             routes: configOverrides.routes ?? [],
+            aliases: configOverrides.aliases ?? [],
         },
         throttles: [] as ThrottleCabState[],
         trackPower: null as boolean | null,
@@ -34,6 +35,10 @@ function makeService(
     })
 
     return { service, write }
+}
+
+function makeAlias(name: string, value: number, aliasType?: AliasEntry['aliasType']): AliasEntry {
+    return { name, value: String(value), aliasType }
 }
 
 function makeTurnout(id: number): Turnout {
@@ -362,6 +367,19 @@ describe('ThrottleService._handleLine — turnout broadcasts', () => {
         expect(service.routeStatuses.find((r) => r.id === 2)).toBe(unrelated)
         expect(service.routeStatuses.find((r) => r.id === 2)).toMatchObject({ status: 'UNKNOWN' })
     })
+
+    it('recomputes route status for a route referencing the changed turnout by ALIAS', () => {
+        const { service } = makeService('/dev/ttyACM1', {
+            turnouts: [makeTurnout(5)],
+            routes: [makeRoute(1, 'THROW(myAlias)\nDONE')],
+            aliases: [makeAlias('myAlias', 5, 'Turnout')],
+        })
+        ;(service as unknown as { _seedTurnoutAndRouteStatuses(): void })._seedTurnoutAndRouteStatuses()
+
+        ;(service as unknown as { _handleLine(line: string): void })._handleLine('<H 5 1>')
+
+        expect(service.routeStatuses.find((r) => r.id === 1)).toMatchObject({ id: 1, status: 'MATCHED' })
+    })
 })
 
 describe('ThrottleService.throwTurnout / closeTurnout', () => {
@@ -414,6 +432,28 @@ describe('ThrottleService.triggerRoute', () => {
         service.triggerRoute(99)
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '</ START 99>\n')
+        expect(write).toHaveBeenCalledTimes(1)
+    })
+
+    it('resolves an ALIAS-referenced turnout, mixed alongside a plain numeric id, to its real id', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', {
+            routes: [makeRoute(1, 'THROW(myAlias)\nCLOSE(6)\nDONE')],
+            aliases: [makeAlias('myAlias', 5, 'Turnout')],
+        })
+        service.triggerRoute(1)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 5 1>\n')
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T 6 0>\n')
+    })
+
+    it('does not resolve an alias scoped to a different type (e.g. Roster) as a turnout', async () => {
+        const { service, write } = makeService('/dev/ttyACM1', {
+            routes: [makeRoute(1, 'THROW(myAlias)\nDONE')],
+            aliases: [makeAlias('myAlias', 5, 'Roster')],
+        })
+        service.triggerRoute(1)
+        await flush(service)
+        expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '</ START 1>\n')
         expect(write).toHaveBeenCalledTimes(1)
     })
 })

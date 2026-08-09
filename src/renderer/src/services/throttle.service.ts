@@ -4,6 +4,7 @@ import { ConfigEditorState } from '../models/config-editor-state'
 import { UsbService } from './usb.service'
 import { createLineSplitter } from '../utils/serial-line-buffer'
 import { deriveRouteStatus, parseRouteTurnoutCommands, type RouteStatus, type TurnoutLiveState } from '../utils/routeStatus'
+import { getAliasIdByName } from '../utils/myAutomationParser'
 
 /** F0-F28 — matches the 29-function cap already enforced by the roster editor. */
 export const MAX_FUNCTIONS = 29
@@ -279,9 +280,15 @@ export class ThrottleService {
         void this._send(`</ START ${id}>`)
         const route = this.configEditorState.routes.find((r) => r.id === id)
         if (!route) return
-        for (const { id: turnoutId, state } of parseRouteTurnoutCommands(route.body)) {
+        const commands = parseRouteTurnoutCommands(route.body, (name) => this._resolveTurnoutAlias(name))
+        for (const { id: turnoutId, state } of commands) {
             void this._send(`<T ${turnoutId} ${state === 'THROWN' ? 1 : 0}>`)
         }
+    }
+
+    /** Resolves an ALIAS name referenced in a route body to its turnout id — see parseRouteTurnoutCommands/deriveRouteStatus. Routes can freely mix numeric turnout ids and alias names. */
+    private _resolveTurnoutAlias(name: string): number | undefined {
+        return getAliasIdByName(this.configEditorState.aliases, name, 'Turnout')
     }
 
     powerOn(): void {
@@ -343,7 +350,7 @@ export class ThrottleService {
         for (const entry of this.routeStatuses) {
             const route = this.configEditorState.routes.find((r) => r.id === entry.id)
             if (!route) continue
-            const status = deriveRouteStatus(route.body, live)
+            const status = deriveRouteStatus(route.body, live, (name) => this._resolveTurnoutAlias(name))
             if (entry.status !== status) entry.status = status
         }
     }
