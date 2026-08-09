@@ -257,7 +257,7 @@ test.describe('Turnout Editor', () => {
         await openAliasesEditor(page)
         await switchToRaw(page)
 
-        await setMonacoContent(page, '#define YARD_SWITCH "200" // type: Turnout')
+        await setMonacoContent(page, 'ALIAS(YARD_SWITCH, 200) // type: Turnout')
 
         await openTurnoutEditor(page)
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
@@ -277,7 +277,7 @@ test.describe('Turnout Editor', () => {
         await openAliasesEditor(page)
         await switchToRaw(page)
 
-        await expect(page.locator('div.monaco-editor')).toContainText('#define JUNCTION_MAIN "200" // type: Turnout')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(JUNCTION_MAIN, 200) // type: Turnout')
     })
 
     test('can create a cross-type turnout ID conflict used by alias validation', async ({ workspacePage: page }) => {
@@ -312,14 +312,14 @@ test.describe('Turnout Editor', () => {
         // Shared IDs are now valid because alias usage is context-driven.
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('#define AMBIG_ALIAS "3" // type: Turnout')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(AMBIG_ALIAS, 3) // type: Turnout')
     })
 
     test('deleting a turnout alias in the aliases editor clears the alias field in the turnout editor', async ({ workspacePage: page }) => {
         // Set up alias for turnout 200 via the aliases editor raw view
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, '#define YARD_SWITCH "200" // type: Turnout')
+        await setMonacoContent(page, 'ALIAS(YARD_SWITCH, 200) // type: Turnout')
 
         // Open turnout editor, select the turnout with the alias, verify it shows
         await openTurnoutEditor(page)

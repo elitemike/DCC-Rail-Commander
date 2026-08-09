@@ -598,10 +598,15 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         completions: [
             {
                 label: 'ALIAS',
-                detail: '#define alias',
-                documentation: 'Define a named alias or #define used elsewhere.',
-                insertText: '#define ${1:NAME} ${2:VALUE}',
-                hover: { title: 'ALIAS / #define', description: 'Define a preprocessor alias or helper constant.' },
+                detail: 'ALIAS(name[, value])',
+                documentation: 'Define a readable name for a numeric ID (turnout, sensor, route, sequence, or roster address).',
+                insertText: 'ALIAS(${1:NAME}, ${2:VALUE})',
+                hover: {
+                    title: 'ALIAS Macro',
+                    description: 'Creates a readable name that can be used in place of a numeric ID elsewhere in EX-RAIL. The value is optional — if omitted, EX-RAIL auto-assigns one.',
+                    example: 'ALIAS(YARD_SWITCH, 200)',
+                    note: 'Names must start with a letter or underscore and contain only letters, numbers, and underscores. Avoid a leading zero on the value (e.g. 010) — C treats it as octal.',
+                },
             },
         ],
     },

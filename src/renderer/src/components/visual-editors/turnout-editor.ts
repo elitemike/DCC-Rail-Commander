@@ -21,7 +21,7 @@ export class TurnoutEditorCustomElement {
     private readonly _aliasSubscriber = {
         handleChange: () => {
             if (this.editBuffer !== null) {
-                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id)
+                this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')
             }
         },
     }
@@ -59,7 +59,7 @@ export class TurnoutEditorCustomElement {
     attached(): void {
         // Refresh alias display in case aliases changed while this editor was inactive
         if (this.editBuffer !== null) {
-            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id)
+            this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
@@ -159,7 +159,7 @@ export class TurnoutEditorCustomElement {
     private _setBuffer(index: number, entry: Turnout): void {
         this.editBufferIndex = index
         this.editBuffer = { ...entry }
-        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id)
+        this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id, 'Turnout')
         this.errorMessage = ''
     }
 
@@ -176,10 +176,29 @@ export class TurnoutEditorCustomElement {
         this.errorMessage = ''
     }
 
+    /**
+     * `value.bind` on `<input type="number">` round-trips through the DOM's `.value`,
+     * which is always a string — so id/pin/angle/addr fields land back in `editBuffer`
+     * as strings after any edit. Left uncoerced, strict-equality lookups elsewhere
+     * (alias type resolution, EXRAIL reference validation) silently fail to match a
+     * numeric target and can resolve to the wrong object type.
+     */
+    private _coerceNumericFields(t: Turnout): Turnout {
+        const id = Number(t.id)
+        if (t.type === 'SERVO') {
+            return { ...t, id, pin: Number(t.pin), activeAngle: Number(t.activeAngle), inactiveAngle: Number(t.inactiveAngle) }
+        }
+        if (t.type === 'DCC') {
+            return { ...t, id, addr: Number(t.addr), subAddr: Number(t.subAddr) }
+        }
+        return { ...t, id, pin: Number(t.pin) }
+    }
+
     commitBuffer(): void {
         if (this.editBuffer === null || this.editBufferIndex === null) return
+        this.editBuffer = this._coerceNumericFields(this.editBuffer)
         const existing = this.state.turnouts?.[this.editBufferIndex]
-        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id) : ''
+        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id, 'Turnout') : ''
         const aliasChanged = !!existing && (existing.id !== this.editBuffer.id || existingAliasName !== this.aliasInput.trim())
         this.state.updateTurnoutEntry(this.editBufferIndex, { ...this.editBuffer })
         if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {

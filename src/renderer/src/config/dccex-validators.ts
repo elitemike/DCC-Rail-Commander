@@ -11,7 +11,7 @@
 
 import * as monaco from 'monaco-editor'
 import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
-import { inferAliasTypes, parseAliasNumericValue, type AliasTargetType } from '../utils/myAutomationParser'
+import { inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, type AliasTargetType } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
 
@@ -436,6 +436,49 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
     }
 }
 
+// ── ALIAS validator (myAliases.h) ─────────────────────────────────────────────
+
+/**
+ * ALIAS(name[, value])
+ *   arg 1 — identifier: starts with a letter/underscore, then letters/digits/underscores,
+ *           must not collide with an EXRAIL command name
+ *   arg 2 — optional plain integer (no leading zero — C treats that as octal)
+ */
+function validateAlias(text: string, out: monaco.editor.IMarkerData[]): void {
+    const seen = new Map<string, number>()
+
+    for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, 'ALIAS')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+
+        if (args.length < 1 || args.length > 2) {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                `ALIAS expects 1 or 2 arguments (name[, value]) but got ${args.length}.`,
+            ))
+            continue
+        }
+
+        const [name, value] = args
+        const nameCheck = validateAliasName(name.value)
+        if (!nameCheck.ok) {
+            out.push(makeMarker(text, name.start, name.end, nameCheck.reason))
+        } else if (seen.has(name.value)) {
+            out.push(makeMarker(text, name.start, name.end,
+                `Alias name "${name.value}" is defined more than once.`,
+            ))
+        } else {
+            seen.set(name.value, name.start)
+        }
+
+        if (value) {
+            const valueCheck = validateAliasValue(value.value)
+            if (!valueCheck.ok) {
+                out.push(makeMarker(text, value.start, value.end, valueCheck.reason))
+            }
+        }
+    }
+}
+
 // ── EXRAIL object-reference validator (myAutomation.h / myRoutes.h / mySequences.h) ────
 
 /** True when `value` is a configured object ID or a defined alias resolving to one of `targetTypes`. */
@@ -583,6 +626,7 @@ const OWNER = 'dccex-validator'
 
 const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerData[]) => void> = {
     'myRoster.h': validateRoster,
+    'myAliases.h': validateAlias,
     'myTurnouts.h': (text, out) => {
         validateServoTurnout(text, out)
         validateTurnout(text, out)

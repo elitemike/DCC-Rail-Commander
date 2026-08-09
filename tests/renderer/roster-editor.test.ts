@@ -588,12 +588,12 @@ describe('RosterEditorCustomElement alias integration', () => {
 
 describe('Alias type comments', () => {
     it('parses alias type metadata from an end-of-line comment', () => {
-        const aliases = parseAliasesFromFile('#define YARD_EXIT "200" // type: Turnout')
+        const aliases = parseAliasesFromFile('ALIAS(YARD_EXIT, 200) // type: Turnout')
         expect(aliases).toEqual([{ name: 'YARD_EXIT', value: '200', aliasType: 'Turnout' }])
     })
 
     it('serializes alias type metadata back to myAliases.h', () => {
         const text = serializeAliasesToFile([{ name: 'SW1', value: '42', aliasType: 'Roster' }])
-        expect(text).toBe('#define SW1 "42" // type: Roster')
+        expect(text).toBe('ALIAS(SW1, 42) // type: Roster')
     })
 })

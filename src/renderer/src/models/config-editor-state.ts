@@ -22,6 +22,8 @@ import {
     parseAliasNumericValue,
     collectObjectIdReferences,
     parseAliasTypeComment,
+    validateAliasName,
+    validateAliasValue,
     type Roster,
     type Turnout,
     type RosterFunction,
@@ -421,8 +423,8 @@ export class ConfigEditorState {
         return { ok: true }
     }
 
-    getPrimaryAliasNameForId(id: number): string {
-        return getPrimaryAliasForId(this.aliases, id)?.name ?? ''
+    getPrimaryAliasNameForId(id: number, type?: AliasTargetType): string {
+        return getPrimaryAliasForId(this.aliases, id, type)?.name ?? ''
     }
 
     getObjectIdReferences(id: number) {
@@ -442,9 +444,16 @@ export class ConfigEditorState {
     }
 
     private normalizeAliasEntry(alias: AliasEntry): { ok: true; alias: AliasEntry } | { ok: false; reason: string } {
+        const nameValidation = validateAliasName(alias.name)
+        if (!nameValidation.ok) return nameValidation
+
+        const valueValidation = validateAliasValue(alias.value)
+        if (!valueValidation.ok) return valueValidation
+
+        const name = alias.name.trim()
         const numericValue = parseAliasNumericValue(alias.value)
         if (numericValue === null) {
-            return { ok: true, alias: { ...alias, aliasType: alias.aliasType ? parseAliasTypeComment(`type: ${alias.aliasType}`) : alias.aliasType } }
+            return { ok: true, alias: { ...alias, name, aliasType: alias.aliasType ? parseAliasTypeComment(`type: ${alias.aliasType}`) : alias.aliasType } }
         }
 
         const validation = this.validateAliasTargetId(numericValue)
@@ -452,10 +461,17 @@ export class ConfigEditorState {
 
         const references = this.getObjectIdReferences(numericValue)
         const resolvedType = alias.aliasType ?? (references.length === 1 ? references[0]?.type : undefined)
-        return { ok: true, alias: { ...alias, aliasType: resolvedType } }
+        return { ok: true, alias: { ...alias, name, aliasType: resolvedType } }
     }
 
     normalizeAliases(aliases: AliasEntry[]): { ok: true; aliases: AliasEntry[] } | { ok: false; reason: string } {
+        const seen = new Set<string>()
+        for (const alias of aliases) {
+            const name = alias.name.trim()
+            if (seen.has(name)) return { ok: false, reason: `Alias name "${name}" is used more than once.` }
+            seen.add(name)
+        }
+
         const normalized: AliasEntry[] = []
         for (const alias of aliases) {
             const result = this.normalizeAliasEntry(alias)
@@ -487,7 +503,11 @@ export class ConfigEditorState {
                 parseAliasNumericValue(alias.value) === previousId && alias.aliasType === aliasType,
             )
         }
-        if (aliasIndex === -1) {
+        // Only fall back to an untyped ID match when the caller didn't tell us what type
+        // of object this is — otherwise this can grab another type's alias that merely
+        // happens to share the same numeric ID (e.g. editing a roster entry whose DCC
+        // address collides with an unrelated turnout ID) and corrupt it in place.
+        if (aliasIndex === -1 && !aliasType) {
             aliasIndex = aliases.findIndex(alias => parseAliasNumericValue(alias.value) === previousId)
         }
 
@@ -501,12 +521,23 @@ export class ConfigEditorState {
             return { ok: true }
         }
 
+        const nameValidation = validateAliasName(trimmedName)
+        if (!nameValidation.ok) return nameValidation
+
         const validation = this.validateAliasTargetId(nextId)
         if (!validation.ok) {
             return validation
         }
 
-        const normalizedType = this.getObjectIdReferences(nextId)[0]?.type ?? aliasType
+        // The caller (roster/turnout editor) already knows which kind of object this alias
+        // is for — trust it over `getObjectIdReferences`, which returns whichever object type
+        // happens to match `nextId` first and can pick the wrong type when IDs collide across
+        // types (e.g. a turnout ID that numerically matches an unrelated roster address).
+        // The caller (roster/turnout editor) already knows which kind of object this alias
+        // is for — trust it over `getObjectIdReferences`, which returns whichever object type
+        // happens to match `nextId` first and can pick the wrong type when IDs collide across
+        // types (e.g. a turnout ID that numerically matches an unrelated roster address).
+        const normalizedType = aliasType ?? this.getObjectIdReferences(nextId)[0]?.type
         const aliasByNameIndex = aliases.findIndex(alias => {
             if (alias.name !== trimmedName) return false
             if (!normalizedType || !alias.aliasType) return false
@@ -521,6 +552,11 @@ export class ConfigEditorState {
         const updateIndex = aliasIndex !== -1
             ? aliasIndex
             : (aliasByNameIndex !== -1 ? aliasByNameIndex : aliasByTargetIndex)
+
+        const conflictIndex = aliases.findIndex((alias, i) => alias.name === trimmedName && i !== updateIndex)
+        if (conflictIndex !== -1) {
+            return { ok: false, reason: `Alias name "${trimmedName}" is already used for a different ID. Choose a unique name.` }
+        }
 
         if (updateIndex !== -1) {
             aliases[updateIndex] = { ...aliases[updateIndex], name: trimmedName, value: String(nextId), aliasType: normalizedType }
