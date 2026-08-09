@@ -1,4 +1,4 @@
-import { resolve } from 'aurelia'
+import { IObserverLocator, resolve } from 'aurelia'
 import { InstallerState } from '../models/installer-state'
 import { ConfigEditorState } from '../models/config-editor-state'
 import { UsbService } from './usb.service'
@@ -53,20 +53,6 @@ export interface RouteStatusEntry {
 }
 
 /**
- * How often turnout states are re-queried (`<T>`). Locos don't need an
- * equivalent poll: DCC-EX broadcasts `<l cab reg speedByte functmap>` to
- * every connected client whenever a cab's speed *or* function state changes,
- * regardless of which throttle (this app, another instance, WiFi/JMRI, a
- * physical cab) issued the `<t>`/`<F>` command — confirmed by capturing the
- * broadcast in the serial monitor for an `<F>`-only change. So the one-off
- * `<t cab>` sent from acquire() to seed a newly-acquired cab's current state
- * is enough; live changes after that arrive on their own. Turnouts get their
- * own timer here because a `<T>` reply usefully covers every turnout at once,
- * unlike a per-cab request.
- */
-const TURNOUT_POLL_INTERVAL_MS = 10_000
-
-/**
  * How long to wait after a `<T>` query before assuming any turnout still
  * showing UNKNOWN is actually CLOSED. A real, defined turnout always answers
  * `<T>` with an `<H id state>` line — there's no such thing as a turnout
@@ -87,8 +73,20 @@ const TURNOUT_UNKNOWN_GRACE_MS = 3000
  * device-side throttle-session concept, any number of cabs can be driven
  * concurrently over one connection, including other throttles entirely
  * outside this app (WiFi apps, JMRI, physical cabs) — their speed/function
- * changes reach us the same way ours do, via the `<l>` broadcast (see
- * TURNOUT_POLL_INTERVAL_MS for why locos don't need a poll but turnouts do).
+ * changes reach us the same way ours do, via the `<l>` broadcast. Turnouts
+ * are assumed to work the same way: DCC-EX broadcasts `<H id state>` to
+ * every connected client whenever a turnout's state changes, regardless of
+ * source (this app's own `<T id state>`, another throttle, a physical
+ * button, or EX-RAIL) — the mock transport already echoes `<H>` this way in
+ * response to any `<T id state>`, and `_handleLine` already treats `<H>` as
+ * a broadcast it can receive unprompted, same as it did before this poll was
+ * removed. So neither locos nor turnouts need polling: a one-off `<T>` query
+ * in initialize() (mirroring the one-off `<t cab>` sent from acquire())
+ * seeds current state, and live changes after that arrive on their own via
+ * `<H>`. The query is re-sent whenever the configured turnout/route list
+ * itself changes (see the `configEditorState` subscriptions below) so a
+ * newly-added turnout gets its real position fetched rather than defaulting
+ * to UNKNOWN indefinitely.
  *
  * All writes go through a single queue so concurrent throttle cards never
  * interleave bytes on the one open port.
@@ -97,6 +95,7 @@ export class ThrottleService {
     private readonly state = resolve(InstallerState)
     private readonly usb = resolve(UsbService)
     private readonly configEditorState = resolve(ConfigEditorState)
+    private readonly observerLocator = resolve(IObserverLocator)
 
     /**
      * Mutated via push()/splice() rather than reassigned, and each cab's
@@ -126,10 +125,25 @@ export class ThrottleService {
     private unsubData?: () => void
     private readonly lineSplitter = createLineSplitter((line) => this._handleLine(line))
     private writeQueue: Promise<void> = Promise.resolve()
-    private turnoutPollTimer?: ReturnType<typeof setInterval>
     private assumeClosedTimer?: ReturnType<typeof setTimeout>
 
-    /** Starts listening for `<l ...>`/`<p...>`/`<H ...>` broadcasts and polling for full state on the selected device's port. Safe to call more than once. */
+    /** Picks up turnouts added via the config editor while the panel is open and fetches their real position — see the class doc comment. */
+    private readonly _turnoutsConfigSubscriber = {
+        handleChange: () => {
+            this._seedTurnoutAndRouteStatuses()
+            this._queryTurnouts()
+        },
+    }
+
+    /** Picks up routes added via the config editor while the panel is open — no device query needed, status is derived from local turnout state. */
+    private readonly _routesConfigSubscriber = {
+        handleChange: () => {
+            this._seedTurnoutAndRouteStatuses()
+            this._recomputeRouteStatuses()
+        },
+    }
+
+    /** Starts listening for `<l ...>`/`<p...>`/`<H ...>` broadcasts on the selected device's port. Safe to call more than once. */
     initialize(): void {
         if (this.unsubData || !window.usb) return
         this.unsubData = window.usb.onData(({ path, data }) => {
@@ -139,7 +153,8 @@ export class ThrottleService {
         this._seedTurnoutAndRouteStatuses()
         void this._send('<s>') // seed the initial track-power state
         this._queryTurnouts()
-        this.turnoutPollTimer = setInterval(() => this._pollTurnouts(), TURNOUT_POLL_INTERVAL_MS)
+        this.observerLocator.getObserver(this.configEditorState, 'turnouts').subscribe(this._turnoutsConfigSubscriber)
+        this.observerLocator.getObserver(this.configEditorState, 'routes').subscribe(this._routesConfigSubscriber)
     }
 
     /** Sends `<T>` and schedules the UNKNOWN -> CLOSED grace-period fallback — see TURNOUT_UNKNOWN_GRACE_MS. */
@@ -163,9 +178,10 @@ export class ThrottleService {
     /**
      * Ensures every currently-configured turnout/route has a stable status
      * entry before any view binds to it — find-or-create, never replaces an
-     * existing entry. Re-run on every poll (cheap) so turnouts/routes added
-     * or removed via the config editor while the panel is open still get an
-     * entry without waiting for a remount.
+     * existing entry. Called from initialize() and again whenever
+     * configEditorState.turnouts/routes changes (see the subscribers above),
+     * so turnouts/routes added via the config editor while the panel is open
+     * still get an entry without waiting for a remount.
      */
     private _seedTurnoutAndRouteStatuses(): void {
         for (const turnout of this.configEditorState.turnouts) {
@@ -183,16 +199,10 @@ export class ThrottleService {
     dispose(): void {
         this.unsubData?.()
         this.unsubData = undefined
-        if (this.turnoutPollTimer) clearInterval(this.turnoutPollTimer)
-        this.turnoutPollTimer = undefined
+        this.observerLocator.getObserver(this.configEditorState, 'turnouts').unsubscribe(this._turnoutsConfigSubscriber)
+        this.observerLocator.getObserver(this.configEditorState, 'routes').unsubscribe(this._routesConfigSubscriber)
         if (this.assumeClosedTimer) clearTimeout(this.assumeClosedTimer)
         this.assumeClosedTimer = undefined
-    }
-
-    /** Re-requests turnout states — see TURNOUT_POLL_INTERVAL_MS. */
-    private _pollTurnouts(): void {
-        this._seedTurnoutAndRouteStatuses()
-        this._queryTurnouts()
     }
 
     isAcquired(cab: number): boolean {
