@@ -244,11 +244,10 @@ describe('ThrottleService power + e-stop', () => {
 
 // ── incoming <l> broadcast parsing ───────────────────────────────────────────
 
-describe('ThrottleService._pollTurnouts', () => {
-    it('re-requests turnout states (<T>)', async () => {
-        vi.useFakeTimers()
+describe('ThrottleService._queryTurnouts', () => {
+    it('sends <T> to request turnout states', async () => {
         const { service, write } = makeService()
-        ;(service as unknown as { _pollTurnouts(): void })._pollTurnouts()
+        ;(service as unknown as { _queryTurnouts(): void })._queryTurnouts()
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<T>\n')
     })
