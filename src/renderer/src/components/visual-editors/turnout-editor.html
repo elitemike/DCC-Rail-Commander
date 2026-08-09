@@ -20,7 +20,14 @@
         </div>
 
         <!-- ── Visual tab ─────────────────────────────────────────────────── -->
-        <div if.bind="activeTab === 'visual'" style="flex:1;min-height:0;overflow:hidden;">
+        <!-- Class-toggled (not if.bind) — #turnout-splitter hosts a Syncfusion Splitter
+             instance created once in attached(); if.bind would destroy/recreate this
+             element on every Visual/Raw toggle, orphaning that widget instance (its
+             DOM would be gone while splitterObj is still alive), which then throws
+             when detaching() later calls splitterObj.destroy() on it and can abort
+             Aurelia's own teardown of this component — see roster-editor.html, which
+             already uses this same class-toggle convention for the same reason. -->
+        <div class="${activeTab === 'visual' ? '' : 'hidden'}" style="flex:1;min-height:0;overflow:hidden;">
             <div id="turnout-splitter" style="height:100%;width:100%;">
 
                 <!-- Sidebar -->
@@ -341,7 +348,7 @@
         </div><!-- end visual tab -->
 
         <!-- ── Raw tab ────────────────────────────────────────────────────── -->
-        <div if.bind="activeTab === 'raw'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="${activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'}">
             <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myTurnouts.h"
                 on-text-change.bind="onRawChange"></monaco-editor>
         </div>

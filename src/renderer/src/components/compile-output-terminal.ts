@@ -9,17 +9,21 @@ export class CompileOutputTerminalCustomElement {
     private term!: Terminal
     private fitAddon!: FitAddon
     private resizeObserver?: ResizeObserver
+    /** Guards the deferred initTerminal() below — document.fonts.load() can resolve after this component has already been torn down (e.g. the user switches sections/tabs before the font finishes loading), and terminalEl is a detached node by then. */
+    private _detached = false
 
     attached(): void {
         // xterm.js uses a canvas renderer — the font must be fully loaded before
         // Terminal.open() is called or character-cell measurements are taken
         // against the fallback font, producing visibly wrong glyph spacing.
         document.fonts.load('400 12px "JetBrains Mono NF"').finally(() => {
+            if (this._detached) return
             this.initTerminal()
         })
     }
 
     detaching(): void {
+        this._detached = true
         this.resizeObserver?.disconnect()
         this.term?.dispose()
     }

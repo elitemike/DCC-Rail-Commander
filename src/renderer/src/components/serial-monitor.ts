@@ -457,11 +457,15 @@ export class SerialMonitorCustomElement {
     private readonly usb = resolve(UsbService)
     private readonly state = resolve(InstallerState)
 
+    /** Guards the deferred init below — document.fonts.load() can resolve after this component has already been torn down (e.g. the user switches sections/tabs before the font finishes loading); initTerminal() would then open() a detached terminalEl, and subscribeToPort()/connectPort() would open a port/subscriptions detaching() already ran and won't run again to clean up. */
+    private _detached = false
+
     // ── Aurelia lifecycle ──────────────────────────────────────────────────
     attached(): void {
         // xterm.js uses a canvas renderer — the font must be fully loaded before
         // Terminal.open() is called or it falls back to the system monospace.
         document.fonts.load('400 12px "JetBrains Mono NF"').finally(() => {
+            if (this._detached) return
             this.initTerminal()
             this.subscribeToPort()
             this.connectPort()
@@ -469,6 +473,7 @@ export class SerialMonitorCustomElement {
     }
 
     detaching(): void {
+        this._detached = true
         this.resizeObserver?.disconnect()
         this.unsubData?.()
         this.unsubError?.()

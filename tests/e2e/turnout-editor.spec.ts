@@ -558,3 +558,31 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('PIN_TURNOUT(400')
     })
 })
+
+// ── Regression: switching sections after a Raw/Visual toggle must fully unmount ──
+
+test('switching to another Configuration section after toggling Raw/Visual leaves no stale turnout-editor mounted', async ({ workspacePage: page }) => {
+    // turnout-editor.html previously gated its Visual-tab pane (which hosts a
+    // Syncfusion Splitter widget) behind if.bind on the Raw/Visual toggle —
+    // CLAUDE.md documents that SF-widget-containing tabs must use CSS-class
+    // toggling instead, because if.bind destroys/recreates the element out from
+    // under the widget instance. That could corrupt the widget and, if its
+    // destroy() then threw during a later section switch, abort Aurelia's
+    // teardown of turnout-editor entirely — leaving it stuck in the DOM
+    // underneath whatever section was switched to.
+    const consoleErrors: string[] = []
+    page.on('pageerror', (err) => consoleErrors.push(err.message))
+
+    await openTurnoutEditor(page)
+    await page.getByText('Main Line Junction', { exact: false }).click()
+    await switchToRaw(page)
+    await switchToVisual(page)
+    await switchToRaw(page)
+    await switchToVisual(page)
+
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.locator('roster-editor')).toBeVisible()
+
+    await expect(page.locator('turnout-editor')).toHaveCount(0)
+    expect(consoleErrors).toEqual([])
+})
