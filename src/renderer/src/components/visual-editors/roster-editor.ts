@@ -68,6 +68,8 @@ export class RosterEditorCustomElement {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private splitterObj: Splitter | null = null
     private readonly observerLocator = resolve(IObserverLocator)
+    /** Guards the queueTask() below — this component can be torn down before the deferred Splitter/TreeView/ContextMenu creation runs, which would otherwise append live widgets into detached elements and leave broken instances for detaching() to (potentially) throw on. */
+    private _detached = false
 
     private readonly _aliasSubscriber = {
         handleChange: () => {
@@ -84,6 +86,7 @@ export class RosterEditorCustomElement {
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
+            if (this._detached) return
             const savedWidth = this._loadSidebarWidth()
             this.splitterObj = new Splitter({
                 paneSettings: [
@@ -170,6 +173,7 @@ export class RosterEditorCustomElement {
     }
 
     detaching(): void {
+        this._detached = true
         this.observerLocator.getObserver(this.state, 'aliases').unsubscribe(this._aliasSubscriber)
         if (this.activeTab === 'raw') {
             const text = this.rawEditor?.flush() ?? this._rawText
@@ -177,11 +181,14 @@ export class RosterEditorCustomElement {
         } else if (this.editBuffer !== null) {
             this.commitBuffer()
         }
-        this.sfContextMenu?.destroy()
+        // A widget left in a broken/partially-appended state must not be allowed to
+        // throw here — that would abort Aurelia's own teardown of this component
+        // mid-sequence and leave its DOM stuck in place instead of being removed.
+        try { this.sfContextMenu?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.sfContextMenu = null
-        this.sfTree?.destroy()
+        try { this.sfTree?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.sfTree = null
-        this.splitterObj?.destroy()
+        try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.splitterObj = null
     }
 

@@ -17,6 +17,8 @@ export class TurnoutEditorCustomElement {
     private readonly toastService = resolve(ToastService)
     private readonly observerLocator = resolve(IObserverLocator)
     private splitterObj: Splitter | null = null
+    /** Guards the queueTask() below — the component (or its #turnout-splitter, gated behind activeTab === 'visual') can be torn down before the deferred Splitter creation runs, which would otherwise append a live widget into a detached/stale element and leave a broken splitterObj for detaching() to (potentially) throw on. */
+    private _detached = false
 
     private readonly _aliasSubscriber = {
         handleChange: () => {
@@ -63,6 +65,7 @@ export class TurnoutEditorCustomElement {
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
+            if (this._detached || !document.getElementById('turnout-splitter')) return
             const savedWidth = this._loadSidebarWidth()
             this.splitterObj = new Splitter({
                 paneSettings: [
@@ -81,6 +84,7 @@ export class TurnoutEditorCustomElement {
     }
 
     detaching(): void {
+        this._detached = true
         this.observerLocator.getObserver(this.state, 'aliases').unsubscribe(this._aliasSubscriber)
         if (this.activeTab === 'raw') {
             const text = this.rawEditor?.flush() ?? this._rawText
@@ -88,7 +92,11 @@ export class TurnoutEditorCustomElement {
         } else if (this.editBuffer !== null) {
             this.commitBuffer()
         }
-        this.splitterObj?.destroy()
+        // A Splitter left in a broken/partially-appended state (see the queueTask
+        // guard above) must not be allowed to throw here — that would abort
+        // Aurelia's own teardown of this component mid-sequence and leave its DOM
+        // stuck in place instead of being removed.
+        try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.splitterObj = null
     }
 
