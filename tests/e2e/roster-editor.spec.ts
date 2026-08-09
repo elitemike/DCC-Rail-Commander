@@ -275,7 +275,7 @@ test.describe('Roster Editor', () => {
         await openAliasesEditor(page)
         await switchToRaw(page)
 
-        await setMonacoContent(page, '#define THOMAS_ALIAS "3" // type: Roster')
+        await setMonacoContent(page, 'ALIAS(THOMAS_ALIAS, 3) // type: Roster')
 
         await openRosterEditor(page)
         await page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first().locator('.e-fullrow').click()
@@ -295,7 +295,7 @@ test.describe('Roster Editor', () => {
         await openAliasesEditor(page)
         await switchToRaw(page)
 
-        await expect(page.locator('div.monaco-editor')).toContainText('#define BLUE_ENGINE "3" // type: Roster')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(BLUE_ENGINE, 3) // type: Roster')
     })
 
     // ── Invalid lines: commenting + toast ────────────────────────────────────

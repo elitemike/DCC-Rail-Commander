@@ -345,7 +345,7 @@ describe('Workspace.switchToConfig — disk rehydration', () => {
             sourceFolder: '/source/folder',
             lastModified: new Date().toISOString(),
             configFiles: [
-                { name: 'myAliases.h', content: '#define OLD_ALIAS 1\n' },
+                { name: 'myAliases.h', content: 'ALIAS(OLD_ALIAS, 1)\n' },
             ],
         }
 
@@ -359,7 +359,7 @@ describe('Workspace.switchToConfig — disk rehydration', () => {
             files: {
                 exists: vi.fn().mockImplementation(async (p: string) => p === '/source/folder/myAliases.h'),
                 readFile: vi.fn().mockImplementation(async (p: string) => {
-                    if (p === '/source/folder/myAliases.h') return '#define FRESH_ALIAS 1\n'
+                    if (p === '/source/folder/myAliases.h') return 'ALIAS(FRESH_ALIAS, 1)\n'
                     throw new Error('unexpected file read')
                 }),
             },

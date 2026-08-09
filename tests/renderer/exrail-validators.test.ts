@@ -91,3 +91,42 @@ describe('validateExrailReferences — other reference-taking commands', () => {
         expect(_runValidatorsForTest('myAutomation.h', 'DELAY(500)', DATA)).toHaveLength(0)
     })
 })
+
+describe('ALIAS validator (myAliases.h)', () => {
+    it('produces no marker for a valid ALIAS with a value', () => {
+        expect(_runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH, 200)')).toHaveLength(0)
+    })
+
+    it('produces no marker for a valid ALIAS with no value', () => {
+        expect(_runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH)')).toHaveLength(0)
+    })
+
+    it('flags a name that does not start with a letter or underscore', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(1SWITCH, 200)')
+        expect(markers.length).toBeGreaterThanOrEqual(1)
+        expect(markers[0].message).toContain('1SWITCH')
+    })
+
+    it('flags a name matching a reserved EXRAIL command', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(THROW, 200)')
+        expect(markers.length).toBeGreaterThanOrEqual(1)
+        expect(markers[0].message).toContain('reserved')
+    })
+
+    it('flags a value with a leading zero (interpreted as octal by C)', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH, 010)')
+        expect(markers.length).toBeGreaterThanOrEqual(1)
+        expect(markers[0].message).toContain('octal')
+    })
+
+    it('flags a duplicate alias name defined more than once', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH, 200)\nALIAS(YARD_SWITCH, 300)')
+        expect(markers.some(m => m.message.includes('defined more than once'))).toBe(true)
+    })
+
+    it('flags the wrong number of arguments', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(A, 1, 2)')
+        expect(markers.length).toBeGreaterThanOrEqual(1)
+        expect(markers[0].message).toContain('expects 1 or 2 arguments')
+    })
+})

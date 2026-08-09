@@ -228,4 +228,44 @@ describe('TurnoutEditorCustomElement alias integration', () => {
         expect(updateTurnoutEntry).toHaveBeenCalledWith(0, { ...existing, id: 201 })
         expect(syncAliasForId).toHaveBeenCalledWith(200, 201, 'NEW_TURNOUT', 'Turnout', 'OLD_TURNOUT')
     })
+
+    it('coerces numeric fields back to numbers before persisting (value.bind on <input type="number"> yields strings)', () => {
+        const existing = {
+            type: 'SERVO' as const,
+            id: 200,
+            pin: 25,
+            activeAngle: 410,
+            inactiveAngle: 205,
+            profile: 'Slow' as const,
+            description: 'Main Line Junction',
+            comment: '',
+            defaultState: 'CLOSED' as const,
+        }
+        const updateTurnoutEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                turnouts: [existing],
+                updateTurnoutEntry,
+                syncAliasForId,
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+            },
+            editBufferIndex: 0,
+            // Simulate what the DOM actually hands back from a number input: strings.
+            editBuffer: { ...existing, id: '3' as unknown as number, pin: '25' as unknown as number, activeAngle: '410' as unknown as number, inactiveAngle: '205' as unknown as number },
+            aliasInput: '',
+        })
+
+        editor.commitBuffer()
+
+        const [, persisted] = updateTurnoutEntry.mock.calls[0]
+        expect(persisted).toEqual({ ...existing, id: 3 })
+        expect(typeof persisted.id).toBe('number')
+        expect(typeof persisted.pin).toBe('number')
+        expect(typeof persisted.activeAngle).toBe('number')
+        expect(typeof persisted.inactiveAngle).toBe('number')
+        // syncAliasForId must also see the coerced numeric ID, not the raw string.
+        expect(syncAliasForId).toHaveBeenCalledWith(200, 3, '', 'Turnout', '')
+    })
 })
