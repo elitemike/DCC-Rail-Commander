@@ -1,4 +1,4 @@
-import { bindable, resolve } from 'aurelia'
+import { bindable, IObserverLocator, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Slider, NumericTextBox } from '@syncfusion/ej2-inputs'
 import { Button } from '@syncfusion/ej2-buttons'
@@ -26,6 +26,7 @@ interface FunctionButton {
 export class ThrottleCardCustomElement {
     private readonly throttleService = resolve(ThrottleService)
     private readonly dialogService = resolve(IDialogService)
+    private readonly observerLocator = resolve(IObserverLocator)
 
     @bindable cab!: ThrottleCabState
     /** Function list from the matched roster loco — empty when isRosterMatch is false (freeform address). */
@@ -41,8 +42,38 @@ export class ThrottleCardCustomElement {
     functionsContainerEl!: HTMLElement
     private sfSlider?: Slider
     private sfSpeedStepper?: NumericTextBox
-    /** Polls for state that changed from outside this card's own controls (another card/throttle on the same cab, a device broadcast, or this card's own direction/Stop buttons) and pushes it into the SF widgets, which have no way to observe external mutation of `cab.speed`/`cab.functions`. Compares each widget's own displayed value rather than a single shared "last synced" flag, since they can go stale independently of each other. */
-    private syncTimer?: ReturnType<typeof setInterval>
+
+    /**
+     * Syncfusion widgets have no way to observe external mutation of
+     * `cab.speed`/`cab.functions` (another card/throttle on the same cab, a
+     * device broadcast, or this card's own direction/Stop buttons) the way
+     * Aurelia-bound template expressions do, so we subscribe directly via
+     * `IObserverLocator` — same pattern as the alias subscriber in
+     * roster-editor.ts — instead of polling on a timer.
+     */
+    private readonly _speedSubscriber = {
+        handleChange: (speed: number) => {
+            if (this.sfSlider && this.sfSlider.value !== speed) {
+                this.sfSlider.value = speed
+                this.sfSlider.refresh()
+            }
+            if (this.sfSpeedStepper && this.sfSpeedStepper.value !== speed) {
+                this.sfSpeedStepper.value = speed
+            }
+        },
+    }
+
+    private readonly _functionsSubscriber = {
+        handleChange: () => {
+            for (const fb of this.functionButtons) {
+                if (fb.slot.isMomentary) continue
+                const shouldBeActive = !!this.cab.functions[fb.slot.index]
+                if (fb.el.classList.contains('e-active') !== shouldBeActive) {
+                    fb.el.classList.toggle('e-active', shouldBeActive)
+                }
+            }
+        },
+    }
 
     binding(): void {
         this._rebuildFunctionSlots()
@@ -91,26 +122,13 @@ export class ThrottleCardCustomElement {
         // render into — build it now that attached() guarantees it does.
         this._rebuildFunctionButtons()
 
-        this.syncTimer = setInterval(() => {
-            if (this.sfSlider && this.sfSlider.value !== this.cab.speed) {
-                this.sfSlider.value = this.cab.speed
-                this.sfSlider.refresh()
-            }
-            if (this.sfSpeedStepper && this.sfSpeedStepper.value !== this.cab.speed) {
-                this.sfSpeedStepper.value = this.cab.speed
-            }
-            for (const fb of this.functionButtons) {
-                if (fb.slot.isMomentary) continue
-                const shouldBeActive = !!this.cab.functions[fb.slot.index]
-                if (fb.el.classList.contains('e-active') !== shouldBeActive) {
-                    fb.el.classList.toggle('e-active', shouldBeActive)
-                }
-            }
-        }, 200)
+        this.observerLocator.getObserver(this.cab, 'speed').subscribe(this._speedSubscriber)
+        this.observerLocator.getObserver(this.cab, 'functions').subscribe(this._functionsSubscriber)
     }
 
     detaching(): void {
-        if (this.syncTimer) clearInterval(this.syncTimer)
+        this.observerLocator.getObserver(this.cab, 'speed').unsubscribe(this._speedSubscriber)
+        this.observerLocator.getObserver(this.cab, 'functions').unsubscribe(this._functionsSubscriber)
         this.sfSlider?.destroy()
         this.sfSlider = undefined
         this.sfSpeedStepper?.destroy()
