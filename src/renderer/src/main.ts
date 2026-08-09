@@ -29,6 +29,7 @@ import { AutomationEditorCustomElement } from './components/visual-editors/autom
 import { FileEditorPanelCustomElement } from './components/visual-editors/file-editor-panel'
 import { ConfirmDialog } from './components/dialogs/confirm-dialog'
 import { CompileProgressCustomElement } from './components/compile-progress'
+import { CompileOutputTerminalCustomElement } from './components/compile-output-terminal'
 import { SensorsEditorCustomElement } from './components/visual-editors/sensors-editor'
 import { SignalsEditorCustomElement } from './components/visual-editors/signals-editor'
 import { RoutesEditorCustomElement } from './components/visual-editors/routes-editor'
@@ -88,6 +89,7 @@ new Aurelia()
         AliasesEditorCustomElement,
         ConfirmDialog,
         CompileProgressCustomElement,
+        CompileOutputTerminalCustomElement,
         SerialMonitorCustomElement,
         CommandstationConfigFormCustomElement,
         TrackManagerFormCustomElement,
