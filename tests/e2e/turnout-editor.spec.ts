@@ -586,3 +586,21 @@ test('switching to another Configuration section after toggling Raw/Visual leave
     await expect(page.locator('turnout-editor')).toHaveCount(0)
     expect(consoleErrors).toEqual([])
 })
+
+test('the Splitter layout still renders after leaving Turnouts and coming back', async ({ workspacePage: page }) => {
+    // Aurelia's if.bind caches and reuses the turnout-editor component instance
+    // across hide/show cycles by default (cache: true), so attached() runs again
+    // on the SAME instance rather than a fresh one — any guard flag set by
+    // detaching() that isn't reset in attached() stays set forever after the
+    // first visit, silently skipping the deferred Splitter (re)creation on every
+    // later visit and leaving the turnout list/detail panes stacked instead of
+    // in their proper resizable side-by-side layout.
+    await openTurnoutEditor(page)
+    await expect(page.locator('#turnout-splitter.e-splitter')).toBeVisible()
+
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.locator('roster-editor')).toBeVisible()
+
+    await openTurnoutEditor(page)
+    await expect(page.locator('#turnout-splitter.e-splitter')).toBeVisible()
+})
