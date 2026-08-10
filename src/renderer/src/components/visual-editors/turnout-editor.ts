@@ -59,6 +59,11 @@ export class TurnoutEditorCustomElement {
 
     // ── Lifecycle ──────────────────────────────────────────────────────
     attached(): void {
+        // Aurelia's if.bind caches and reuses this same component instance across
+        // hide/show cycles by default — reset the guard set by the previous
+        // detaching() or the queued Splitter creation below would skip itself
+        // forever after the first time this editor is left and revisited.
+        this._detached = false
         // Refresh alias display in case aliases changed while this editor was inactive
         if (this.editBuffer !== null) {
             this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')

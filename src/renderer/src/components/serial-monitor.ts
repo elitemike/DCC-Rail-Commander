@@ -462,6 +462,11 @@ export class SerialMonitorCustomElement {
 
     // ── Aurelia lifecycle ──────────────────────────────────────────────────
     attached(): void {
+        // Aurelia's if.bind caches and reuses this same component instance across
+        // hide/show cycles by default — reset the guard set by the previous
+        // detaching() or the deferred init below would skip itself forever after
+        // the first time this panel is closed and reopened.
+        this._detached = false
         // xterm.js uses a canvas renderer — the font must be fully loaded before
         // Terminal.open() is called or it falls back to the system monospace.
         document.fonts.load('400 12px "JetBrains Mono NF"').finally(() => {
