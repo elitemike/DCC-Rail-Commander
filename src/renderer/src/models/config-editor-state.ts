@@ -293,7 +293,19 @@ export class ConfigEditorState {
 
     setTurnoutsFromRaw(text: string): void {
         try {
-            this.turnouts = parseTurnoutFromFile(text)
+            // myTurnouts.h's SERVO_TURNOUT()/PIN_TURNOUT()/TURNOUT() syntax has no
+            // field for defaultState — it only ever exists as this app's in-memory
+            // state (surfaced on disk purely via myAutomation.h's generated AUTOSTART
+            // block, see _syncGeneratedTurnoutDefaultsContent). parseTurnoutFromFile
+            // always defaults it to CLOSED, so re-parsing on every raw round-trip —
+            // even one where the user changed nothing — would otherwise silently
+            // reset every turnout's defaultState and drop its AUTOSTART THROW line.
+            // Preserve the previous value for any id that still exists.
+            const previousDefaultStateById = new Map(this.turnouts.map(t => [t.id, t.defaultState]))
+            this.turnouts = parseTurnoutFromFile(text).map(t => {
+                const previousDefaultState = previousDefaultStateById.get(t.id)
+                return previousDefaultState ? { ...t, defaultState: previousDefaultState } : t
+            })
             this._syncGeneratedTurnoutDefaultsContent()
             this.hasChanges = true
         } catch {
