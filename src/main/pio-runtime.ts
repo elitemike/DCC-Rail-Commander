@@ -12,7 +12,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { mkdir, cp, readdir, writeFile, readFile } from 'fs/promises'
+import { mkdir, cp, readdir, writeFile, readFile, rename, rm } from 'fs/promises'
 
 /**
  * Versions the app is built against. These are what `fetch-toolchain.mjs`
@@ -129,6 +129,15 @@ export async function isRuntimeReady(): Promise<boolean> {
  * package directories, user-imported toolchain packs have to land in the same
  * tree, and Windows directory symlinks need elevation. It runs once per build
  * of the app, guarded by the manifest stamp.
+ *
+ * Each entry is copied to a sibling temp path and then renamed into place.
+ * `existsSync(target)` below is what makes re-seeding cheap on every launch —
+ * without the rename being atomic, a process crash (or a second app instance
+ * seeding the same shared core dir concurrently) can leave a half-copied
+ * directory that looks "already installed" forever after, since nothing ever
+ * re-copies over an existing target. A copy that never completes to `target`
+ * cannot corrupt it; two racing copies just duplicate work, and whichever
+ * renames first wins while the loser's temp copy is discarded.
  */
 export async function seedRuntime(
     onProgress?: (message: string) => void,
@@ -155,7 +164,14 @@ export async function seedRuntime(
                 const target = join(dest, entry)
                 if (existsSync(target)) continue
                 onProgress?.(`Installing ${entry}...`)
-                await cp(join(src, entry), target, { recursive: true })
+                const tmp = join(dest, `.tmp-${entry}-${process.pid}-${Date.now()}`)
+                await cp(join(src, entry), tmp, { recursive: true })
+                try {
+                    await rename(tmp, target)
+                } catch (err) {
+                    await rm(tmp, { recursive: true, force: true }).catch(() => { })
+                    if (!existsSync(target)) throw err
+                }
             }
         }
 
