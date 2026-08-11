@@ -1,6 +1,6 @@
 # EX-Installer — Dev Mock Mode
 
-Mock mode lets you run the full UI wizard and workspace without a physical Arduino connected. It does everything for real — real git clones, real compilation via Arduino CLI — the **only** thing that is faked is USB device scanning.
+Mock mode lets you run the full UI wizard and workspace without a physical Arduino connected. It does everything for real — real git clones, real compilation via the bundled PlatformIO toolchain — the **only** thing that is faked is USB device scanning.
 
 ---
 
@@ -10,13 +10,13 @@ Mock behaviour lives entirely in the **IPC layer** — the UI components have no
 
 | IPC handler | Mock mode behaviour |
 |---|---|
-| `arduino-cli:list-boards` | Returns `MOCK_SERIAL_PORTS` from `dev-mock.ts` mapped to board name + FQBN via VID:PID lookup |
+| `pio:list-boards` | Returns `MOCK_SERIAL_PORTS` from `dev-mock.ts` mapped to board name + FQBN via VID:PID lookup |
 | `usb:list` / `usb:watch` | Returns / emits `MOCK_SERIAL_PORTS` |
-| Everything else | **Real** — git clone/pull/checkout, version tag listing, reading/writing files, Arduino CLI `isInstalled`, `getVersion`, `compile`, `upload`, preferences storage |
+| Everything else | **Real** — git clone/pull/checkout, version tag listing, reading/writing files, PlatformIO `isRuntimeReady`, `getVersion`, `compile`, `upload`, preferences storage |
 
 ### Per-device scratch folders
 
-Every time a device is configured through the wizard, a unique scratch folder is created under `<install-dir>/repos/_build/<timestamp-id>`. Source files (`.cpp`, `.h`, `.ino`) are copied from the cloned repo; user-editable files (`config.h`, `myAutomation.h`, etc.) are preserved across reconfigures.
+Every time a device is configured through the wizard, a unique scratch folder is created under `<install-dir>/repos/_build/<board-slug>-<id>`. The folder name is keyed on the board (FQBN plus serial number or port), so two boards running the same product never share build output or settings. Source files (`.cpp`, `.h`, `.ino`) are copied from the cloned repo; user-editable files (`config.h`, `myAutomation.h`, etc.) are preserved across reconfigures.
 
 Compile and upload operations always use the scratch path, never the git source repo.
 
@@ -41,7 +41,7 @@ device mocking without bypassing the real compiler:
 | Flag | Controls |
 |---|---|
 | `--mock-device` | USB/device scanning (virtual boards, no real hardware needed) |
-| `--mock-compile` | arduino-cli compile & upload responses (fast fake responses) |
+| `--mock-compile` | PlatformIO compile & upload responses (fast fake responses) |
 
 | Launch command | Device mock | Compile mock |
 |---|---|---|
@@ -52,7 +52,7 @@ device mocking without bypassing the real compiler:
 | `pnpm build` (packaged) | **OFF** | **OFF** |
 
 Flags are independent — for example, `--mock-device` lets you use virtual boards
-while still running a real arduino-cli compile against the sketch.
+while still running a real PlatformIO compile against the sketch.
 
 E2E tests (Playwright) pass both `--mock-device` and `--mock-compile` by default
 via the shared `launchApp(true)` helper in `tests/e2e/fixtures.ts`. Real-compiler
@@ -80,14 +80,14 @@ export const MOCK_SERIAL_PORTS: SerialDeviceInfo[] = [
 ]
 ```
 
-Common VID:PID values (full list in `arduino-cli-ipc.ts`):
+Common VID:PID values (full list in `src/types/boards.ts`):
 
 | VID:PID | Board |
 |---|---|
 | `303a:1001` | EX-CSB1 (ESP32-S3) |
 | `2341:0042` | Arduino Mega 2560 |
 | `2341:0043` | Arduino Uno |
-| `10c4:ea60` | ESP32 (CP2102) |
+| `10c4:ea60` | CP2102 serial adapter (board type unknown) |
 
 ---
 
@@ -106,7 +106,7 @@ src/
 │   ├── index.ts              ← IS_MOCK_DEVICE + IS_MOCK_COMPILE flag detection
 │   ├── dev-mock.ts           ← MOCK_SERIAL_PORTS, mock data
 │   └── ipc/
-│       ├── arduino-cli-ipc.ts  ← list-boards mocked by IS_MOCK_DEVICE;
+│       ├── platformio-ipc.ts   ← list-boards mocked by IS_MOCK_DEVICE;
 │       │                          compile/upload mocked by IS_MOCK_COMPILE
 │       ├── git-ipc.ts          ← all real (no mock guards)
 │       └── usb-ipc.ts          ← list + watch mocked by IS_MOCK_DEVICE

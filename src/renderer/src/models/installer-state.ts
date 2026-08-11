@@ -1,5 +1,5 @@
 import { DI } from 'aurelia'
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from './saved-configuration'
 
 export const IInstallerState = DI.createInterface<InstallerState>('IInstallerState')
@@ -12,11 +12,11 @@ export class InstallerState {
     /** App version */
     readonly appVersion = '0.1.0'
 
-    /** Arduino CLI installed and ready */
-    cliReady = false
+    /** Bundled PlatformIO build toolchain unpacked and ready */
+    toolchainReady = false
 
     /** Selected Arduino device */
-    selectedDevice: ArduinoCliBoardInfo | null = null
+    selectedDevice: DetectedBoardInfo | null = null
 
     /** Selected product key (e.g. 'ex_commandstation') */
     selectedProduct: string | null = null
@@ -49,7 +49,7 @@ export class InstallerState {
     lastError: string | null = null
 
     /** All detected boards from the last scan */
-    detectedBoards: ArduinoCliBoardInfo[] = []
+    detectedBoards: DetectedBoardInfo[] = []
 
     /** Persisted device configurations shown on the home screen */
     savedConfigurations: SavedConfiguration[] = []
@@ -58,7 +58,7 @@ export class InstallerState {
     activeConfigId: string | null = null
 
     reset(): void {
-        this.cliReady = false
+        this.toolchainReady = false
         this.selectedDevice = null
         this.selectedProduct = null
         this.selectedVersion = null

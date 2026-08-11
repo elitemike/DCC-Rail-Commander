@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { InstallerState } from '../../src/renderer/src/models/installer-state'
-import type { ArduinoCliService } from '../../src/renderer/src/services/arduino-cli.service'
+import type { PlatformIoService } from '../../src/renderer/src/services/platformio.service'
 import type { FileService } from '../../src/renderer/src/services/file.service'
 
 // ── Factory ───────────────────────────────────────────────────────────────────────────────
 
 function makeWorkspace(overrides: {
     state?: Partial<InstallerState>
-    cli?: Partial<ArduinoCliService>
+    pio?: Partial<PlatformIoService>
     files?: Partial<FileService>
 } = {}): Workspace & { eaPublish: ReturnType<typeof vi.fn> } {
     const ws = Object.create(Workspace.prototype) as Workspace & { eaPublish: ReturnType<typeof vi.fn> }
@@ -32,19 +32,19 @@ function makeWorkspace(overrides: {
         ...overrides.files,
     } as unknown as FileService
 
-    const cli = {
+    const pio = {
         compile: vi.fn().mockResolvedValue({ success: true, output: '' }),
         upload: vi.fn(),
         subscribeToProgress: vi.fn().mockReturnValue(() => { }),
-        ...overrides.cli,
-    } as unknown as ArduinoCliService
+        ...overrides.pio,
+    } as unknown as PlatformIoService
 
     const eaPublish = vi.fn()
     const toastShow = vi.fn()
 
     Object.assign(ws, {
         state,
-        cli,
+        pio,
         files,
         ea: { publish: eaPublish },
         toastService: { show: toastShow },
@@ -100,7 +100,7 @@ describe('Workspace.compile — guard conditions', () => {
         await ws.compile()
         expect(ws.isCompiling).toBe(false)
         expect(ws.compileLog).toBe('')
-        expect((ws as any).cli.compile).not.toHaveBeenCalled()
+        expect((ws as any).pio.compile).not.toHaveBeenCalled()
     })
 
     it('returns immediately when scratchPath is null', async () => {
@@ -108,13 +108,13 @@ describe('Workspace.compile — guard conditions', () => {
         await ws.compile()
         expect(ws.isCompiling).toBe(false)
         expect(ws.compileLog).toBe('')
-        expect((ws as any).cli.compile).not.toHaveBeenCalled()
+        expect((ws as any).pio.compile).not.toHaveBeenCalled()
     })
 
     it('returns immediately when both device and repoPath are null', async () => {
         const ws = makeWorkspace()
         await ws.compile()
-        expect((ws as any).cli.compile).not.toHaveBeenCalled()
+        expect((ws as any).pio.compile).not.toHaveBeenCalled()
     })
 })
 
@@ -139,10 +139,10 @@ describe('Workspace.compile — FQBN validation', () => {
         expect(ws.compileError).toMatch(/fqbn/i)
     })
 
-    it('does not call cli.compile when FQBN is missing', async () => {
+    it('does not call pio.compile when FQBN is missing', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: { ...megaDevice, fqbn: '' }, repoPath: REPO } })
         await ws.compile()
-        expect((ws as any).cli.compile).not.toHaveBeenCalled()
+        expect((ws as any).pio.compile).not.toHaveBeenCalled()
     })
 
     it('isCompiling is false after FQBN error', async () => {
@@ -174,7 +174,7 @@ describe('Workspace.compile — state reset on each call', () => {
         const compileMock = vi.fn().mockResolvedValue({ success: false, output: '', error: 'new error' })
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { compile: compileMock },
+            pio: { compile: compileMock },
         })
         ws.compileSuccess = true
         await ws.compile()
@@ -187,7 +187,7 @@ describe('Workspace.compile — state reset on each call', () => {
             capturedProgress = (ws as any).progressPercent
             return { success: true, output: '' }
         })
-        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, cli: { compile: compileMock } })
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, pio: { compile: compileMock } })
         ws.progressPercent = 99
         await ws.compile()
         // By the time compile() is called, we're at 40 (after save=20, fqbn check, then log+set40)
@@ -217,7 +217,7 @@ describe('Workspace.compile — file saving before compile', () => {
 
         await ws.compile()
 
-        expect((ws as any).cli.compile).toHaveBeenCalledTimes(1)
+        expect((ws as any).pio.compile).toHaveBeenCalledTimes(1)
             ; (globalThis as { document?: unknown }).document = prevDocument
     })
 
@@ -242,15 +242,15 @@ describe('Workspace.compile — file saving before compile', () => {
         expect(writeFile).toHaveBeenCalledTimes(configFiles.length)
     })
 
-    it('saveFiles is called before cli.compile', async () => {
+    it('saveFiles is called before pio.compile', async () => {
         const callOrder: string[] = []
         const files = {
             writeFile: vi.fn().mockImplementation(async () => { callOrder.push('writeFile') }),
         } as unknown as FileService
-        const cli = {
+        const pio = {
             compile: vi.fn().mockImplementation(async () => { callOrder.push('compile'); return { success: true, output: '' } }),
-        } as unknown as ArduinoCliService
-        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles }, cli, files })
+        } as unknown as PlatformIoService
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles }, pio, files })
         await ws.compile()
         expect(callOrder[0]).toBe('writeFile')
         expect(callOrder[callOrder.length - 1]).toBe('compile')
@@ -372,38 +372,38 @@ describe('Workspace.switchToConfig — disk rehydration', () => {
     })
 })
 
-// ── cli.compile invocation ────────────────────────────────────────────────────
+// ── pio.compile invocation ────────────────────────────────────────────────────
 
-describe('Workspace.compile — cli.compile invocation', () => {
-    it('calls cli.compile with the correct scratchPath', async () => {
+describe('Workspace.compile — pio.compile invocation', () => {
+    it('calls pio.compile with the correct scratchPath', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).cli.compile).toHaveBeenCalledWith(SCRATCH, megaDevice.fqbn)
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(SCRATCH, megaDevice.fqbn)
     })
 
-    it('calls cli.compile with the correct fqbn for Mega', async () => {
+    it('calls pio.compile with the correct fqbn for Mega', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).cli.compile).toHaveBeenCalledWith(expect.any(String), 'arduino:avr:mega')
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'arduino:avr:mega')
     })
 
-    it('calls cli.compile with the correct fqbn for ESP32-S3', async () => {
+    it('calls pio.compile with the correct fqbn for ESP32-S3', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: espDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).cli.compile).toHaveBeenCalledWith(expect.any(String), 'esp32:esp32:esp32s3')
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'esp32:esp32:esp32s3')
     })
 
-    it('calls cli.compile exactly once per compile() call', async () => {
+    it('calls pio.compile exactly once per compile() call', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).cli.compile).toHaveBeenCalledTimes(1)
+        expect((ws as any).pio.compile).toHaveBeenCalledTimes(1)
     })
 
-    it('calls cli.compile twice when compile() is called twice', async () => {
+    it('calls pio.compile twice when compile() is called twice', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
         await ws.compile()
-        expect((ws as any).cli.compile).toHaveBeenCalledTimes(2)
+        expect((ws as any).pio.compile).toHaveBeenCalledTimes(2)
     })
 })
 
@@ -419,7 +419,7 @@ describe('Workspace.compile — progress tracking', () => {
     it('progressPercent stays below 70 on failure (does not advance past compile step)', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
         })
         await ws.compile()
         expect(ws.progressPercent).toBeLessThan(70)
@@ -438,7 +438,7 @@ describe('Workspace.compile — log output', () => {
     it('log contains compiler stdout output', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: true, output: 'Sketch uses 12345 bytes (47%)' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: true, output: 'Sketch uses 12345 bytes (47%)' }) },
         })
         await ws.compile()
         expect(ws.compileLog).toContain('Sketch uses 12345 bytes (47%)')
@@ -447,7 +447,7 @@ describe('Workspace.compile — log output', () => {
     it('log contains compiler stdout even on failure', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: {
+            pio: {
                 compile: vi.fn().mockResolvedValue({
                     success: false,
                     output: "DCCTimerESP.cpp:102:8: error: 'sens_dev_t' has no member named 'sar_meas_start1'",
@@ -468,7 +468,7 @@ describe('Workspace.compile — log output', () => {
     it('log does not contain success marker on failure', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'failed' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'failed' }) },
         })
         await ws.compile()
         expect(ws.compileLog).not.toContain('✓ Compile successful!')
@@ -483,7 +483,7 @@ describe('Workspace.compile — success outcome', () => {
     beforeEach(async () => {
         ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles },
-            cli: { compile: vi.fn().mockResolvedValue({ success: true, output: 'Sketch uses 12345 bytes' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: true, output: 'Sketch uses 12345 bytes' }) },
         })
         await ws.compile()
     })
@@ -511,7 +511,7 @@ describe('Workspace.compile — failure outcomes', () => {
     it('sets compileSuccess=false on failure', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'bad' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'bad' }) },
         })
         await ws.compile()
         expect(ws.compileSuccess).toBe(false)
@@ -521,7 +521,7 @@ describe('Workspace.compile — failure outcomes', () => {
         const errMsg = "error: 'WIFI_HOSTNAME' was not declared in this scope"
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: errMsg }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: errMsg }) },
         })
         await ws.compile()
         expect(ws.compileError).toBe(errMsg)
@@ -530,7 +530,7 @@ describe('Workspace.compile — failure outcomes', () => {
     it("falls back to 'Compilation failed' when no error string is provided", async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '' }) },
         })
         await ws.compile()
         expect(ws.compileError).toBe('Compilation failed')
@@ -539,16 +539,16 @@ describe('Workspace.compile — failure outcomes', () => {
     it('isCompiling is false after failure', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
         })
         await ws.compile()
         expect(ws.isCompiling).toBe(false)
     })
 
-    it('isCompiling is false even when cli.compile throws unexpectedly', async () => {
+    it('isCompiling is false even when pio.compile throws unexpectedly', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
+            pio: { compile: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
         })
         await ws.compile()
         expect(ws.isCompiling).toBe(false)
@@ -558,7 +558,7 @@ describe('Workspace.compile — failure outcomes', () => {
     it('captures unexpected thrown error message', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
+            pio: { compile: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
         })
         await ws.compile()
         expect(ws.compileError).toBe('IPC channel closed')
@@ -582,7 +582,7 @@ describe('Workspace.compile — successive calls', () => {
         const compileMock = vi.fn()
             .mockResolvedValueOnce({ success: false, output: '', error: 'first run error' })
             .mockResolvedValueOnce({ success: true, output: 'OK' })
-        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, cli: { compile: compileMock } })
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, pio: { compile: compileMock } })
         await ws.compile()
         expect(ws.compileSuccess).toBe(false)
         await ws.compile()
@@ -594,7 +594,7 @@ describe('Workspace.compile — successive calls', () => {
         const compileMock = vi.fn()
             .mockResolvedValueOnce({ success: true, output: 'first run output' })
             .mockResolvedValueOnce({ success: true, output: 'second run output' })
-        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, cli: { compile: compileMock } })
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, pio: { compile: compileMock } })
         await ws.compile()
         await ws.compile()
         expect(ws.compileLog).not.toContain('first run output')
@@ -630,7 +630,7 @@ describe('Workspace.compile — toast notifications', () => {
     it('publishes a failure toast on failed compile', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'compile error' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'compile error' }) },
         })
         await ws.compile()
         expect((ws as any).toastShow).toHaveBeenCalledWith(expect.objectContaining({
@@ -641,7 +641,7 @@ describe('Workspace.compile — toast notifications', () => {
     it('failure toast title is "Compile Failed"', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'bad board' }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'bad board' }) },
         })
         await ws.compile()
         const [payload] = (ws as any).toastShow.mock.calls[0]
@@ -652,7 +652,7 @@ describe('Workspace.compile — toast notifications', () => {
         const errMsg = "error: 'WIFI_SSID' was not declared"
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: errMsg }) },
+            pio: { compile: vi.fn().mockResolvedValue({ success: false, output: '', error: errMsg }) },
         })
         await ws.compile()
         const [payload] = (ws as any).toastShow.mock.calls[0]

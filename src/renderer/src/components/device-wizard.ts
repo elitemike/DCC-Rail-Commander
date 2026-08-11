@@ -2,7 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogController } from '@aurelia/dialog'
 import { StepModel, Stepper } from '@syncfusion/ej2-navigations'
 import { InstallerState } from '../models/installer-state'
-import { ArduinoCliService } from '../services/arduino-cli.service'
+import { PlatformIoService } from '../services/platformio.service'
 import { UsbService } from '../services/usb.service'
 import { GitService } from '../services/git.service'
 import { FileService } from '../services/file.service'
@@ -12,18 +12,19 @@ import { resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { DevicePickerDialog } from './dialogs/device-picker-dialog'
 import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
 import { isProductUserFile, copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
+import { buildScratchPath, findReusableConfig } from '../utils/board-key'
 
 export class DeviceWizard {
     /** Injected automatically by @aurelia/dialog */
     private readonly $dialog = resolve(IDialogController)
 
     private readonly state = resolve(InstallerState)
-    private readonly cli = resolve(ArduinoCliService)
+    private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
     private readonly git = resolve(GitService)
     private readonly files = resolve(FileService)
@@ -41,8 +42,8 @@ export class DeviceWizard {
     ];
 
     // ── Step 0: Device ───────────────────────────────────────────────────────
-    boards: ArduinoCliBoardInfo[] = []
-    selectedBoard: ArduinoCliBoardInfo | null = null
+    boards: DetectedBoardInfo[] = []
+    selectedBoard: DetectedBoardInfo | null = null
     scanning = false
     scanError: string | null = null
 
@@ -119,14 +120,15 @@ export class DeviceWizard {
             await this.usb.initialize()
             await this.usb.refresh()
 
-            let cliBoards: ArduinoCliBoardInfo[] = []
-            if (this.state.cliReady) {
-                try {
-                    cliBoards = await this.cli.listBoards()
-                } catch { /* fall back silently */ }
-            }
+            // Board detection no longer depends on the build toolchain being
+            // ready — it is serial-port enumeration plus a VID/PID lookup — so
+            // boards are listed even on an installation that can't compile yet.
+            let detected: DetectedBoardInfo[] = []
+            try {
+                detected = await this.pio.listBoards()
+            } catch { /* fall back silently to the raw port list */ }
 
-            this.boards = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
+            this.boards = mergeDetectedBoards(this.usb.serialPorts, detected)
         } catch (err) {
             this.scanError = (err as Error).message
         } finally {
@@ -247,7 +249,7 @@ export class DeviceWizard {
             // a valid FQBN.
             if (this.selectedBoard && !this.selectedBoard.fqbn) {
                 try {
-                    const cliBoards = await this.cli.listBoards()
+                    const cliBoards = await this.pio.listBoards()
                     const match = cliBoards.find(b => b.port === this.selectedBoard!.port || (b.serialNumber && b.serialNumber === this.selectedBoard!.serialNumber))
                     if (match && match.fqbn) {
                         this.selectedBoard.fqbn = match.fqbn
@@ -263,7 +265,7 @@ export class DeviceWizard {
                     // `fqbn` if the CLI recognises it.
                     const result = await this.dialogService.open({ component: () => DevicePickerDialog }).whenClosed((r) => r)
                     if ((result as any).status === 'ok' && (result as any).value) {
-                        this.selectedBoard = (result as any).value as ArduinoCliBoardInfo
+                        this.selectedBoard = (result as any).value as DetectedBoardInfo
                     } else {
                         throw new Error('Board type is required to continue.');
                     }
@@ -279,9 +281,14 @@ export class DeviceWizard {
             const repoFolder = product.repoName.split('/')[1]
             const repoPath = `${reposDir}/${repoFolder}`         // git source (never cleared)
             const id = String(Date.now())
-            // Arduino CLI requires the sketch directory name to match the .ino filename,
-            // so nest files under _build/<id>/<repoFolder> (e.g. CommandStation-EX/).
-            const scratchPath = `${reposDir}/_build/${id}/${repoFolder}`  // per-device working dir
+            // The build dir is keyed on the board itself, so two boards running
+            // the same product never share build output or settings.
+            const boardIdentity = {
+                fqbn: this.selectedBoard.fqbn,
+                serialNumber: this.selectedBoard.serialNumber,
+                port: this.selectedBoard.port,
+            }
+            const scratchPath = buildScratchPath(reposDir, repoFolder, boardIdentity, id)
 
             // ── Checkout requested version in the source repo ────────────────
             const checkout = await this.git.checkout(repoPath, this.selectedVersion)
@@ -292,9 +299,12 @@ export class DeviceWizard {
             const isUserFile = (name: string) => isProductUserFile(product, name)
 
             // ── Save existing user files from previous scratchPath (if any) ──
-            // Look for any previously saved config for the same product/repo
-            const prevConf = this.state.savedConfigurations.find(
-                c => c.product === this.selectedProduct && c.scratchPath
+            // Prefer this exact board's previous configuration, then any config
+            // for the same board type — never another board's.
+            const prevConf = findReusableConfig(
+                this.state.savedConfigurations,
+                this.selectedProduct!,
+                boardIdentity,
             )
             const savedUserFiles: Map<string, string> = new Map()
             if (prevConf?.scratchPath) {
@@ -377,6 +387,7 @@ export class DeviceWizard {
                 deviceName: this.selectedBoard.name,
                 devicePort: this.selectedBoard.port,
                 deviceFqbn: this.selectedBoard.fqbn,
+                deviceSerialNumber: this.selectedBoard.serialNumber,
                 product: this.selectedProduct!,
                 productName: product.productName,
                 version: this.selectedVersion,

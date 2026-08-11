@@ -97,21 +97,12 @@ export function pickLatestVersion(sortedTags: string[]): string | null {
     return sortedTags.find((t) => extractVersionDetails(t).type === 'Prod') ?? sortedTags[0] ?? null
 }
 
-/** Arduino CLI platform packages */
-export const basePlatforms: Record<string, string> = {
-    'arduino:avr': '1.8.6',
-}
-
-export const extraPlatforms: Record<string, string> = {
-    'esp32:esp32': '2.0.17',
-    'STMicroelectronics:stm32': '2.7.1',
-}
-
-export const requiredLibraries: Record<string, string> = {
-    'Ethernet': '2.0.2',
-}
-
-/** Device FQBN to friendly name mapping */
+/**
+ * Device FQBN to friendly name mapping.
+ *
+ * The FQBN is the app-wide board identity; the main process maps it to a
+ * PlatformIO target in `src/main/board-targets.ts`.
+ */
 export const supportedDevices: Record<string, string> = {
     'arduino:avr:mega': 'Arduino Mega or Mega 2560',
     'arduino:avr:uno': 'Arduino Uno',

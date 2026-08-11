@@ -181,3 +181,10 @@ dist/
 tests/e2e/playwright-report/
 tests/e2e/test-results/
 tests/e2e/playwright-report/index.html
+
+# electron-builder output
+release/
+
+# Bundled build runtime — produced by `pnpm toolchain:fetch`, never committed
+# (hundreds of MB, and platform-specific). See scripts/fetch-toolchain.mjs.
+resources/

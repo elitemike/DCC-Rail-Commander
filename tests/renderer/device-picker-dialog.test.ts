@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { DevicePickerDialog } from '../../src/renderer/src/components/dialogs/device-picker-dialog'
-import type { ArduinoCliBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
+import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 // Built like tests/renderer/servo-calibration-dialog.test.ts: a bare prototype
@@ -22,17 +22,17 @@ const UNO_PORT: SerialDeviceInfo = {
     productId: '0043',
 }
 
-const MEGA_BOARD: ArduinoCliBoardInfo = { name: 'Arduino Mega 2560', port: '/dev/ttyACM0', fqbn: 'arduino:avr:mega', protocol: 'serial' }
-const UNO_BOARD: ArduinoCliBoardInfo = { name: 'Arduino Uno', port: '/dev/ttyACM1', fqbn: 'arduino:avr:uno', protocol: 'serial' }
+const MEGA_BOARD: DetectedBoardInfo = { name: 'Arduino Mega 2560', port: '/dev/ttyACM0', fqbn: 'arduino:avr:mega', protocol: 'serial' }
+const UNO_BOARD: DetectedBoardInfo = { name: 'Arduino Uno', port: '/dev/ttyACM1', fqbn: 'arduino:avr:uno', protocol: 'serial' }
 
-function makeDialog(opts: { serialPorts: SerialDeviceInfo[]; cliBoards?: ArduinoCliBoardInfo[]; listBoardsError?: boolean }) {
+function makeDialog(opts: { serialPorts: SerialDeviceInfo[]; cliBoards?: DetectedBoardInfo[]; listBoardsError?: boolean }) {
     const dialog = Object.create(DevicePickerDialog.prototype) as DevicePickerDialog
 
     Object.assign(dialog, {
         $dialog: { ok: vi.fn(), cancel: vi.fn() },
-        cli: {
+        pio: {
             listBoards: opts.listBoardsError
-                ? vi.fn().mockRejectedValue(new Error('cli not ready'))
+                ? vi.fn().mockRejectedValue(new Error('board scan failed'))
                 : vi.fn().mockResolvedValue(opts.cliBoards ?? []),
         },
         usb: {
@@ -76,7 +76,7 @@ describe('DevicePickerDialog.scan preselect', () => {
     })
 
     it('matches on base FQBN, ignoring option suffixes', async () => {
-        const esp32Board: ArduinoCliBoardInfo = { name: 'EX-CSB1', port: '/dev/ttyACM0', fqbn: 'esp32:esp32:esp32:FlashFreq=80m', protocol: 'serial' }
+        const esp32Board: DetectedBoardInfo = { name: 'EX-CSB1', port: '/dev/ttyACM0', fqbn: 'esp32:esp32:esp32:FlashFreq=80m', protocol: 'serial' }
         const { dialog } = makeDialog({ serialPorts: [MEGA_PORT], cliBoards: [esp32Board] })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(dialog as any).initialFqbn = 'esp32:esp32:esp32'
@@ -104,7 +104,7 @@ describe('DevicePickerDialog.scan preselect', () => {
     it('with initialFqbn set but the CLI failed to identify a generic clone chip, does NOT fall back to boards[0]', async () => {
         // A generic CH340 clone isn't in KNOWN_BOARDS with a real FQBN (target board type
         // is ambiguous from VID/PID alone), so mergeDetectedBoards's fallback lists it with
-        // fqbn: '' when arduino-cli can't identify it either — that must not match.
+        // fqbn: '' when arduino-pio can't identify it either — that must not match.
         const ch340Clone: SerialDeviceInfo = {
             path: '/dev/ttyUSB2',
             manufacturer: 'QinHeng Electronics',
@@ -133,7 +133,7 @@ describe('DevicePickerDialog.scan preselect', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(dialog as any).usb.serialPorts = [MEGA_PORT]
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(dialog as any).cli.listBoards = vi.fn().mockResolvedValue([MEGA_BOARD])
+        ;(dialog as any).pio.listBoards = vi.fn().mockResolvedValue([MEGA_BOARD])
 
         await dialog.scan()
 

@@ -9,6 +9,8 @@
         "dev:mock": "electron-vite dev -- --mock-device",
         "debug": "electron-vite dev --inspect=9229",
         "build": "electron-vite build",
+        "toolchain:fetch": "node scripts/fetch-toolchain.mjs",
+        "package": "pnpm build && electron-builder",
         "preview": "electron-vite preview",
         "start": "electron-vite dev",
         "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
@@ -44,6 +46,7 @@
         "@types/node": "^24.10.13",
         "@types/tar": "^7.0.87",
         "electron": "^40.6.0",
+        "electron-builder": "^26.15.3",
         "electron-vite": "^5.0.0",
         "postcss-import": "^16.1.1",
         "rimraf": "^5.0.1",
@@ -66,12 +69,36 @@
         },
         "files": [
             "out/**/*",
-            "!node_modules/**/*"
+            "package.json",
+            "node_modules/**/*"
+        ],
+        "asarUnpack": [
+            "**/*.node"
         ],
         "extraResources": [
             {
                 "from": "src/python",
+                "to": "python-scripts"
+            },
+            {
+                "from": "resources/python",
                 "to": "python"
+            },
+            {
+                "from": "resources/pio",
+                "to": "pio"
+            },
+            {
+                "from": "resources/pio-core",
+                "to": "pio-core"
+            },
+            {
+                "from": "resources/pio-libs",
+                "to": "pio-libs"
+            },
+            {
+                "from": "resources/toolchain-manifest.json",
+                "to": "toolchain-manifest.json"
             }
         ],
         "nativeRebuilder": "prebuild-install",

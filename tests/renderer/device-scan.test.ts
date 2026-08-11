@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { mergeDetectedBoards, KNOWN_BOARDS } from '../../src/renderer/src/utils/device-scan'
-import type { SerialDeviceInfo, ArduinoCliBoardInfo } from '../../src/types/ipc'
+import type { SerialDeviceInfo, DetectedBoardInfo } from '../../src/types/ipc'
 
 const megaPort: SerialDeviceInfo = {
     path: '/dev/ttyACM1',
@@ -27,7 +27,7 @@ describe('mergeDetectedBoards', () => {
     })
 
     it('uses the CLI-identified board when the CLI recognises the port', () => {
-        const cliBoard: ArduinoCliBoardInfo = {
+        const cliBoard: DetectedBoardInfo = {
             name: 'Arduino Mega 2560',
             fqbn: 'arduino:avr:mega',
             port: '/dev/ttyACM1',
@@ -65,7 +65,7 @@ describe('mergeDetectedBoards', () => {
     })
 
     it('preserves the CLI serial number when the raw port info lacks one', () => {
-        const cliBoard: ArduinoCliBoardInfo = {
+        const cliBoard: DetectedBoardInfo = {
             name: 'Arduino Mega 2560',
             fqbn: 'arduino:avr:mega',
             port: '/dev/ttyACM1',

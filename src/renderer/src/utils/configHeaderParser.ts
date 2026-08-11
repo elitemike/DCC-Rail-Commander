@@ -17,7 +17,7 @@
  *   // ==== DCCEX-Installer Device Configuration ====
  */
 
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../types/ipc'
 
 const DEVICE_HEADER_TAG = '// ==== DCCEX-Installer Device Configuration ===='
 
@@ -27,7 +27,7 @@ export function hasDeviceHeader(text: string): boolean {
 }
 
 /** Builds the device comment block to embed in config.h */
-export function buildDeviceHeader(device: ArduinoCliBoardInfo): string {
+export function buildDeviceHeader(device: DetectedBoardInfo): string {
     return [
         DEVICE_HEADER_TAG,
         `//   Name:     ${device.name}`,
@@ -40,10 +40,10 @@ export function buildDeviceHeader(device: ArduinoCliBoardInfo): string {
 }
 
 /**
- * Parses an `ArduinoCliBoardInfo` object from a device header block in text.
+ * Parses an `DetectedBoardInfo` object from a device header block in text.
  * Returns `null` when no block is present or required fields are missing.
  */
-export function parseDeviceFromHeader(text: string): ArduinoCliBoardInfo | null {
+export function parseDeviceFromHeader(text: string): DetectedBoardInfo | null {
     const firstIdx = text.indexOf(DEVICE_HEADER_TAG)
     if (firstIdx === -1) return null
     const secondIdx = text.indexOf(DEVICE_HEADER_TAG, firstIdx + DEVICE_HEADER_TAG.length)
@@ -76,7 +76,7 @@ export function parseDeviceFromHeader(text: string): ArduinoCliBoardInfo | null 
  * Inserts (or replaces) a device header block at the very top of the
  * config.h content string.  Existing content is preserved below the block.
  */
-export function injectDeviceHeader(configHContent: string, device: ArduinoCliBoardInfo): string {
+export function injectDeviceHeader(configHContent: string, device: DetectedBoardInfo): string {
     const header = buildDeviceHeader(device)
 
     if (hasDeviceHeader(configHContent)) {
@@ -116,9 +116,9 @@ function baseFqbn(fqbn: string): string {
 }
 
 export function reconcileDevicePort(
-    stored: ArduinoCliBoardInfo,
-    connected: ArduinoCliBoardInfo[],
-): { device: ArduinoCliBoardInfo; portChanged: boolean } {
+    stored: DetectedBoardInfo,
+    connected: DetectedBoardInfo[],
+): { device: DetectedBoardInfo; portChanged: boolean } {
     // Match on base FQBN — stable board identity, ignoring option suffixes
     const match = connected.find(b => baseFqbn(b.fqbn) === baseFqbn(stored.fqbn))
 

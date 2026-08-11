@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Workspace } from '../../src/renderer/src/views/workspace'
-import type { ArduinoCliBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
+import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 // Built like tests/renderer/servo-calibration-dialog.test.ts and
 // tests/renderer/device-picker-dialog.test.ts: a bare prototype instance with
 // fields assigned manually, avoiding a full Aurelia DI bootstrap.
 
-const DEVICE: ArduinoCliBoardInfo = {
+const DEVICE: DetectedBoardInfo = {
     name: 'Arduino Mega 2560',
     port: '/dev/ttyACM0',
     fqbn: 'arduino:avr:mega',
@@ -15,9 +15,9 @@ const DEVICE: ArduinoCliBoardInfo = {
 }
 
 function makeWorkspace(opts: {
-    device?: ArduinoCliBoardInfo | null
+    device?: DetectedBoardInfo | null
     serialPorts?: SerialDeviceInfo[]
-    cliBoards?: ArduinoCliBoardInfo[]
+    cliBoards?: DetectedBoardInfo[]
     listBoardsError?: boolean
     showMonitor?: boolean
     autoConnectMonitor?: boolean
@@ -42,9 +42,9 @@ function makeWorkspace(opts: {
         toastService: { show: vi.fn() },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
         files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
-        cli: {
+        pio: {
             listBoards: opts.listBoardsError
-                ? vi.fn().mockRejectedValue(new Error('cli not ready'))
+                ? vi.fn().mockRejectedValue(new Error('board scan failed'))
                 : vi.fn().mockResolvedValue(opts.cliBoards ?? []),
             upload: uploadFn,
             subscribeToProgress: vi.fn().mockReturnValue(() => { /* unsub */ }),
@@ -203,7 +203,7 @@ describe('Workspace.upload monitor handling', () => {
         await workspace.upload()
 
         expect(closePortFn).toHaveBeenCalledWith('/dev/ttyACM0')
-        // closePort() must have been awaited before cli.upload() ran.
+        // closePort() must have been awaited before pio.upload() ran.
         expect(closePortFn.mock.invocationCallOrder[0]).toBeLessThan(uploadFn.mock.invocationCallOrder[0])
         expect(monitorWasHiddenDuringUpload).toBe(true)
         expect(workspace.showMonitor).toBe(true)

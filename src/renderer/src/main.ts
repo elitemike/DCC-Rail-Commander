@@ -8,7 +8,7 @@ import syncfusionLicense from '../../../syncfusion-license.txt?raw'
 import './styles.css'
 
 // Services
-import { ArduinoCliService } from './services/arduino-cli.service'
+import { PlatformIoService } from './services/platformio.service'
 import { GitService } from './services/git.service'
 import { FileService } from './services/file.service'
 import { PreferencesService } from './services/preferences.service'
@@ -71,7 +71,7 @@ new Aurelia()
             settings.options.modal = true
         }),
         // Register services as singletons
-        Registration.singleton(ArduinoCliService, ArduinoCliService),
+        Registration.singleton(PlatformIoService, PlatformIoService),
         Registration.singleton(GitService, GitService),
         Registration.singleton(FileService, FileService),
         Registration.singleton(PreferencesService, PreferencesService),
