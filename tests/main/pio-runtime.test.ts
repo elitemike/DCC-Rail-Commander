@@ -23,12 +23,14 @@ vi.mock('fs', async (importOriginal) => {
     return { ...actual, existsSync: mockExistsSync, readFileSync: mockReadFileSync }
 })
 
-const { mockMkdir, mockCp, mockReaddir, mockWriteFile, mockReadFile } = vi.hoisted(() => ({
+const { mockMkdir, mockCp, mockReaddir, mockWriteFile, mockReadFile, mockRename, mockRm } = vi.hoisted(() => ({
     mockMkdir: vi.fn(async () => { }),
     mockCp: vi.fn(async () => { }),
     mockReaddir: vi.fn(async () => [] as string[]),
     mockWriteFile: vi.fn(async () => { }),
     mockReadFile: vi.fn(async () => ''),
+    mockRename: vi.fn(async () => { }),
+    mockRm: vi.fn(async () => { }),
 }))
 
 vi.mock('fs/promises', () => ({
@@ -37,6 +39,8 @@ vi.mock('fs/promises', () => ({
     readdir: mockReaddir,
     writeFile: mockWriteFile,
     readFile: mockReadFile,
+    rename: mockRename,
+    rm: mockRm,
 }))
 
 import {
