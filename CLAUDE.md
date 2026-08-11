@@ -20,7 +20,7 @@ anything under `src/`.
 pnpm dev              # electron-vite dev (hot reload)
 pnpm dev:mock         # dev with --mock-device (no real hardware needed)
 pnpm build            # electron-vite build -> out/ (required before e2e tests)
-pnpm toolchain:fetch  # download the bundled Python/PlatformIO runtime into resources/
+pnpm toolchain:fetch  # download the bundled Python/PlatformIO runtime into resources/ (also runs as postinstall)
 pnpm package          # pnpm build && electron-builder -> release/
 pnpm typecheck        # tsc --noEmit against tsconfig.node.json + tsconfig.web.json
 pnpm test             # vitest run (unit tests: tests/main/, tests/renderer/)

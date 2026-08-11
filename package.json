@@ -10,6 +10,7 @@
         "debug": "electron-vite dev --inspect=9229",
         "build": "electron-vite build",
         "toolchain:fetch": "node scripts/fetch-toolchain.mjs",
+        "postinstall": "node scripts/fetch-toolchain.mjs",
         "package": "pnpm build && electron-builder",
         "preview": "electron-vite preview",
         "start": "electron-vite dev",
