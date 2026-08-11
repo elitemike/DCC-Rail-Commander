@@ -8,14 +8,14 @@ import { friendlyName } from '../utils/friendly-names'
 import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
 import { GitService } from '../services/git.service'
-import { ArduinoCliService } from '../services/arduino-cli.service'
+import { PlatformIoService } from '../services/platformio.service'
 import { UsbService } from '../services/usb.service'
 import { ConfigService } from '../services/config.service'
 import { DeviceWizard } from '../components/device-wizard'
 import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
 import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../types/ipc'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
@@ -34,7 +34,7 @@ export class Workspace {
     private readonly preferences = resolve(PreferencesService)
     private readonly files = resolve(FileService)
     private readonly git = resolve(GitService)
-    private readonly cli = resolve(ArduinoCliService)
+    private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
     private readonly config = resolve(ConfigService)
 
@@ -179,9 +179,9 @@ export class Workspace {
         try {
             await this.usb.initialize()
             await this.usb.refresh()
-            let cliBoards: ArduinoCliBoardInfo[] = []
+            let cliBoards: DetectedBoardInfo[] = []
             try {
-                cliBoards = await this.cli.listBoards()
+                cliBoards = await this.pio.listBoards()
             } catch { /* fall back silently to the raw serial-port list */ }
             const connected = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
             const isLive = connected.some((b) => b.port === device.port)
@@ -524,7 +524,14 @@ export class Workspace {
             // switched to (menu, or app restart re-loading the active config),
             // devicePort would revert to whatever was saved when the config was
             // first created, even though config.h on disk already had the new port.
-            ...(device ? { deviceName: device.name, devicePort: device.port, deviceFqbn: device.fqbn } : {}),
+            ...(device
+                ? {
+                    deviceName: device.name,
+                    devicePort: device.port,
+                    deviceFqbn: device.fqbn,
+                    deviceSerialNumber: device.serialNumber,
+                }
+                : {}),
             configFiles: this.state.configFiles.map((f) => ({ ...f })),
             lastModified: new Date().toISOString(),
         }
@@ -644,7 +651,7 @@ export class Workspace {
             if (!looksLikeFqbn(fqbn)) {
                 // As a final attempt, scan live boards and match by port/name/serial
                 try {
-                    const boards = await this.cli.listBoards()
+                    const boards = await this.pio.listBoards()
                     const match = boards.find(b => b.port === device.port || b.name === device.name || (b.serialNumber && (device as any).serialNumber && b.serialNumber === (device as any).serialNumber))
                     if (match && looksLikeFqbn(match.fqbn)) {
                         fqbn = match.fqbn
@@ -657,21 +664,21 @@ export class Workspace {
             }
 
             if (!looksLikeFqbn(fqbn)) {
-                throw new Error(`Board "${device.name}" has no FQBN — install Arduino CLI and rescan to identify it.`)
+                throw new Error(`Board "${device.name}" has no FQBN — reconnect the board and rescan to identify it.`)
             }
 
             this.compileLog += `Compiling for ${fqbn}...\n`
             this.compileTerminal?.write(`Compiling for ${fqbn}...\n`)
             this.progressPercent = 40
             let streamedLines = 0
-            const unsubCompile = this.cli.subscribeToProgress(({ phase, message }) => {
+            const unsubCompile = this.pio.subscribeToProgress(({ phase, message }) => {
                 if (phase === 'compile') {
                     this.compileLog += message + '\n'
                     this.compileTerminal?.write(message + '\n')
                     streamedLines++
                 }
             })
-            const result = await this.cli.compile(this.state.scratchPath!, fqbn)
+            const result = await this.pio.compile(this.state.scratchPath!, fqbn)
             unsubCompile()
             if (streamedLines === 0) {
                 this.compileLog += result.output ?? ''
@@ -706,17 +713,17 @@ export class Workspace {
      * touches it, and transparently corrects it if the board re-enumerated on a
      * different port (common right after a reset-triggering upload, a replug, or
      * — on Windows — a freshly/manually-bound generic USB-serial driver that
-     * doesn't keep a stable COM number). Without this, arduino-cli/esptool would
+     * doesn't keep a stable COM number). Without this, the uploader would
      * be handed a stale port string and fail with an opaque "port doesn't exist"
      * error instead of the app recovering or explaining what happened.
      */
-    private async ensureLivePort(device: ArduinoCliBoardInfo): Promise<void> {
+    private async ensureLivePort(device: DetectedBoardInfo): Promise<void> {
         await this.usb.initialize()
         await this.usb.refresh()
 
-        let cliBoards: ArduinoCliBoardInfo[] = []
+        let cliBoards: DetectedBoardInfo[] = []
         try {
-            cliBoards = await this.cli.listBoards()
+            cliBoards = await this.pio.listBoards()
         } catch { /* fall back silently to the raw serial-port list */ }
 
         const connected = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
@@ -755,8 +762,8 @@ export class Workspace {
         const device = this.state.selectedDevice
         if (!device || !this.state.scratchPath) return
 
-        // The Monitor holds the port open for live traffic, but arduino-cli/
-        // esptool needs exclusive access to it during upload. Close it (if
+        // The Monitor holds the port open for live traffic, but the uploader
+        // needs exclusive access to it during upload. Close it (if
         // open) and remember to bring it back afterwards — success or
         // failure — so watching the monitor doesn't mean manually closing
         // and reopening it around every upload. Switching to the Output tab
@@ -783,7 +790,7 @@ export class Workspace {
         try {
             const fqbn = device.fqbn
             if (!fqbn) {
-                throw new Error(`Board "${device.name}" has no FQBN — install Arduino CLI and rescan to identify it.`)
+                throw new Error(`Board "${device.name}" has no FQBN — reconnect the board and rescan to identify it.`)
             }
 
             await this.ensureLivePort(device)
@@ -792,14 +799,14 @@ export class Workspace {
             this.compileTerminal?.write(`\nUploading to ${device.port}...\n`)
             this.progressPercent = 80
             let streamedUploadLines = 0
-            const unsubUpload = this.cli.subscribeToProgress(({ phase, message }) => {
+            const unsubUpload = this.pio.subscribeToProgress(({ phase, message }) => {
                 if (phase === 'upload') {
                     this.compileLog += message + '\n'
                     this.compileTerminal?.write(message + '\n')
                     streamedUploadLines++
                 }
             })
-            const result = await this.cli.upload(this.state.scratchPath!, fqbn, device.port)
+            const result = await this.pio.upload(this.state.scratchPath!, fqbn, device.port)
             unsubUpload()
             if (streamedUploadLines === 0) {
                 this.compileLog += result.output ?? ''
@@ -847,7 +854,13 @@ export class Workspace {
 
     async switchToConfig(config: SavedConfiguration): Promise<void> {
         this.showDeviceMenu = false
-        this.state.selectedDevice = { name: config.deviceName, port: config.devicePort, fqbn: config.deviceFqbn, protocol: 'serial' }
+        this.state.selectedDevice = {
+            name: config.deviceName,
+            port: config.devicePort,
+            fqbn: config.deviceFqbn,
+            protocol: 'serial',
+            serialNumber: config.deviceSerialNumber,
+        }
         this.state.selectedProduct = config.product || null
         this.state.selectedVersion = config.version || null
         this.state.repoPath = config.repoPath

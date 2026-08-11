@@ -19,7 +19,7 @@ import { tmpdir } from 'os'
 const { ELECTRON_RUN_AS_NODE: _ern, ...ELECTRON_ENV } = process.env
 import { buildGeneratorHeader } from '../../src/renderer/src/utils/myAutomationParser'
 import { buildDeviceHeader } from '../../src/renderer/src/utils/configHeaderParser'
-import type { ArduinoCliBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
+import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
 // ── Mock file content ─────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ const MOCK_CONFIG_H = [
     '#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD',
 ].join('\n')
 
-const MOCK_DEVICE: ArduinoCliBoardInfo = {
+const MOCK_DEVICE: DetectedBoardInfo = {
     name: 'Arduino Mega 2560',
     port: '/dev/ttyTest0',
     fqbn: 'arduino:avr:mega',
@@ -104,14 +104,14 @@ async function mockSelectDirectory(app: ElectronApplication, folder: string): Pr
 }
 
 /**
- * Mocks the `arduino-cli:list-boards` IPC channel to return a fixed list of
+ * Mocks the `pio:list-boards` IPC channel to return a fixed list of
  * boards.  The device-picker dialog calls this on open.
  */
-async function mockListBoards(app: ElectronApplication, boards: ArduinoCliBoardInfo[]): Promise<void> {
-    await app.evaluate((_electronApp, boardList: ArduinoCliBoardInfo[]) => {
+async function mockListBoards(app: ElectronApplication, boards: DetectedBoardInfo[]): Promise<void> {
+    await app.evaluate((_electronApp, boardList: DetectedBoardInfo[]) => {
         const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
-        ipcMain.removeHandler('arduino-cli:list-boards')
-        ipcMain.handle('arduino-cli:list-boards', () => boardList)
+        ipcMain.removeHandler('pio:list-boards')
+        ipcMain.handle('pio:list-boards', () => boardList)
     }, boards)
 }
 
@@ -259,7 +259,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8')
 
         // But the board is currently attached at a different port
-        const movedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM0' }
+        const movedDevice: DetectedBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM0' }
         await mockSelectDirectory(electronApp, sourceFolder)
         await mockListBoards(electronApp, [movedDevice])
 
@@ -296,7 +296,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await homePage.getByText('Device Settings', { exact: true }).first().click()
 
         // Now a *different* board answers on a new port for the manual rescan.
-        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        const rescannedDevice: DetectedBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
         await mockListBoards(electronApp, [rescannedDevice])
         await mockSerialPorts(electronApp, [{
             path: '/dev/ttyACM9',
@@ -343,7 +343,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await homePage.getByText('Load from Folder').first().click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
-        const rescannedDevice: ArduinoCliBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
+        const rescannedDevice: DetectedBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }
         await mockListBoards(electronApp, [rescannedDevice])
         await mockSerialPorts(electronApp, [{
             path: '/dev/ttyACM9',

@@ -11,7 +11,7 @@ import {
     injectDeviceHeader,
     reconcileDevicePort,
 } from '../../src/renderer/src/utils/configHeaderParser'
-import type { ArduinoCliBoardInfo } from '../../src/types/ipc'
+import type { DetectedBoardInfo } from '../../src/types/ipc'
 import {
     hasGeneratorHeader,
     getGeneratorVersion,
@@ -186,7 +186,7 @@ describe('header round-trip with roster data', () => {
 
 // ── configHeaderParser — device header in config.h ────────────────────────────
 
-const SAMPLE_DEVICE: ArduinoCliBoardInfo = {
+const SAMPLE_DEVICE: DetectedBoardInfo = {
     name: 'Arduino Mega 2560',
     port: '/dev/ttyUSB0',
     fqbn: 'arduino:avr:mega',
@@ -267,7 +267,7 @@ describe('parseDeviceFromHeader', () => {
     })
 
     it('handles a port path with spaces', () => {
-        const device: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: 'COM3' }
+        const device: DetectedBoardInfo = { ...SAMPLE_DEVICE, port: 'COM3' }
         const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
         expect(parsed!.port).toBe('COM3')
     })
@@ -276,7 +276,7 @@ describe('parseDeviceFromHeader', () => {
         // Regression: the Port regex used to be `\s*` (matches \n too), so with an
         // empty value it ran past the line break and captured the following
         // "//   FQBN:     ..." line's text as the "port" instead of "".
-        const device: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: '' }
+        const device: DetectedBoardInfo = { ...SAMPLE_DEVICE, port: '' }
         const parsed = parseDeviceFromHeader(buildDeviceHeader(device))
         expect(parsed!.port).toBe('')
         expect(parsed!.fqbn).toBe(SAMPLE_DEVICE.fqbn)
@@ -297,7 +297,7 @@ describe('injectDeviceHeader', () => {
 
     it('replaces an existing device block rather than appending a second one', () => {
         const first = injectDeviceHeader(SAMPLE_CONFIG_H, SAMPLE_DEVICE)
-        const updated: ArduinoCliBoardInfo = { ...SAMPLE_DEVICE, port: 'COM4', name: 'Arduino UNO' }
+        const updated: DetectedBoardInfo = { ...SAMPLE_DEVICE, port: 'COM4', name: 'Arduino UNO' }
         const second = injectDeviceHeader(first, updated)
 
         // Only one occurrence of the tag
@@ -320,7 +320,7 @@ describe('injectDeviceHeader', () => {
 // ── reconcileDevicePort ───────────────────────────────────────────────────────
 
 describe('reconcileDevicePort', () => {
-    const STORED: ArduinoCliBoardInfo = {
+    const STORED: DetectedBoardInfo = {
         name: 'Arduino Mega 2560',
         port: '/dev/ttyUSB0',
         fqbn: 'arduino:avr:mega',
@@ -341,7 +341,7 @@ describe('reconcileDevicePort', () => {
     })
 
     it('updates port when same FQBN appears on a different port', () => {
-        const connected: ArduinoCliBoardInfo[] = [
+        const connected: DetectedBoardInfo[] = [
             { ...STORED, port: '/dev/ttyACM0' },
         ]
         const { device, portChanged } = reconcileDevicePort(STORED, connected)
@@ -350,7 +350,7 @@ describe('reconcileDevicePort', () => {
     })
 
     it('preserves all other fields when updating port', () => {
-        const connected: ArduinoCliBoardInfo[] = [
+        const connected: DetectedBoardInfo[] = [
             { ...STORED, port: 'COM4' },
         ]
         const { device } = reconcileDevicePort(STORED, connected)
@@ -360,7 +360,7 @@ describe('reconcileDevicePort', () => {
     })
 
     it('does not match boards with a different FQBN', () => {
-        const connected: ArduinoCliBoardInfo[] = [
+        const connected: DetectedBoardInfo[] = [
             { name: 'Arduino UNO', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', protocol: 'serial' },
         ]
         const { device, portChanged } = reconcileDevicePort(STORED, connected)
@@ -369,7 +369,7 @@ describe('reconcileDevicePort', () => {
     })
 
     it('matches on FQBN even when board names differ', () => {
-        const connected: ArduinoCliBoardInfo[] = [
+        const connected: DetectedBoardInfo[] = [
             { name: 'Mega (clone)', port: '/dev/ttyACM1', fqbn: 'arduino:avr:mega', protocol: 'serial' },
         ]
         const { device, portChanged } = reconcileDevicePort(STORED, connected)
@@ -378,7 +378,7 @@ describe('reconcileDevicePort', () => {
     })
 
     it('uses first FQBN match when multiple boards of same type are connected', () => {
-        const connected: ArduinoCliBoardInfo[] = [
+        const connected: DetectedBoardInfo[] = [
             { ...STORED, port: '/dev/ttyACM0' },
             { ...STORED, port: '/dev/ttyACM1' },
         ]

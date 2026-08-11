@@ -6,14 +6,15 @@ import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
 import { GitService } from '../services/git.service'
 import { ToastService } from '../services/toast.service'
-import { ArduinoCliService } from '../services/arduino-cli.service'
+import { PlatformIoService } from '../services/platformio.service'
 import { DevicePickerDialog } from '../components/dialogs/device-picker-dialog'
 import { DeviceWizard } from '../components/device-wizard'
 import { hasGeneratorHeader } from '../utils/myAutomationParser'
 import { parseDeviceFromHeader, injectDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
 import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
-import type { ArduinoCliBoardInfo } from '../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../types/ipc'
+import { buildScratchPath } from '../utils/board-key'
 
 /** File extensions we care about when scanning a loaded folder. */
 const HEADER_EXTENSIONS = ['.h']
@@ -37,7 +38,7 @@ export class Home {
     private readonly files = resolve(FileService)
     private readonly git = resolve(GitService)
     private readonly toastService = resolve(ToastService)
-    private readonly cli = resolve(ArduinoCliService)
+    private readonly pio = resolve(PlatformIoService)
 
     async binding(): Promise<void> {
         await this.loadSavedConfigs()
@@ -100,7 +101,7 @@ export class Home {
         // Check if config.h already contains a device header from a previous load.
         const configHFile = configFiles.find(f => f.name === 'config.h')!
         const configHOriginalContent = configHFile.content
-        let device: ArduinoCliBoardInfo | null = parseDeviceFromHeader(configHFile.content)
+        let device: DetectedBoardInfo | null = parseDeviceFromHeader(configHFile.content)
 
         console.debug('[loadFromFolder] parsed device from header:', device)
 
@@ -108,7 +109,7 @@ export class Home {
             // Board identity is known — silently reconcile the port in case the OS
             // assigned a different one since the last session (very common on Linux/Mac).
             try {
-                const liveBoards = await this.cli.listBoards()
+                const liveBoards = await this.pio.listBoards()
                 const { device: reconciled, portChanged } = reconcileDevicePort(device, liveBoards)
                 if (portChanged) {
                     // Update the in-memory config.h so the next Save persists the new port
@@ -129,7 +130,7 @@ export class Home {
                 // EXCSB1 / EXCSB1_WITH_EX8874 / EXCSB1_PROG → ESP32 generic target
                 const impliedFqbn = 'esp32:esp32:esp32'
                 try {
-                    const liveBoards = await this.cli.listBoards()
+                    const liveBoards = await this.pio.listBoards()
                     // Match on base FQBN so option-suffixed variants (esp32:esp32:esp32:FlashFreq=...) are found
                     const match = liveBoards.find(b => b.fqbn === impliedFqbn || b.fqbn.startsWith(impliedFqbn + ':'))
                     device = match ?? { name: 'EX-CSB1', fqbn: impliedFqbn, port: '', protocol: 'serial' }
@@ -153,7 +154,7 @@ export class Home {
 
                 // 'ok' with null = user clicked "Continue without device"
                 // 'ok' with board = user picked a board
-                device = (result as any).value as ArduinoCliBoardInfo | null
+                device = (result as any).value as DetectedBoardInfo | null
 
                 if (device) {
                     // If the picker returned a board without an FQBN (some platforms
@@ -161,7 +162,7 @@ export class Home {
                     // re-querying the live board list and matching on port/serial.
                     if (!device.fqbn) {
                         try {
-                            const live = await this.cli.listBoards()
+                            const live = await this.pio.listBoards()
                             const matched = live.find(b => b.port === device!.port || (b.serialNumber && b.serialNumber === (device as any).serialNumber))
                             if (matched && matched.fqbn) {
                                 console.debug('[loadFromFolder] enriched picked device fqbn from live scan:', matched.fqbn)
@@ -179,7 +180,7 @@ export class Home {
             }
         }
 
-        const selectedDevice: ArduinoCliBoardInfo = device ?? {
+        const selectedDevice: DetectedBoardInfo = device ?? {
             name: 'Unknown',
             port: '',
             fqbn: '',
@@ -199,7 +200,7 @@ export class Home {
             // 'cancel' = user dismissed the dialog — abort folder load
             if ((portResult as any).status === 'cancel') return
 
-            const picked = (portResult as any).value as ArduinoCliBoardInfo | null
+            const picked = (portResult as any).value as DetectedBoardInfo | null
             if (picked?.port) {
                 selectedDevice.port = picked.port
                 // Keep whichever FQBN is more specific (picked may have option suffixes)
@@ -248,6 +249,7 @@ export class Home {
             deviceName: selectedDevice.name,
             devicePort: selectedDevice.port,
             deviceFqbn: selectedDevice.fqbn,
+            deviceSerialNumber: selectedDevice.serialNumber,
             product: productKey ?? '',
             productName: productKey ? (productDetails[productKey]?.productName ?? 'Loaded from Folder') : 'Loaded from Folder',
             version: '',
@@ -314,7 +316,7 @@ export class Home {
         folder: string,
         configFileNames: string[],
         entries: string[],
-        selectedDevice: ArduinoCliBoardInfo,
+        selectedDevice: DetectedBoardInfo,
     ): Promise<{
         scratchPath: string
         repoPath: string | null
@@ -370,7 +372,11 @@ export class Home {
                     // Create a fresh internal scratch directory and populate it with
                     // the repo's source files so the compiler can find the .ino.
                     const id = String(Date.now())
-                    const scratchPath = `${reposDir}/_build/${id}/${repoFolder}`
+                    const scratchPath = buildScratchPath(reposDir, repoFolder, {
+                        fqbn: selectedDevice.fqbn,
+                        serialNumber: selectedDevice.serialNumber,
+                        port: selectedDevice.port,
+                    }, id)
 
                     try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
                     await this.files.mkdir(scratchPath)
@@ -423,6 +429,7 @@ export class Home {
             port: config.devicePort,
             fqbn: config.deviceFqbn,
             protocol: 'serial',
+            serialNumber: config.deviceSerialNumber,
         }
         this.state.selectedProduct = config.product || null
         this.state.selectedVersion = config.version || null

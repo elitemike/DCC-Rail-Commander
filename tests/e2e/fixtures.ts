@@ -11,7 +11,7 @@
  *   6. Returns the Playwright Page for the workspace view.
  *
  * The `workspacePageNative` fixture omits --mock-compile so compile calls
- * hit the real arduino-cli toolchain. Use it for COMPILE_E2E=1 tests.
+ * hit the real PlatformIO toolchain. Use it for COMPILE_E2E=1 tests.
  */
 
 import { test as base, expect } from '@playwright/test'

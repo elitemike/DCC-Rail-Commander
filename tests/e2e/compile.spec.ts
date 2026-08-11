@@ -4,7 +4,7 @@
  * The default describe block always runs using the mock compile handler
  * (--mock-compile flag is passed by the standard e2e fixture).
  *
- * The "real compiler" block requires a working arduino-cli installation and
+ * The "real compiler" block requires the bundled PlatformIO toolchain and
  * is skipped by default. Enable with:
  *
  *   COMPILE_E2E=1 pnpm test:e2e --grep "Compile"
@@ -125,10 +125,10 @@ test.describe('Compile button', () => {
     })
 })
 
-// ── Real compiler: requires arduino-cli installed (COMPILE_E2E=1) ─────────────
+// ── Real compiler: requires the bundled PlatformIO toolchain (COMPILE_E2E=1) ─────────────
 
 test.describe('Compile button — real compiler', () => {
-    test.skip(!COMPILE_E2E, 'Set COMPILE_E2E=1 to run against the real arduino-cli toolchain')
+    test.skip(!COMPILE_E2E, 'Set COMPILE_E2E=1 to run against the real PlatformIO toolchain')
 
     test('real compile succeeds and shows ✓ Success', async ({ workspacePageNative }) => {
         await workspacePageNative.getByRole('button', { name: 'Compile' }).click()

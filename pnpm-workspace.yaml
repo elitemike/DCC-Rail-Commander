@@ -3,6 +3,10 @@ shamefullyHoist: true
 allowBuilds:
   '@serialport/bindings-cpp': true
   electron: true
+  # Pulled in by electron-builder. Only used for Squirrel.Windows targets, which
+  # this app does not build (the Windows target is NSIS), so its postinstall
+  # doesn't need to run.
+  electron-winstaller: false
   esbuild: true
   usb: true
 onlyBuiltDependencies:

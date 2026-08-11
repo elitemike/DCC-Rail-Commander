@@ -73,22 +73,21 @@ export interface PythonElectronApi {
 
 // ── Augment Window global ─────────────────────────────────────────────────────
 
-// ── Arduino CLI ──────────────────────────────────────────────────────────────
+// ── PlatformIO build backend ─────────────────────────────────────────────────
 
-export interface ArduinoCliPlatformInfo {
+export interface PioPlatformInfo {
     id: string
     installed: string
     latest: string
     name: string
 }
 
-export interface ArduinoCliLibraryInfo {
-    name: string
-    installedVersion: string
-    availableVersion?: string
-}
-
-export interface ArduinoCliBoardInfo {
+/**
+ * A connected board. The FQBN stays the app-wide board identity — it is
+ * persisted in saved configurations and embedded in config.h — and the main
+ * process translates it into a PlatformIO target when building.
+ */
+export interface DetectedBoardInfo {
     name: string
     fqbn: string
     port: string
@@ -108,27 +107,21 @@ export interface UploadResult {
     error?: string
 }
 
-export interface ArduinoCliElectronApi {
-    isInstalled: () => Promise<boolean>
+export interface PlatformIoElectronApi {
+    /** True once the bundled runtime is present and its toolchains are seeded. */
+    isRuntimeReady: () => Promise<boolean>
+    /** Copies the bundled platform packs into the writable core dir (once). */
+    seedRuntime: () => Promise<{ success: boolean; error?: string }>
     getVersion: () => Promise<string | null>
-    downloadCli: () => Promise<{ success: boolean; error?: string }>
-    installPlatform: (platform: string, version?: string) => Promise<{ success: boolean; error?: string }>
-    installLibrary: (library: string, version?: string) => Promise<{ success: boolean; error?: string }>
-    getPlatforms: () => Promise<ArduinoCliPlatformInfo[]>
-    getLibraries: () => Promise<ArduinoCliLibraryInfo[]>
-    listBoards: () => Promise<ArduinoCliBoardInfo[]>
+    getBundledVersion: () => Promise<string>
+    getPlatforms: () => Promise<PioPlatformInfo[]>
+    /** Whether the toolchain for a board's FQBN is available locally. */
+    checkToolchain: (fqbn: string) => Promise<{ installed: boolean; version: string | null }>
+    listBoards: () => Promise<DetectedBoardInfo[]>
     compile: (sketchPath: string, fqbn: string) => Promise<CompileResult>
     upload: (sketchPath: string, fqbn: string, port: string) => Promise<UploadResult>
-    initConfig: () => Promise<{ success: boolean; error?: string }>
-    updateIndex: () => Promise<{ success: boolean; error?: string }>
-    getBundledVersion: () => Promise<string>
-    browseBinary: () => Promise<string | null>
-    browsePlatformArchive: () => Promise<string | null>
-    validateBinary: (binaryPath: string) => Promise<{ success: boolean; version?: string; error?: string }>
-    setCustomPath: (binaryPath: string) => Promise<{ success: boolean }>
-    installFromArchive: (archivePath: string) => Promise<{ success: boolean; error?: string }>
-    checkPlatform: (platformId: string) => Promise<{ installed: boolean; version: string | null }>
-    installPlatformFromArchive: (archivePath: string, platformId: string, version: string) => Promise<{ success: boolean; error?: string }>
+    browseToolchainPack: () => Promise<string | null>
+    importToolchainPack: (archivePath: string) => Promise<{ success: boolean; error?: string }>
     onProgress: (cb: (payload: { phase: string; message: string }) => void) => () => void
 }
 
@@ -198,7 +191,7 @@ declare global {
     interface Window {
         usb: UsbElectronApi
         python: PythonElectronApi
-        arduinoCli: ArduinoCliElectronApi
+        platformio: PlatformIoElectronApi
         git: GitElectronApi
         files: FileElectronApi
         preferences: PreferencesElectronApi

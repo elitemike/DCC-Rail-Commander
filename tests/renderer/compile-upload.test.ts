@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { InstallerState } from '../../src/renderer/src/models/installer-state'
-import type { ArduinoCliService } from '../../src/renderer/src/services/arduino-cli.service'
+import type { PlatformIoService } from '../../src/renderer/src/services/platformio.service'
 import type { FileService } from '../../src/renderer/src/services/file.service'
 import type { UsbService } from '../../src/renderer/src/services/usb.service'
 
@@ -9,7 +9,7 @@ import type { UsbService } from '../../src/renderer/src/services/usb.service'
 
 function makeWorkspace(overrides: {
     state?: Partial<InstallerState>
-    cli?: Partial<ArduinoCliService>
+    pio?: Partial<PlatformIoService>
     files?: Partial<FileService>
     usb?: Partial<UsbService>
 } = {}): Workspace {
@@ -34,13 +34,13 @@ function makeWorkspace(overrides: {
         ...overrides.files,
     } as unknown as FileService
 
-    const cli = {
+    const pio = {
         compile: vi.fn().mockResolvedValue({ success: true, output: '' }),
         upload: vi.fn().mockResolvedValue({ success: true, output: '' }),
         listBoards: vi.fn().mockResolvedValue([]),
         subscribeToProgress: vi.fn().mockReturnValue(() => { }),
-        ...overrides.cli,
-    } as unknown as ArduinoCliService
+        ...overrides.pio,
+    } as unknown as PlatformIoService
 
     // ensureLivePort()'s fast path just needs the selected device's own port
     // to already be present in the "connected" list — default to exactly
@@ -57,7 +57,7 @@ function makeWorkspace(overrides: {
 
     Object.assign(ws, {
         state,
-        cli,
+        pio,
         files,
         usb,
         ea: { publish: vi.fn() },
@@ -96,13 +96,13 @@ describe('Workspace.upload — guard conditions', () => {
         const ws = makeWorkspace({ state: { selectedDevice: null, repoPath: REPO } })
         await ws.upload()
         expect(ws.isCompiling).toBe(false)
-        expect((ws as any).cli.upload).not.toHaveBeenCalled()
+        expect((ws as any).pio.upload).not.toHaveBeenCalled()
     })
 
     it('returns immediately when scratchPath is null', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, scratchPath: null } })
         await ws.upload()
-        expect((ws as any).cli.upload).not.toHaveBeenCalled()
+        expect((ws as any).pio.upload).not.toHaveBeenCalled()
     })
 
     it('sets compileSuccess=false when FQBN is empty', async () => {
@@ -127,7 +127,7 @@ describe('Workspace.upload — port reconciliation', () => {
             // Board is no longer at /dev/ttyACM0 — it re-enumerated on a new
             // port, reported by both the raw serial-port list and the CLI.
             usb: { serialPorts: [{ path: '/dev/ttyACM5', manufacturer: 'Arduino Mega 2560' }] },
-            cli: {
+            pio: {
                 listBoards: vi.fn().mockResolvedValue([
                     { name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega', port: '/dev/ttyACM5', protocol: 'serial' },
                 ]),
@@ -137,21 +137,21 @@ describe('Workspace.upload — port reconciliation', () => {
 
         await ws.upload()
 
-        expect((ws as any).cli.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM5')
+        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM5')
         expect(ws.state.selectedDevice?.port).toBe('/dev/ttyACM5')
         expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Port Updated' }))
     })
 
-    it('fails with a clear error instead of calling cli.upload when the board is not found at all', async () => {
+    it('fails with a clear error instead of calling pio.upload when the board is not found at all', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: { ...megaDevice }, repoPath: REPO },
             usb: { serialPorts: [] },
-            cli: { listBoards: vi.fn().mockResolvedValue([]) },
+            pio: { listBoards: vi.fn().mockResolvedValue([]) },
         })
 
         await ws.upload()
 
-        expect((ws as any).cli.upload).not.toHaveBeenCalled()
+        expect((ws as any).pio.upload).not.toHaveBeenCalled()
         expect(ws.compileSuccess).toBe(false)
         expect(ws.compileError).toMatch(/no longer available/i)
     })
@@ -159,17 +159,17 @@ describe('Workspace.upload — port reconciliation', () => {
 
 // ── upload() — invocation ──────────────────────────────────────────────────────
 
-describe('Workspace.upload — cli.upload invocation', () => {
+describe('Workspace.upload — pio.upload invocation', () => {
     it('calls upload with scratchPath, fqbn, and port', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO } })
         await ws.upload()
-        expect((ws as any).cli.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM0')
+        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM0')
     })
 
-    it('does not call cli.compile', async () => {
+    it('does not call pio.compile', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO } })
         await ws.upload()
-        expect((ws as any).cli.compile).not.toHaveBeenCalled()
+        expect((ws as any).pio.compile).not.toHaveBeenCalled()
     })
 })
 
@@ -191,7 +191,7 @@ describe('Workspace.upload — success outcome', () => {
     it('log contains upload output', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockResolvedValue({ success: true, output: 'avrdude done.' }) },
+            pio: { upload: vi.fn().mockResolvedValue({ success: true, output: 'avrdude done.' }) },
         })
         await ws.upload()
         expect(ws.compileLog).toContain('avrdude done.')
@@ -216,7 +216,7 @@ describe('Workspace.upload — failure outcomes', () => {
     it('sets compileSuccess=false', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'port busy' }) },
+            pio: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'port busy' }) },
         })
         await ws.upload()
         expect(ws.compileSuccess).toBe(false)
@@ -225,7 +225,7 @@ describe('Workspace.upload — failure outcomes', () => {
     it('surfaces the upload error string', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'port busy' }) },
+            pio: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'port busy' }) },
         })
         await ws.upload()
         expect(ws.compileError).toBe('port busy')
@@ -234,7 +234,7 @@ describe('Workspace.upload — failure outcomes', () => {
     it("falls back to 'Upload failed' when no error string is provided", async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockResolvedValue({ success: false, output: '' }) },
+            pio: { upload: vi.fn().mockResolvedValue({ success: false, output: '' }) },
         })
         await ws.upload()
         expect(ws.compileError).toBe('Upload failed')
@@ -243,16 +243,16 @@ describe('Workspace.upload — failure outcomes', () => {
     it('isCompiling is false after failure', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
+            pio: { upload: vi.fn().mockResolvedValue({ success: false, output: '', error: 'err' }) },
         })
         await ws.upload()
         expect(ws.isCompiling).toBe(false)
     })
 
-    it('isCompiling is false when cli.upload throws unexpectedly', async () => {
+    it('isCompiling is false when pio.upload throws unexpectedly', async () => {
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO },
-            cli: { upload: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
+            pio: { upload: vi.fn().mockRejectedValue(new Error('IPC channel closed')) },
         })
         await ws.upload()
         expect(ws.isCompiling).toBe(false)
@@ -265,11 +265,11 @@ describe('Workspace.upload — failure outcomes', () => {
 describe('Workspace.compileAndUpload — orchestration', () => {
     it('calls compile then upload on success', async () => {
         const callOrder: string[] = []
-        const cli = {
+        const pio = {
             compile: vi.fn().mockImplementation(async () => { callOrder.push('compile'); return { success: true, output: '' } }),
             upload: vi.fn().mockImplementation(async () => { callOrder.push('upload'); return { success: true, output: '' } }),
-        } as unknown as ArduinoCliService
-        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, cli })
+        } as unknown as PlatformIoService
+        const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] }, pio })
         await ws.compileAndUpload()
         expect(callOrder).toEqual(['compile', 'upload'])
     })
@@ -278,7 +278,7 @@ describe('Workspace.compileAndUpload — orchestration', () => {
         const uploadMock = vi.fn()
         const ws = makeWorkspace({
             state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] },
-            cli: {
+            pio: {
                 compile: vi.fn().mockResolvedValue({ success: false, output: '', error: 'compile error' }),
                 upload: uploadMock,
             },
@@ -289,7 +289,7 @@ describe('Workspace.compileAndUpload — orchestration', () => {
 
     it('does not call upload when device is null', async () => {
         const uploadMock = vi.fn()
-        const ws = makeWorkspace({ state: { selectedDevice: null, repoPath: REPO }, cli: { upload: uploadMock } })
+        const ws = makeWorkspace({ state: { selectedDevice: null, repoPath: REPO }, pio: { upload: uploadMock } })
         await ws.compileAndUpload()
         expect(uploadMock).not.toHaveBeenCalled()
     })
@@ -301,7 +301,7 @@ describe('Workspace.compileAndUpload — orchestration', () => {
             const configFiles = [{ name: 'config.h', content: '#define MOTOR_SHIELD_TYPE STANDARD_MOTOR_SHIELD\n' }]
             ws = makeWorkspace({
                 state: { selectedDevice: megaDevice, repoPath: REPO, configFiles },
-                cli: {
+                pio: {
                     compile: vi.fn().mockResolvedValue({ success: true, output: 'Sketch uses 12345 bytes' }),
                     upload: vi.fn().mockResolvedValue({ success: true, output: 'avrdude done.' }),
                 },
@@ -325,7 +325,7 @@ describe('Workspace.compileAndUpload — orchestration', () => {
 //         → generateCommandStationConfig() → state.configFiles
 //       workspace.compile()
 //         → saveFiles() → files.writeFile(repoPath/config.h, content)
-//         → cli.compile(repoPath, fqbn)
+//         → pio.compile(repoPath, fqbn)
 //
 // CSB1 device: VID:PID 303a:1001, FQBN 'esp32:esp32:esp32s3'
 // Config generated for: EXCSB1 motor driver, SH1106 OLED (132×64),
@@ -378,14 +378,14 @@ describe('Workspace.compile() — EX-CSB1 full configuration', () => {
                 scratchPath: CSB1_REPO,
                 configFiles: [{ name: 'config.h', content: CSB1_CONFIG_H }],
             },
-            cli: { compile: mockCompile as unknown as (sketchPath: string, fqbn: string) => Promise<any> },
+            pio: { compile: mockCompile as unknown as (sketchPath: string, fqbn: string) => Promise<any> },
             files: { writeFile: mockWriteFile as unknown as (filePath: string, content: string) => Promise<void> },
         })
 
         await ws.compile()
     })
 
-    it('calls cli.compile with the CSB1 sketch path and FQBN', () => {
+    it('calls pio.compile with the CSB1 sketch path and FQBN', () => {
         expect(mockCompile).toHaveBeenCalledWith(CSB1_REPO, 'esp32:esp32:esp32s3')
     })
 

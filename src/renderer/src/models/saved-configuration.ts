@@ -10,8 +10,14 @@ export interface SavedConfiguration {
     deviceName: string
     /** Serial port path (e.g. "/dev/ttyACM0" or "COM3") */
     devicePort: string
-    /** Arduino FQBN string – empty if board wasn't identified by CLI */
+    /** Arduino FQBN string – empty if the board wasn't identified */
     deviceFqbn: string
+    /**
+     * USB serial number of the specific board, when it reports one. Together
+     * with the FQBN this distinguishes two identical boards, which is what
+     * keeps their build dirs and saved settings from colliding.
+     */
+    deviceSerialNumber?: string
     /** Product key (e.g. "ex_commandstation") */
     product: string
     /** Product display name (e.g. "EX-CommandStation") */

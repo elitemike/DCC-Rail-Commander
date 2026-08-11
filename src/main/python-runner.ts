@@ -1,7 +1,9 @@
 import { BrowserWindow } from 'electron'
 import { PythonShell, Options as PythonOptions } from 'python-shell'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { app } from 'electron'
+import { pythonExe } from './pio-runtime'
 
 export interface PythonJobOptions {
     /** Python script path relative to the `python/` resource directory. */
@@ -37,11 +39,31 @@ export class PythonRunner {
     private readonly jobs = new Map<string, PythonShell>()
     private jobCounter = 0
 
-    /** Resolve the root directory that contains Python scripts. */
+    /**
+     * Resolve the root directory that contains Python scripts.
+     *
+     * Note this is *not* where the bundled interpreter lives (that's
+     * `<resources>/python`, see pio-runtime.ts) — these are the app's own
+     * scripts, shipped alongside it.
+     */
     private get scriptRoot(): string {
         return app.isPackaged
-            ? join(process.resourcesPath, 'python')
-            : join(__dirname, '../../python')
+            ? join(process.resourcesPath, 'python-scripts')
+            : join(__dirname, '../../src/python')
+    }
+
+    /**
+     * The interpreter to run scripts with.
+     *
+     * Prefers the version-locked interpreter bundled with the app, so scripts
+     * run against a known Python regardless of what the user has installed.
+     * Falls back to the system interpreter when the bundled runtime isn't
+     * present (development checkouts before `pnpm toolchain:fetch` has run).
+     */
+    private get pythonPath(): string {
+        const bundled = pythonExe()
+        if (existsSync(bundled)) return bundled
+        return process.platform === 'win32' ? 'python' : 'python3'
     }
 
     /**
@@ -54,7 +76,7 @@ export class PythonRunner {
 
         const shellOptions: PythonOptions = {
             mode: options.mode ?? 'text',
-            pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+            pythonPath: this.pythonPath,
             scriptPath: options.cwd ?? this.scriptRoot,
             args: options.args,
             env: { ...process.env, ...(options.env ?? {}) },

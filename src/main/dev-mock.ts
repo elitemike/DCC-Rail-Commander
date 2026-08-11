@@ -122,7 +122,7 @@ export const MOCK_SKETCH_SEEDS: Record<string, { sketchFile: string; content: st
 export const MOCK_CONFIG_SEEDS = STARTER_TEMPLATES
 
 /**
- * Seeds the mock repo directory on disk so arduino-cli has a real sketch tree.
+ * Seeds the mock repo directory on disk so the compiler has a real sketch tree.
  * Called by the git:clone IPC handler when IS_DEV_MOCK is true.
  */
 export async function seedMockRepo(dest: string): Promise<void> {

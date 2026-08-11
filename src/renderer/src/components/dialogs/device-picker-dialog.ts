@@ -1,9 +1,9 @@
 import { resolve } from 'aurelia'
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
-import { ArduinoCliService } from '../../services/arduino-cli.service'
+import { PlatformIoService } from '../../services/platformio.service'
 import { UsbService } from '../../services/usb.service'
 import { mergeDetectedBoards } from '../../utils/device-scan'
-import type { ArduinoCliBoardInfo } from '../../../../types/ipc'
+import type { DetectedBoardInfo } from '../../../../types/ipc'
 
 /**
  * Minimal dialog that scans for connected boards and lets the user pick one.
@@ -24,11 +24,11 @@ import type { ArduinoCliBoardInfo } from '../../../../types/ipc'
  */
 export class DevicePickerDialog implements IDialogCustomElementViewModel {
     readonly $dialog = resolve(IDialogController)
-    private readonly cli = resolve(ArduinoCliService)
+    private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
 
-    boards: ArduinoCliBoardInfo[] = []
-    selectedBoard: ArduinoCliBoardInfo | null = null
+    boards: DetectedBoardInfo[] = []
+    selectedBoard: DetectedBoardInfo | null = null
     scanning = false
     scanError: string | null = null
     portOnly = false
@@ -41,7 +41,7 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
     activate(model?: { initialFqbn?: string; portOnly?: boolean }): void {
         // Deliberately not awaited: @aurelia/dialog doesn't attach/show the dialog
         // until this hook's return value settles, so awaiting scan() here (USB +
-        // arduino-cli enumeration, can take a second or more) would leave the dialog
+        // board enumeration, can take a second or more) would leave the dialog
         // invisible the whole time it's "opening". Firing it without awaiting lets
         // the dialog show immediately with its scanning spinner instead.
         this.initialFqbn = model?.initialFqbn ?? ''
@@ -63,9 +63,9 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
             // board is never missing just because Arduino CLI hasn't recognised it yet
             // (still installing, generic/clone chip, or a momentary lag right after a
             // replug) — CLI results only ever add detail on top.
-            let cliBoards: ArduinoCliBoardInfo[] = []
+            let cliBoards: DetectedBoardInfo[] = []
             try {
-                cliBoards = await this.cli.listBoards()
+                cliBoards = await this.pio.listBoards()
             } catch { /* fall back silently to the raw serial-port list */ }
 
             this.boards = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
@@ -94,7 +94,7 @@ export class DevicePickerDialog implements IDialogCustomElementViewModel {
         }
     }
 
-    selectBoard(board: ArduinoCliBoardInfo): void {
+    selectBoard(board: DetectedBoardInfo): void {
         this.selectedBoard = board
     }
 

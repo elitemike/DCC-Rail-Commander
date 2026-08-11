@@ -4,9 +4,8 @@ import type {
     UsbDeviceInfo,
     PythonJobOptions,
     PythonJobResult,
-    ArduinoCliPlatformInfo,
-    ArduinoCliLibraryInfo,
-    ArduinoCliBoardInfo,
+    PioPlatformInfo,
+    DetectedBoardInfo,
     CompileResult,
     UploadResult,
 } from '../types/ipc'
@@ -104,72 +103,45 @@ const pythonApi = {
 contextBridge.exposeInMainWorld('usb', usbApi)
 contextBridge.exposeInMainWorld('python', pythonApi)
 
-// ── Arduino CLI API ──────────────────────────────────────────────────────────
-const arduinoCliApi = {
-    isInstalled: (): Promise<boolean> =>
-        ipcRenderer.invoke('arduino-cli:is-installed'),
+// ── PlatformIO API ───────────────────────────────────────────────────────────
+const platformIoApi = {
+    isRuntimeReady: (): Promise<boolean> =>
+        ipcRenderer.invoke('pio:is-runtime-ready'),
+
+    seedRuntime: (): Promise<{ success: boolean; error?: string }> =>
+        ipcRenderer.invoke('pio:seed-runtime'),
 
     getVersion: (): Promise<string | null> =>
-        ipcRenderer.invoke('arduino-cli:get-version'),
-
-    downloadCli: (): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:download'),
-
-    installPlatform: (platform: string, version?: string): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:install-platform', platform, version),
-
-    installLibrary: (library: string, version?: string): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:install-library', library, version),
-
-    getPlatforms: (): Promise<ArduinoCliPlatformInfo[]> =>
-        ipcRenderer.invoke('arduino-cli:get-platforms'),
-
-    getLibraries: (): Promise<ArduinoCliLibraryInfo[]> =>
-        ipcRenderer.invoke('arduino-cli:get-libraries'),
-
-    listBoards: (): Promise<ArduinoCliBoardInfo[]> =>
-        ipcRenderer.invoke('arduino-cli:list-boards'),
-
-    compile: (sketchPath: string, fqbn: string): Promise<CompileResult> =>
-        ipcRenderer.invoke('arduino-cli:compile', sketchPath, fqbn),
-
-    upload: (sketchPath: string, fqbn: string, port: string): Promise<UploadResult> =>
-        ipcRenderer.invoke('arduino-cli:upload', sketchPath, fqbn, port),
-
-    initConfig: (): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:init-config'),
-
-    updateIndex: (): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:update-index'),
+        ipcRenderer.invoke('pio:get-version'),
 
     getBundledVersion: (): Promise<string> =>
-        ipcRenderer.invoke('arduino-cli:get-bundled-version'),
+        ipcRenderer.invoke('pio:get-bundled-version'),
 
-    browseBinary: (): Promise<string | null> =>
-        ipcRenderer.invoke('arduino-cli:browse-binary'),
+    getPlatforms: (): Promise<PioPlatformInfo[]> =>
+        ipcRenderer.invoke('pio:get-platforms'),
 
-    browsePlatformArchive: (): Promise<string | null> =>
-        ipcRenderer.invoke('arduino-cli:browse-platform-archive'),
+    checkToolchain: (fqbn: string): Promise<{ installed: boolean; version: string | null }> =>
+        ipcRenderer.invoke('pio:check-toolchain', fqbn),
 
-    validateBinary: (binaryPath: string): Promise<{ success: boolean; version?: string; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:validate-binary', binaryPath),
+    listBoards: (): Promise<DetectedBoardInfo[]> =>
+        ipcRenderer.invoke('pio:list-boards'),
 
-    setCustomPath: (binaryPath: string): Promise<{ success: boolean }> =>
-        ipcRenderer.invoke('arduino-cli:set-custom-path', binaryPath),
+    compile: (sketchPath: string, fqbn: string): Promise<CompileResult> =>
+        ipcRenderer.invoke('pio:compile', sketchPath, fqbn),
 
-    installFromArchive: (archivePath: string): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:install-from-archive', archivePath),
+    upload: (sketchPath: string, fqbn: string, port: string): Promise<UploadResult> =>
+        ipcRenderer.invoke('pio:upload', sketchPath, fqbn, port),
 
-    checkPlatform: (platformId: string): Promise<{ installed: boolean; version: string | null }> =>
-        ipcRenderer.invoke('arduino-cli:check-platform', platformId),
+    browseToolchainPack: (): Promise<string | null> =>
+        ipcRenderer.invoke('pio:browse-toolchain-pack'),
 
-    installPlatformFromArchive: (archivePath: string, platformId: string, version: string): Promise<{ success: boolean; error?: string }> =>
-        ipcRenderer.invoke('arduino-cli:install-platform-from-archive', archivePath, platformId, version),
+    importToolchainPack: (archivePath: string): Promise<{ success: boolean; error?: string }> =>
+        ipcRenderer.invoke('pio:import-toolchain-pack', archivePath),
 
     onProgress: (cb: (payload: { phase: string; message: string }) => void) => {
         const handler = (_: IpcRendererEvent, p: { phase: string; message: string }) => cb(p)
-        ipcRenderer.on('arduino-cli:progress', handler)
-        return () => ipcRenderer.off('arduino-cli:progress', handler)
+        ipcRenderer.on('pio:progress', handler)
+        return () => ipcRenderer.off('pio:progress', handler)
     },
 }
 
@@ -236,7 +208,7 @@ const preferencesApi = {
         ipcRenderer.invoke('preferences:get-all'),
 }
 
-contextBridge.exposeInMainWorld('arduinoCli', arduinoCliApi)
+contextBridge.exposeInMainWorld('platformio', platformIoApi)
 contextBridge.exposeInMainWorld('git', gitApi)
 contextBridge.exposeInMainWorld('files', filesApi)
 contextBridge.exposeInMainWorld('preferences', preferencesApi)

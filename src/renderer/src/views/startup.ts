@@ -1,29 +1,36 @@
 import { resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
 import { InstallerState } from '../models/installer-state'
-import { ArduinoCliService } from '../services/arduino-cli.service'
-import { extraPlatforms } from '../models/product-details'
+import { PlatformIoService } from '../services/platformio.service'
 import { ConfigService } from '../services/config.service'
+import { PreferencesService } from '../services/preferences.service'
+import type { SavedConfiguration } from '../models/saved-configuration'
 
+/**
+ * Startup is no longer an installer.
+ *
+ * The build toolchain (Python, PlatformIO Core and the platform packs) ships
+ * inside the application, so the only work left at launch is copying the
+ * bundled packs into the writable core directory the first time a given build
+ * of the app runs. Nothing here downloads anything.
+ */
 type SetupPhase =
     | 'splash'
     | 'checking'
-    | 'cli-prompt'
-    | 'installing'
-    | 'upgrade-prompt'
-    | 'esp32-prompt'
-    | 'esp32-installing'
+    | 'seeding'
+    | 'toolchain-prompt'
     | 'ready'
     | 'error'
 
 export class Startup {
     private readonly router = resolve(Router)
     private readonly state = resolve(InstallerState)
-    private readonly cli = resolve(ArduinoCliService)
+    private readonly pio = resolve(PlatformIoService)
     private readonly config = resolve(ConfigService)
+    private readonly preferences = resolve(PreferencesService)
 
     phase: SetupPhase = 'splash'
-    statusMessage = 'Checking Arduino CLI...'
+    statusMessage = 'Checking build toolchain...'
     progress = 0
     installedVersion: string | null = null
     bundledVersion = ''
@@ -31,16 +38,8 @@ export class Startup {
     error: string | null = null
     /** Inline error shown inside prompt cards. */
     browseError: string | null = null
-    /** True while a browse+validate flow is in progress. */
+    /** True while a browse+import flow is in progress. */
     browseBusy = false
-
-    /** ESP32 platform state */
-    esp32InstalledVersion: string | null = null
-    esp32UpdateAvailable = false // true = update prompt, false = fresh install prompt
-    readonly esp32PlatformId = 'esp32:esp32'
-    get esp32PlatformVersion(): string {
-        return extraPlatforms['esp32:esp32'] ?? '2.0.17'
-    }
 
     async attached(): Promise<void> {
         await this.config.ready
@@ -58,194 +57,128 @@ export class Startup {
         this.progress = 0
 
         try {
-            this.bundledVersion = await this.cli.getBundledVersion()
-            this.statusMessage = 'Checking Arduino CLI...'
+            this.bundledVersion = await this.pio.getBundledVersion()
+            this.installedVersion = await this.pio.getVersion()
 
-            const isInstalled = await this.cli.isInstalled()
-            if (!isInstalled) {
-                this.phase = 'cli-prompt'
-                return
-            }
-
-            this.installedVersion = await this.cli.getVersion()
-            const installed = this.parseVersion(this.installedVersion ?? '')
-            const bundled = this.parseVersion(this.bundledVersion)
-
-            if (!installed) {
-                // Binary exists but couldn't report a version — treat as broken/missing.
-                this.phase = 'cli-prompt'
-                return
-            }
-
-            if (installed !== bundled) {
-                this.phase = 'upgrade-prompt'
-            } else {
-                await this.checkEsp32Platform()
-            }
-        } catch (err) {
-            this.error = (err as Error).message
-            this.phase = 'error'
-        }
-    }
-
-    // ── ESP32 platform check ─────────────────────────────────────────────────
-
-    private async checkEsp32Platform(): Promise<void> {
-        this.phase = 'checking'
-        this.statusMessage = 'Checking ESP32 platform...'
-        try {
-            const result = await this.cli.checkPlatform(this.esp32PlatformId)
-            if (!result.installed) {
-                this.esp32UpdateAvailable = false
-                this.esp32InstalledVersion = null
-                this.phase = 'esp32-prompt'
-            } else {
-                this.esp32InstalledVersion = result.version
-                const required = this.esp32PlatformVersion
-                if (result.version && result.version !== required) {
-                    this.esp32UpdateAvailable = true
-                    this.phase = 'esp32-prompt'
-                } else {
-                    this.markReady()
+            if (await this.pio.isRuntimeReady()) {
+                if (await this.needsToolchainPack()) {
+                    this.phase = 'toolchain-prompt'
+                    return
                 }
+                this.markReady()
+                return
             }
-        } catch {
-            // Non-fatal — platform check failure doesn't block launch
-            this.markReady()
-        }
-    }
 
-    // ── ESP32 prompt actions ─────────────────────────────────────────────────
+            // No runnable interpreter at all: nothing to seed, and nothing the
+            // user can do about it here.
+            if (!this.installedVersion) {
+                await this.continueWithoutToolchain('bundled runtime is missing or not runnable')
+                return
+            }
 
-    async downloadEsp32(): Promise<void> {
-        this.phase = 'esp32-installing'
-        this.browseError = null
-        this.progress = 5
-        try {
-            this.statusMessage = 'Installing ESP32 platform...'
-            const result = await this.cli.installPlatform(this.esp32PlatformId, this.esp32PlatformVersion)
-            if (!result.success) throw new Error(result.error ?? 'Platform install failed')
-            this.progress = 100
-            this.markReady()
+            await this.seed()
         } catch (err) {
             this.error = (err as Error).message
             this.phase = 'error'
         }
     }
 
-    async browseEsp32Archive(): Promise<void> {
+    /**
+     * Copies the bundled platform packs into the writable core dir. Runs once
+     * per build of the app; the progress messages come from the main process.
+     */
+    private async seed(): Promise<void> {
+        this.phase = 'seeding'
+        this.statusMessage = 'Preparing build toolchain...'
+        this.progress = 10
+
+        const unsubscribe = this.pio.subscribeToProgress((payload) => {
+            if (payload.phase !== 'seed') return
+            this.statusMessage = payload.message
+            // The seed step has no meaningful total, so creep towards 90% and
+            // let completion take it the rest of the way.
+            this.progress = Math.min(90, this.progress + 5)
+        })
+
+        try {
+            const result = await this.pio.seedRuntime()
+            if (!result.success) throw new Error(result.error ?? 'Could not prepare the build toolchain.')
+            this.progress = 100
+            if (await this.needsToolchainPack()) {
+                this.phase = 'toolchain-prompt'
+                return
+            }
+            this.markReady()
+        } finally {
+            unsubscribe()
+        }
+    }
+
+    /**
+     * True when a board the user has already configured needs a toolchain this
+     * build doesn't bundle (STM32) and hasn't been imported yet.
+     *
+     * Checked against saved configurations rather than asked unconditionally,
+     * so the overwhelming majority of users — on AVR and ESP32 boards — never
+     * see this prompt.
+     */
+    private async needsToolchainPack(): Promise<boolean> {
+        try {
+            const saved = await this.preferences.get('savedConfigurations') as SavedConfiguration[] | undefined
+            if (!Array.isArray(saved)) return false
+            const fqbns = [...new Set(saved.map((c) => c.deviceFqbn).filter(Boolean))]
+            for (const fqbn of fqbns) {
+                if (!(await this.pio.checkToolchain(fqbn)).installed) return true
+            }
+            return false
+        } catch {
+            // Never block launch on this check.
+            return false
+        }
+    }
+
+    /**
+     * A build toolchain that is missing outright — a development checkout that
+     * hasn't run `pnpm toolchain:fetch`, or a broken package — must not lock the
+     * user out of the app: editing and saving configurations still works fine
+     * without it, and compile/upload already fail with the same message at the
+     * point where it is actionable.
+     */
+    private async continueWithoutToolchain(reason: string): Promise<void> {
+        console.warn('[startup] build toolchain unavailable:', reason)
+        this.markReady(false)
+    }
+
+    // ── Toolchain pack import ────────────────────────────────────────────────
+    // Boards outside the bundled set (STM32) need a toolchain pack supplied by
+    // the user. Nothing is downloaded — the pack is a local archive.
+
+    async browseToolchainPack(): Promise<void> {
         this.browseError = null
         this.browseBusy = true
         try {
-            const filePath = await this.cli.browsePlatformArchive()
+            const filePath = await this.pio.browseToolchainPack()
             if (!filePath) return // cancelled
 
-            this.phase = 'esp32-installing'
-            this.progress = 5
-            this.statusMessage = 'Extracting ESP32 platform...'
+            this.phase = 'seeding'
+            this.progress = 20
+            this.statusMessage = 'Installing toolchain pack...'
 
-            const result = await this.cli.installPlatformFromArchive(
-                filePath,
-                this.esp32PlatformId,
-                this.esp32PlatformVersion,
-            )
-            if (!result.success) throw new Error(result.error ?? 'Archive extraction failed')
+            const result = await this.pio.importToolchainPack(filePath)
+            if (!result.success) throw new Error(result.error ?? 'Toolchain pack import failed')
             this.progress = 100
             this.markReady()
         } catch (err) {
             // Return to the prompt so the user can try again
             this.browseError = (err as Error).message
-            this.phase = 'esp32-prompt'
+            this.phase = 'toolchain-prompt'
         } finally {
             this.browseBusy = false
         }
     }
 
-    skipEsp32(): void {
+    skipToolchainPack(): void {
         this.markReady()
-    }
-
-    // ── cli-prompt actions ───────────────────────────────────────────────────
-
-    async downloadAndInstall(): Promise<void> {
-        await this.runInstall()
-    }
-
-    async browseForBinary(): Promise<void> {
-        this.browseError = null
-        this.browseBusy = true
-        try {
-            const filePath = await this.cli.browseBinary()
-            if (!filePath) return
-
-            const validation = await this.cli.validateBinary(filePath)
-            if (!validation.success) {
-                this.browseError = validation.error ?? 'The selected file is not a valid Arduino CLI binary.'
-                return
-            }
-
-            await this.cli.setCustomPath(filePath)
-            this.installedVersion = validation.version ?? null
-            await this.checkAndSetup()
-        } catch (err) {
-            this.browseError = (err as Error).message
-        } finally {
-            this.browseBusy = false
-        }
-    }
-
-    async browseForArchive(): Promise<void> {
-        this.browseError = null
-        this.browseBusy = true
-        try {
-            const filePath = await this.cli.browseBinary()
-            if (!filePath) return
-
-            this.phase = 'installing'
-            this.statusMessage = 'Extracting Arduino CLI from archive...'
-            this.progress = 10
-
-            const extract = await this.cli.installFromArchive(filePath)
-            if (!extract.success) throw new Error(extract.error ?? 'Extraction failed')
-            this.progress = 40
-
-            this.statusMessage = 'Initializing configuration...'
-            const init = await this.cli.initConfig()
-            if (!init.success) throw new Error(init.error ?? 'Config init failed')
-            this.progress = 55
-
-            this.statusMessage = 'Updating board index...'
-            const upd = await this.cli.updateIndex()
-            if (!upd.success) throw new Error(upd.error ?? 'Index update failed')
-            this.progress = 75
-
-            this.statusMessage = 'Installing Arduino AVR core...'
-            const platform = await this.cli.installPlatform('arduino:avr', '1.8.6')
-            if (!platform.success) throw new Error(platform.error ?? 'AVR platform install failed')
-            this.progress = 100
-
-            this.statusMessage = 'Arduino CLI ready!'
-            await this.checkEsp32Platform()
-        } catch (err) {
-            this.error = (err as Error).message
-            this.phase = 'error'
-        } finally {
-            this.browseBusy = false
-        }
-    }
-
-    // ── upgrade-prompt actions ───────────────────────────────────────────────
-
-    async upgrade(): Promise<void> {
-        await this.runInstall()
-    }
-
-    async skipUpgrade(): Promise<void> {
-        await this.checkEsp32Platform()
-    }
-
-    async browseForUpgradeFile(): Promise<void> {
-        await this.browseForBinary()
     }
 
     // ── error card ───────────────────────────────────────────────────────────
@@ -254,52 +187,11 @@ export class Startup {
         await this.checkAndSetup()
     }
 
-    // ── Install / upgrade (download path) ───────────────────────────────────
-
-    private async runInstall(): Promise<void> {
-        this.phase = 'installing'
-        this.error = null
-
-        try {
-            this.statusMessage = 'Downloading Arduino CLI...'
-            this.progress = 5
-            const dl = await this.cli.downloadCli()
-            if (!dl.success) throw new Error(dl.error ?? 'Download failed')
-            this.progress = 35
-
-            this.statusMessage = 'Initializing configuration...'
-            const init = await this.cli.initConfig()
-            if (!init.success) throw new Error(init.error ?? 'Config init failed')
-            this.progress = 50
-
-            this.statusMessage = 'Updating board index...'
-            const upd = await this.cli.updateIndex()
-            if (!upd.success) throw new Error(upd.error ?? 'Index update failed')
-            this.progress = 70
-
-            this.statusMessage = 'Installing Arduino AVR core...'
-            const platform = await this.cli.installPlatform('arduino:avr', '1.8.6')
-            if (!platform.success) throw new Error(platform.error ?? 'AVR platform install failed')
-            this.progress = 100
-
-            this.statusMessage = 'Arduino CLI ready!'
-            await this.checkEsp32Platform()
-        } catch (err) {
-            this.error = (err as Error).message
-            this.phase = 'error'
-        }
-    }
-
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private markReady(): void {
+    private markReady(toolchainReady = true): void {
         this.phase = 'ready'
-        this.state.cliReady = true
+        this.state.toolchainReady = toolchainReady
         this.router.load('home')
-    }
-
-    private parseVersion(versionString: string): string {
-        const match = versionString.match(/\d+\.\d+\.\d+/)
-        return match ? match[0] : ''
     }
 }

@@ -4,7 +4,7 @@ import { config } from './config'
 import { registerAllIpcHandlers } from './ipc'
 import { UsbManager } from './usb-manager'
 import { PythonRunner } from './python-runner'
-import { ArduinoCliService } from './arduino-cli'
+import { PlatformIoService } from './platformio'
 import { GitService } from './git-client'
 import { FileService } from './file-manager'
 import { PreferencesService } from './preferences'
@@ -21,7 +21,7 @@ if (testDataDir) {
  * IS_MOCK_DEVICE — mocks USB/device scanning (virtual boards, no real hardware).
  * Enable with `--mock-device`.
  *
- * IS_MOCK_COMPILE — mocks arduino-cli compile/upload responses so e2e tests
+ * IS_MOCK_COMPILE — mocks PlatformIO compile/upload responses so e2e tests
  * don't require a real toolchain. Enable with `--mock-compile`.
  */
 export const IS_MOCK_DEVICE =
@@ -56,7 +56,7 @@ if (process.env['ELECTRON_RENDERER_URL']) {
 // ── Singletons shared between IPC handlers ──────────────────────────────────
 export const usbManager = new UsbManager()
 export const pythonRunner = new PythonRunner()
-export const arduinoCliService = new ArduinoCliService()
+export const platformIoService = new PlatformIoService(usbManager)
 export const gitService = new GitService()
 export const fileService = new FileService()
 export const preferencesService = new PreferencesService()
@@ -168,7 +168,7 @@ app.whenReady().then(() => {
     registerAllIpcHandlers({
         usbManager,
         pythonRunner,
-        arduinoCliService,
+        platformIoService,
         gitService,
         fileService,
         preferencesService,
