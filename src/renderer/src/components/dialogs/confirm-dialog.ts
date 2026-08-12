@@ -11,7 +11,7 @@ interface ConfirmDialogModel {
 }
 
 export class ConfirmDialog implements IDialogCustomElementViewModel {
-    private readonly controller = resolve(IDialogController)
+    readonly $dialog = resolve(IDialogController)
 
     title = ''
     message = ''
@@ -30,10 +30,10 @@ export class ConfirmDialog implements IDialogCustomElementViewModel {
     }
 
     ok(): void {
-        void this.controller.ok()
+        void this.$dialog.ok()
     }
 
     cancel(): void {
-        void this.controller.cancel()
+        void this.$dialog.cancel()
     }
 }

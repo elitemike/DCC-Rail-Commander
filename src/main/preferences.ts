@@ -39,16 +39,18 @@ class JsonStore {
 
     private get data(): Record<string, unknown> {
         if (this._data === null) {
-            this._data = {}
-            if (existsSync(this.filePath)) {
-                try {
-                    this._data = JSON.parse(readFileSync(this.filePath, 'utf-8'))
-                } catch {
-                    this._data = {}
-                }
-            }
+            this._data = this.readData()
         }
         return this._data
+    }
+
+    private readData(): Record<string, unknown> {
+        if (!existsSync(this.filePath)) return {}
+        try {
+            return JSON.parse(readFileSync(this.filePath, 'utf-8'))
+        } catch {
+            return {}
+        }
     }
 
     get(key: string): unknown {
