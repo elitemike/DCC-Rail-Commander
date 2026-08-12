@@ -1,7 +1,4 @@
-import { mkdir, writeFile } from 'fs/promises'
-import { join } from 'path'
 import type { SerialDeviceInfo } from '../types/ipc'
-import { STARTER_TEMPLATES } from '../types/starter-templates'
 
 export const MOCK_SERIAL_PORTS: SerialDeviceInfo[] = [
     {
@@ -69,73 +66,3 @@ export const MOCK_SERIAL_PORTS: SerialDeviceInfo[] = [
         productId: '6001',
     },
 ]
-
-export const MOCK_VERSIONS = [
-    'v5.4.0-Prod',
-    'v5.3.2-Prod',
-    'v5.3.0-Prod',
-    'v5.2.0-Prod',
-    'v5.4.1-Devel',
-    'v5.3.3-Devel',
-]
-
-export const MOCK_SKETCH_SEEDS: Record<string, { sketchFile: string; content: string }> = {
-    // repoFolder → sketch
-    'CommandStation-EX': {
-        sketchFile: 'CommandStation-EX.ino',
-        content: [
-            '// CommandStation-EX.ino — minimal mock sketch for dev compilation',
-            '#include "config.h"',
-            '',
-            'void setup() {}',
-            'void loop() {}',
-        ].join('\n') + '\n',
-    },
-    'EX-IOExpander': {
-        sketchFile: 'EX-IOExpander.ino',
-        content: [
-            '// EX-IOExpander.ino — minimal mock sketch for dev compilation',
-            '#include "myConfig.h"',
-            '',
-            'void setup() {}',
-            'void loop() {}',
-        ].join('\n') + '\n',
-    },
-    'EX-Turntable': {
-        sketchFile: 'EX-Turntable.ino',
-        content: [
-            '// EX-Turntable.ino — minimal mock sketch for dev compilation',
-            '#include "config.h"',
-            '',
-            'void setup() {}',
-            'void loop() {}',
-        ].join('\n') + '\n',
-    },
-}
-
-/**
- * Default config file content seeded into the mock sketch directory.
- * Sourced from STARTER_TEMPLATES — the canonical definition lives in
- * src/types/starter-templates.ts and is also used by the renderer as a
- * last-resort fallback when no config file is found on disk or in the repo.
- */
-export const MOCK_CONFIG_SEEDS = STARTER_TEMPLATES
-
-/**
- * Seeds the mock repo directory on disk so the compiler has a real sketch tree.
- * Called by the git:clone IPC handler when IS_DEV_MOCK is true.
- */
-export async function seedMockRepo(dest: string): Promise<void> {
-    await mkdir(dest, { recursive: true })
-    const folderName = dest.split('/').pop() ?? ''
-    const sketchSeed = MOCK_SKETCH_SEEDS[folderName]
-    const configSeed = MOCK_CONFIG_SEEDS[folderName]
-    if (sketchSeed) {
-        await writeFile(join(dest, sketchSeed.sketchFile), sketchSeed.content, 'utf-8')
-    }
-    if (configSeed) {
-        for (const [filename, content] of Object.entries(configSeed)) {
-            await writeFile(join(dest, filename), content, 'utf-8')
-        }
-    }
-}

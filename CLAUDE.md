@@ -71,7 +71,8 @@ reach the source modules that import them and every main-process test fails. See
   should live in preload.
 - Mock mode: `--mock-device` (fake USB/serial devices, see `src/main/dev-mock.ts`) and `--mock-compile` (skip
   the real PlatformIO toolchain) let E2E tests and local dev run without hardware. `--test-data-dir=<path>`
-  redirects Electron's `userData` so preferences don't bleed between test runs.
+  redirects Electron's `userData` so preferences don't bleed between test runs. See `src/DEV-MOCK.md` for the
+  full per-IPC-handler breakdown of what's faked vs. real.
 
 ### Build backend (PlatformIO, fully offline)
 
