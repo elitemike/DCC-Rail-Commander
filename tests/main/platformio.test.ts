@@ -391,14 +391,13 @@ describe('progress streaming', () => {
         expect(messages).toContain('error: no such file')
     })
 
-    it('strips the ANSI colour codes PlatformIO emits when redirected', async () => {
+    it('preserves ANSI colour codes PlatformIO emits, so the terminal panel can render them', async () => {
         const svc = makeService()
         const messages: string[] = []
         svc.setProgressCallback((_phase, message) => messages.push(message))
         mockSpawn.mockReturnValue(makeSpawnChild(0, '[32mRAM:[0m 15.2%\n'))
         await svc.compile('/sketch', MEGA)
-        expect(messages).toContain('RAM: 15.2%')
-        expect(messages.join('')).not.toContain('')
+        expect(messages).toContain('[32mRAM:[0m 15.2%')
     })
 
     it('skips blank lines', async () => {
