@@ -1,5 +1,6 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { CanvasAddon } from '@xterm/addon-canvas'
 
 export class CompileOutputTerminalCustomElement {
     /** Container div xterm mounts into — set by ref="terminalEl" in template */
@@ -49,10 +50,16 @@ export class CompileOutputTerminalCustomElement {
      * rapid tab switching does constantly. That's a real bug inside the
      * addon's disposal ordering, not something guardable from here, and left
      * unguarded it aborts detaching() mid-flight, which can abort whatever
-     * reactive property change triggered it. CanvasAddon (loaded below) was
-     * dropped rather than chasing the addon's internal disposal bug further —
-     * it's a rendering optimisation we don't need for a low-throughput
-     * compile-log terminal.
+     * reactive property change triggered it. CanvasAddon (loaded below) stays
+     * in use despite this — the default DOM renderer has its own real bug:
+     * it measures each glyph's actual rendered width and corrects with
+     * per-span CSS letter-spacing to force alignment to the fixed cell grid,
+     * and for the bundled Nerd Font at this size that correction swings wide
+     * enough (several px on a 12px font) to visibly space characters apart.
+     * The canvas renderer draws glyphs directly at their measured
+     * positions, sidestepping that DOM-layout compensation entirely — so the
+     * disposal bug above is the one being worked around (via the try/catch),
+     * not avoided by dropping the addon.
      */
     private disposeTerminal(): void {
         try {
@@ -88,6 +95,7 @@ export class CompileOutputTerminalCustomElement {
         this.fitAddon = new FitAddon()
         this.term.loadAddon(this.fitAddon)
         this.term.open(this.terminalEl)
+        this.term.loadAddon(new CanvasAddon())
 
         requestAnimationFrame(() => {
             this.fitAddon.fit()
