@@ -44,10 +44,6 @@ the Aurelia UI, Monaco editor, or Syncfusion controls — see `tests/e2e/fixture
 fixtures (`workspacePage`, `csb1StackedPage`, `ioExpanderPage`, `rosterGroupedPage`) that seed config files and
 launch the app with `--mock-device --mock-compile --skip-startup --test-data-dir=<tmp>`.
 
-Known pre-existing TS errors unrelated to feature work: `electron.vite.config.ts:41`, `src/main/preferences.ts:51`,
-`src/renderer/src/components/device-wizard.ts:1` (duplicate `resolve` import),
-`src/renderer/src/components/dialogs/confirm-dialog.ts:13`.
-
 Known pre-existing E2E failures unrelated to feature work (27 of them, same set before and after any change):
 `throttle.spec.ts` (whole file — the throttle nav item never appears), four `load-from-folder.spec.ts` cases,
 and two `turnout-editor.spec.ts` AUTOSTART cases. The raw↔visual round-trip cases in `turnout-editor.spec.ts`
