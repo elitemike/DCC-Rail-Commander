@@ -11,8 +11,9 @@ development is TypeScript under `src/` with tests under `tests/main/`, `tests/re
 Product metadata in `src/renderer/src/models/product-details.ts` is a direct port of the old
 `ex_installer/product_details.py`.
 
-The `README.md` at the repo root still describes the old Python app's build/run process — ignore it for
-anything under `src/`.
+The `README.md` at the repo root has a "Getting started" section for the current Electron/pnpm stack; the
+"Legacy Python installer" section further down still describes the old Python app's build/run process and
+does not apply to anything under `src/`.
 
 ## Commands
 
