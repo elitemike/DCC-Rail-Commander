@@ -76,12 +76,17 @@ reach the source modules that import them and every main-process test fails. See
 
 Firmware is built by **PlatformIO Core running on a Python interpreter bundled with the app** — nothing is
 downloaded at runtime, so `git clone`/`git pull` of the DCC-EX product repos is the app's only network access.
+See `TOOLCHAIN.md` for the full picture (build-time fetch vs. runtime seed, on-disk layout, offline fuse,
+debugging a corrupted seed); the summary below is just the pointers you need day to day.
 
 - `src/main/pio-runtime.ts` — resolves the bundled runtime (`resources/python`, `resources/pio/site-packages`,
   `resources/pio-core`, `resources/pio-libs`), seeds the writable core dir at `~/ex-installer/platformio` once
   per build (guarded by the manifest `stamp`), and builds `pioEnv()`. That environment points all HTTP at
   `http://127.0.0.1:9`, so if PlatformIO ever decides it wants to download a package the build fails loudly
-  instead of quietly pulling an unpinned toolchain — do not remove that fuse.
+  instead of quietly pulling an unpinned toolchain — do not remove that fuse. `seedRuntime()`'s copies are
+  atomic (temp path + rename) specifically so a crash or a second app instance racing to seed the same shared
+  core dir can't leave a package that looks installed but is missing files — see `TOOLCHAIN.md` if you hit
+  that failure mode (compile fails with an HTTP error despite the fuse, only on one board type).
 - `src/main/board-targets.ts` — the FQBN → PlatformIO target table, transcribed from the `platformio.ini` that
   CommandStation-EX ships upstream. **FQBN remains the app-wide board identity** (persisted in
   `SavedConfiguration.deviceFqbn` and embedded in every user's `config.h` device header); PlatformIO targets are
