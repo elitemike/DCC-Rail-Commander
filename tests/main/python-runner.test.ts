@@ -26,6 +26,16 @@ vi.mock('python-shell', () => ({
     PythonShell: MockPythonShell,
 }))
 
+// ── Mock fs ──────────────────────────────────────────────────────────────────
+// Without this, these tests silently depend on whether `resources/python`
+// happens to exist on disk (e.g. after `pnpm toolchain:fetch`), rather than
+// exercising the system-interpreter fallback they claim to test.
+const { mockExistsSync } = vi.hoisted(() => ({ mockExistsSync: vi.fn(() => false) }))
+vi.mock('fs', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>()
+    return { ...actual, existsSync: mockExistsSync }
+})
+
 import { PythonRunner } from '../../src/main/python-runner'
 
 // ── FakePythonShell class (defined after imports so it's available at test-run time) ──
@@ -211,5 +221,15 @@ describe('run()', () => {
         const opts = MockPythonShell.mock.calls[0][1] as Record<string, unknown>
         expect(opts.pythonPath).toBe('python')
         Object.defineProperty(process, 'platform', { value: original, configurable: true })
+    })
+
+    it('prefers the bundled interpreter over the system one when it is present', async () => {
+        mockExistsSync.mockReturnValue(true)
+        const runner = makeRunner()
+        await runner.run({ script: 'detect_boards.py' })
+        const opts = MockPythonShell.mock.calls[0][1] as Record<string, unknown>
+        expect(opts.pythonPath).not.toBe('python3')
+        expect(opts.pythonPath).not.toBe('python')
+        expect(String(opts.pythonPath)).toContain('python')
     })
 })
