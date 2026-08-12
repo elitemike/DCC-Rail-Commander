@@ -52,8 +52,8 @@ export function registerPlatformIoIpcHandlers(platformIo: PlatformIoService): vo
         return platformIo.listBoards()
     })
 
-    ipcMain.handle('pio:compile', async (_event, sketchPath: string, fqbn: string) => {
-        console.debug('[ipc] compile request', { sketchPath, fqbn, IS_MOCK_COMPILE })
+    ipcMain.handle('pio:compile', async (_event, sketchPath: string, fqbn: string, verbose?: boolean) => {
+        console.debug('[ipc] compile request', { sketchPath, fqbn, verbose, IS_MOCK_COMPILE })
         if (IS_MOCK_COMPILE) {
             const emitMock = (msg: string) => BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed()) win.webContents.send('pio:progress', { phase: 'compile', message: msg })
@@ -68,13 +68,13 @@ export function registerPlatformIoIpcHandlers(platformIo: PlatformIoService): vo
             console.debug('[ipc] compile mock result', mockResult)
             return mockResult
         }
-        const result = await platformIo.compile(sketchPath, fqbn)
+        const result = await platformIo.compile(sketchPath, fqbn, verbose)
         console.debug('[ipc] compile result', result)
         return result
     })
 
-    ipcMain.handle('pio:upload', async (_event, sketchPath: string, fqbn: string, port: string) => {
-        console.debug('[ipc] upload request', { sketchPath, fqbn, port, IS_MOCK_COMPILE })
+    ipcMain.handle('pio:upload', async (_event, sketchPath: string, fqbn: string, port: string, verbose?: boolean) => {
+        console.debug('[ipc] upload request', { sketchPath, fqbn, port, verbose, IS_MOCK_COMPILE })
         if (IS_MOCK_COMPILE) {
             await new Promise(r => setTimeout(r, 600))
             const mockResult = {
@@ -84,7 +84,7 @@ export function registerPlatformIoIpcHandlers(platformIo: PlatformIoService): vo
             console.debug('[ipc] upload mock result', mockResult)
             return mockResult
         }
-        const result = await platformIo.upload(sketchPath, fqbn, port)
+        const result = await platformIo.upload(sketchPath, fqbn, port, verbose)
         console.debug('[ipc] upload result', result)
         return result
     })

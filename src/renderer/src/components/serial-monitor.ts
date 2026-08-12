@@ -555,6 +555,19 @@ export class SerialMonitorCustomElement {
         this.term.loadAddon(this.fitAddon)
         this.term.open(this.terminalEl)
 
+        // Ctrl+C is otherwise wired (via onData below) to clear the input line —
+        // only hijack it for copy when there's an active selection, so the
+        // clear-line behaviour is untouched when nothing is selected.
+        this.term.attachCustomKeyEventHandler((event) => {
+            if (event.type !== 'keydown') return true
+            const isCopyChord = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c'
+            if (!isCopyChord) return true
+            const selection = this.term.getSelection()
+            if (!selection) return true
+            void navigator.clipboard.writeText(selection)
+            return false
+        })
+
         requestAnimationFrame(() => {
             this.fitAddon.fit()
         })
