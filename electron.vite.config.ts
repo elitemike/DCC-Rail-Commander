@@ -2,7 +2,15 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import aurelia from '@aurelia/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
-import monacoEditorPlugin from 'vite-plugin-monaco-editor'
+import monacoEditorPluginImport, { type IMonacoEditorOpts } from 'vite-plugin-monaco-editor'
+import type { Plugin } from 'vite'
+
+// Vite's CJS→ESM interop double-wraps this plugin under `moduleResolution:
+// bundler` — the default import resolves to `{ default: actualPluginFn }`
+// rather than the function itself, so the real callable lives one level in.
+const monacoEditorPlugin = (
+    monacoEditorPluginImport as unknown as { default: (opts: IMonacoEditorOpts) => Plugin }
+).default
 
 export default defineConfig({
     // ── Main process ──────────────────────────────────────────────────────────
@@ -38,7 +46,7 @@ export default defineConfig({
                 include: 'src/renderer/src/**/*.{ts,js,html}',
                 useDev: false,
             }),
-            (monacoEditorPlugin as unknown as typeof monacoEditorPlugin.default).default({
+            monacoEditorPlugin({
                 languageWorkers: ['editorWorkerService'],
                 // Ensure the plugin writes worker files into the resolved `outDir` on Windows.
                 // This avoids joining an absolute/drive-prefixed segment onto the renderer root.
