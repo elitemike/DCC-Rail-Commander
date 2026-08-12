@@ -45,3 +45,30 @@ test('rapid Monitor toggling never leaves duplicate or stray DOM behind', async 
     expect(await page.locator('serial-monitor button[title^="Send:"]').count()).toBeLessThanOrEqual(14)
     expect(await page.locator('serial-monitor button[title="Send: <s>"]').count()).toBeLessThanOrEqual(1)
 })
+
+/**
+ * Regression coverage for a bug where closing the bottom panel via its own
+ * "✕ Close panel" button (closeBottomPanel(), collapses the splitter) left
+ * `showMonitor` desynced from the panel's actual (collapsed) visibility —
+ * that button only touched the splitter, never `showMonitor`. So if Monitor
+ * was open when the panel got closed this way, `showMonitor` stayed true,
+ * and the *next* click on the Monitor toggle button just flipped it back to
+ * false (a no-op, since the panel was already collapsed) instead of
+ * reopening it. From the user's perspective: "the monitor doesn't come back"
+ * — it actually takes a second click to see anything happen.
+ */
+test('Monitor reopens with a single click after being closed via the panel\'s own close button', async ({ workspacePage: page }) => {
+    const monitorBtn = page.getByRole('button', { name: 'Monitor' }).first()
+    await expect(monitorBtn).toBeVisible()
+    // The mock device auto-connects and auto-opens the Monitor on load.
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+
+    await page.evaluate(() => {
+        const btn = Array.from(document.querySelectorAll('button')).find((b) => b.title === 'Close panel')
+        btn?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    await expect(page.locator('serial-monitor')).toHaveCount(0)
+
+    await monitorBtn.click()
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+})
