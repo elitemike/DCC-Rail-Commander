@@ -101,12 +101,17 @@ export class Workspace {
     activeBottomTab: 'output' | 'monitor' = 'output'
 
     toggleMonitor(): void {
-        this.showMonitor = !this.showMonitor
-        if (this.showMonitor) {
+        const next = !this.showMonitor
+        if (next) {
+            // Set activeBottomTab before showMonitor mounts the content div, so
+            // the div's hidden-class binding evaluates correctly on its first
+            // bind instead of momentarily reflecting the previous tab.
             this.activeBottomTab = 'monitor'
+            this.showMonitor = next
             this.openBottomPanel()
-        } else if (this.activeBottomTab === 'monitor') {
-            this.activeBottomTab = 'output'
+        } else {
+            this.showMonitor = next
+            if (this.activeBottomTab === 'monitor') this.activeBottomTab = 'output'
         }
     }
 

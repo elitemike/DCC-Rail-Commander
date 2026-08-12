@@ -1,7 +1,6 @@
 import { resolve } from 'aurelia'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { CanvasAddon } from '@xterm/addon-canvas'
 import { UsbService } from '../services/usb.service'
 import { InstallerState } from '../models/installer-state'
 
@@ -500,15 +499,25 @@ export class SerialMonitorCustomElement {
     }
 
     /**
-     * xterm's own dispose() can throw (observed: "Cannot read properties of
-     * undefined (reading 'onShowLinkUnderline')") when a terminal is torn
-     * down very soon after creation, before its internal renderer/addons have
-     * finished their own async setup — plausible here since toggling the
-     * Monitor rapidly can dispose a terminal within the same tick it was
-     * created. Left unguarded, that throw aborts detaching() mid-flight:
-     * Aurelia's `if` never finishes deactivating the old view, so the DOM
-     * from the next toggle's fresh view piles on top of it instead of
-     * replacing it (duplicate quick-command button rows).
+     * xterm's own dispose() can throw. Traced this down to
+     * @xterm/addon-canvas's CanvasAddon: it registers a disposal hook that
+     * calls the terminal's private `_core._createRenderer()` to reinstate the
+     * default DOM renderer once the canvas renderer goes away, and building
+     * that fallback renderer (`new DomRenderer` → `new Linkifier`) throws
+     * ("Cannot read properties of undefined (reading 'onShowLinkUnderline')")
+     * if the terminal's core services aren't in a fully consistent state —
+     * easy to hit when a terminal is disposed very soon after creation, which
+     * toggling the Monitor rapidly does constantly. That's a real bug inside
+     * the addon's disposal ordering, not something guardable from here, and
+     * left unguarded it aborts detaching() mid-flight: Aurelia's `if` never
+     * finishes deactivating the old view, so the DOM from the next toggle's
+     * fresh view piles on top of it instead of replacing it (duplicate
+     * quick-command button rows) — or the exception propagates out through
+     * whatever reactive property change triggered it, silently aborting that
+     * change's remaining side effects (e.g. the Monitor panel staying hidden
+     * after toggling it back on). CanvasAddon is a rendering optimisation we
+     * don't need for a low-throughput device-output terminal, so it was
+     * dropped rather than chasing the addon's internal disposal bug further.
      */
     private disposeTerminal(): void {
         try {
@@ -544,7 +553,6 @@ export class SerialMonitorCustomElement {
 
         this.fitAddon = new FitAddon()
         this.term.loadAddon(this.fitAddon)
-        this.term.loadAddon(new CanvasAddon())
         this.term.open(this.terminalEl)
 
         requestAnimationFrame(() => {
