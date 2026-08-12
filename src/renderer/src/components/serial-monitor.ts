@@ -457,20 +457,26 @@ export class SerialMonitorCustomElement {
     private readonly usb = resolve(UsbService)
     private readonly state = resolve(InstallerState)
 
-    /** Guards the deferred init below — document.fonts.load() can resolve after this component has already been torn down (e.g. the user switches sections/tabs before the font finishes loading); initTerminal() would then open() a detached terminalEl, and subscribeToPort()/connectPort() would open a port/subscriptions detaching() already ran and won't run again to clean up. */
-    private _detached = false
+    /**
+     * Guards the deferred init below. document.fonts.load() can resolve after
+     * this component has been torn down and re-attached one or more times
+     * (e.g. the user toggles the Monitor button rapidly) — a plain boolean
+     * flag isn't enough here, because a *newer* attached() resets it before
+     * an *older* attached()'s pending callback checks it, letting the stale
+     * callback slip through and call initTerminal() again on top of the
+     * current terminal (stray, undisposed xterm canvases stacking up).
+     * Each attached()/detaching() bumps this counter, and a deferred callback
+     * only proceeds if it's still the current generation.
+     */
+    private _attachGeneration = 0
 
     // ── Aurelia lifecycle ──────────────────────────────────────────────────
     attached(): void {
-        // Aurelia's if.bind caches and reuses this same component instance across
-        // hide/show cycles by default — reset the guard set by the previous
-        // detaching() or the deferred init below would skip itself forever after
-        // the first time this panel is closed and reopened.
-        this._detached = false
+        const generation = ++this._attachGeneration
         // xterm.js uses a canvas renderer — the font must be fully loaded before
         // Terminal.open() is called or it falls back to the system monospace.
         document.fonts.load('400 12px "JetBrains Mono NF"').finally(() => {
-            if (this._detached) return
+            if (generation !== this._attachGeneration) return
             this.initTerminal()
             this.subscribeToPort()
             this.connectPort()
@@ -478,7 +484,7 @@ export class SerialMonitorCustomElement {
     }
 
     detaching(): void {
-        this._detached = true
+        this._attachGeneration++
         this.resizeObserver?.disconnect()
         this.unsubData?.()
         this.unsubError?.()
@@ -490,11 +496,35 @@ export class SerialMonitorCustomElement {
             this.portOpenedByUs = false
         }
 
-        this.term?.dispose()
+        this.disposeTerminal()
+    }
+
+    /**
+     * xterm's own dispose() can throw (observed: "Cannot read properties of
+     * undefined (reading 'onShowLinkUnderline')") when a terminal is torn
+     * down very soon after creation, before its internal renderer/addons have
+     * finished their own async setup — plausible here since toggling the
+     * Monitor rapidly can dispose a terminal within the same tick it was
+     * created. Left unguarded, that throw aborts detaching() mid-flight:
+     * Aurelia's `if` never finishes deactivating the old view, so the DOM
+     * from the next toggle's fresh view piles on top of it instead of
+     * replacing it (duplicate quick-command button rows).
+     */
+    private disposeTerminal(): void {
+        try {
+            this.term?.dispose()
+        } catch {
+            // Already torn down as far as we're concerned — nothing to recover.
+        }
     }
 
     // ── Init ──────────────────────────────────────────────────────────────
     private initTerminal(): void {
+        // Defensive: dispose any previous instance so a stray extra call never
+        // leaves an orphaned canvas stacked behind the new one.
+        this.resizeObserver?.disconnect()
+        this.disposeTerminal()
+
         this.term = new Terminal({
             theme: {
                 background: '#0d1117',
