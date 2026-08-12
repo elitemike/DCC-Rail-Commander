@@ -89,6 +89,11 @@ export class Workspace {
     autoConnectMonitorEl!: HTMLInputElement
     private sfAutoConnectMonitor?: CheckBox
 
+    /** Persisted app-wide preference — whether compile()/upload() pass -v to PlatformIO. Loaded in binding(), toggled via the checkbox next to the version selector. */
+    verboseCompile = false
+    verboseCompileEl!: HTMLInputElement
+    private sfVerboseCompile?: CheckBox
+
     // ── Live device connection status (port badge) ────────────────────────────
     /** Whether the selected device currently answers at its recorded port — drives the port badge and auto-opening the Monitor. */
     deviceConnectionStatus: 'checking' | 'connected' | 'disconnected' | 'unknown' = 'unknown'
@@ -151,6 +156,7 @@ export class Workspace {
         // offline) and must never block the rest of the view from rendering.
         void this.loadVersions()
         this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
+        this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         // Fire-and-forget: re-scans serial ports/boards to confirm the
         // selected device is actually plugged in, updating the port badge
         // and (on a fresh connect, if autoConnectMonitor is on) auto-opening
@@ -162,6 +168,12 @@ export class Workspace {
     setAutoConnectMonitor(enabled: boolean): void {
         this.autoConnectMonitor = enabled
         void this.preferences.set('autoConnectMonitor', enabled)
+    }
+
+    /** Persists the verbose-compile preference — called from the checkbox next to the version selector. */
+    setVerboseCompile(enabled: boolean): void {
+        this.verboseCompile = enabled
+        void this.preferences.set('verboseCompile', enabled)
     }
 
     /**
@@ -299,6 +311,13 @@ export class Workspace {
         })
         this.sfAutoConnectMonitor.appendTo(this.autoConnectMonitorEl)
 
+        this.sfVerboseCompile = new CheckBox({
+            label: 'Verbose',
+            checked: this.verboseCompile,
+            change: (args) => this.setVerboseCompile(args.checked),
+        })
+        this.sfVerboseCompile.appendTo(this.verboseCompileEl)
+
         // Re-check whenever a USB device is plugged/unplugged — covers both
         // the selected board coming online after the workspace already loaded,
         // and it going away mid-session. Debounced since a hub can fire several
@@ -314,6 +333,8 @@ export class Workspace {
         this.sfVersion = undefined
         this.sfAutoConnectMonitor?.destroy()
         this.sfAutoConnectMonitor = undefined
+        this.sfVerboseCompile?.destroy()
+        this.sfVerboseCompile = undefined
         if (this._connectionCheckTimer) {
             clearTimeout(this._connectionCheckTimer)
             this._connectionCheckTimer = null
@@ -587,6 +608,46 @@ export class Workspace {
         this.compileError = null
     }
 
+    /** Copies the full Output panel log (ANSI stripped) to the OS clipboard. */
+    async copyCompileLog(): Promise<void> {
+        const text = this.compileTerminal?.getText() ?? ''
+        try {
+            await navigator.clipboard.writeText(text)
+            this.toastService.show({
+                title: 'Copied',
+                content: 'Output copied to clipboard.',
+                cssClass: 'e-toast-success',
+            })
+        } catch (err) {
+            this.toastService.show({
+                title: 'Copy Failed',
+                content: (err as Error).message,
+                cssClass: 'e-toast-danger',
+            })
+        }
+    }
+
+    /** Prompts for a save location and writes the full Output panel log to disk. */
+    async saveCompileLog(): Promise<void> {
+        const text = this.compileTerminal?.getText() ?? ''
+        const path = await this.files.selectSavePath('compile-output.txt')
+        if (!path) return
+        try {
+            await this.files.writeFile(path, text)
+            this.toastService.show({
+                title: 'Saved',
+                content: `Output saved to ${path}.`,
+                cssClass: 'e-toast-success',
+            })
+        } catch (err) {
+            this.toastService.show({
+                title: 'Save Failed',
+                content: (err as Error).message,
+                cssClass: 'e-toast-danger',
+            })
+        }
+    }
+
     private async flushPendingFormEdits(): Promise<void> {
         const active = globalThis.document?.activeElement as HTMLElement | null | undefined
         if (active && typeof active.blur === 'function') {
@@ -688,7 +749,7 @@ export class Workspace {
                     streamedLines++
                 }
             })
-            const result = await this.pio.compile(this.state.scratchPath!, fqbn)
+            const result = await this.pio.compile(this.state.scratchPath!, fqbn, this.verboseCompile)
             unsubCompile()
             if (streamedLines === 0) {
                 this.compileLog += result.output ?? ''
@@ -816,7 +877,7 @@ export class Workspace {
                     streamedUploadLines++
                 }
             })
-            const result = await this.pio.upload(this.state.scratchPath!, fqbn, device.port)
+            const result = await this.pio.upload(this.state.scratchPath!, fqbn, device.port, this.verboseCompile)
             unsubUpload()
             if (streamedUploadLines === 0) {
                 this.compileLog += result.output ?? ''

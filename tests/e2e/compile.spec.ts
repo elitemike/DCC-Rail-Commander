@@ -97,6 +97,25 @@ test.describe('Compile button', () => {
         await expect(outputPanel).not.toContainText('Compile successful!')
     })
 
+    test('Copy button copies the compile output to the clipboard', async ({ workspacePage }) => {
+        await workspacePage.getByRole('button', { name: 'Compile' }).click()
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+
+        await workspacePage.locator('button[title="Copy output to clipboard"]').click()
+        await expect(workspacePage.locator('.e-toast-success').last()).toContainText('Copied', { timeout: 5_000 })
+
+        const clipboardText = await workspacePage.evaluate(() => navigator.clipboard.readText())
+        expect(clipboardText).toContain('Compiling for')
+        expect(clipboardText).toContain('✓ Compile successful!')
+    })
+
+    test('Save button is visible and enabled next to Copy and Clear', async ({ workspacePage }) => {
+        await workspacePage.getByRole('button', { name: 'Compile' }).click()
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+
+        await expect(workspacePage.locator('button[title="Save output to a file"]')).toBeEnabled()
+    })
+
     test('a second compile after clearing also succeeds', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })

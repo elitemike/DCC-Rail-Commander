@@ -97,6 +97,21 @@ export class CompileOutputTerminalCustomElement {
         this.term.open(this.terminalEl)
         this.term.loadAddon(new CanvasAddon())
 
+        // disableStdin only blocks input, not selection — but with nothing to
+        // send a browser's native Ctrl/Cmd+C never reaches this terminal, since
+        // xterm doesn't otherwise treat that combo as a copy shortcut. Intercept
+        // it directly: if there's an active selection, copy it and swallow the
+        // event; otherwise fall through so xterm/the browser handle it as usual.
+        this.term.attachCustomKeyEventHandler((event) => {
+            if (event.type !== 'keydown') return true
+            const isCopyChord = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c'
+            if (!isCopyChord) return true
+            const selection = this.term.getSelection()
+            if (!selection) return true
+            void navigator.clipboard.writeText(selection)
+            return false
+        })
+
         requestAnimationFrame(() => {
             this.fitAddon.fit()
         })
@@ -115,5 +130,17 @@ export class CompileOutputTerminalCustomElement {
     /** Fully clears the screen and scrollback. */
     reset(): void {
         this.term?.reset()
+    }
+
+    /** Full buffer content (scrollback + screen) as plain text, ANSI stripped — used for copy-all/save-to-file. */
+    getText(): string {
+        if (!this.term) return ''
+        const buffer = this.term.buffer.active
+        const lines: string[] = []
+        for (let i = 0; i < buffer.length; i++) {
+            lines.push(buffer.getLine(i)?.translateToString(true) ?? '')
+        }
+        while (lines.length && lines[lines.length - 1] === '') lines.pop()
+        return lines.join('\n')
     }
 }

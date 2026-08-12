@@ -40,12 +40,12 @@ export class PlatformIoService {
         return window.platformio.onProgress(cb)
     }
 
-    async compile(sketchPath: string, fqbn: string): Promise<CompileResult> {
-        return window.platformio.compile(sketchPath, fqbn)
+    async compile(sketchPath: string, fqbn: string, verbose?: boolean): Promise<CompileResult> {
+        return window.platformio.compile(sketchPath, fqbn, verbose)
     }
 
-    async upload(sketchPath: string, fqbn: string, port: string): Promise<UploadResult> {
-        return window.platformio.upload(sketchPath, fqbn, port)
+    async upload(sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<UploadResult> {
+        return window.platformio.upload(sketchPath, fqbn, port, verbose)
     }
 
     async browseToolchainPack(): Promise<string | null> {

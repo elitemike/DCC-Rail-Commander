@@ -221,12 +221,12 @@ export class PlatformIoService {
 
     // ── Build / upload ───────────────────────────────────────────────────────
 
-    async compile(sketchPath: string, fqbn: string): Promise<PioRunResult> {
-        return this.enqueue(() => this.runBuild('compile', sketchPath, fqbn))
+    async compile(sketchPath: string, fqbn: string, verbose?: boolean): Promise<PioRunResult> {
+        return this.enqueue(() => this.runBuild('compile', sketchPath, fqbn, undefined, verbose))
     }
 
-    async upload(sketchPath: string, fqbn: string, port: string): Promise<PioRunResult> {
-        return this.enqueue(() => this.runBuild('upload', sketchPath, fqbn, port))
+    async upload(sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<PioRunResult> {
+        return this.enqueue(() => this.runBuild('upload', sketchPath, fqbn, port, verbose))
     }
 
     private enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -241,6 +241,7 @@ export class PlatformIoService {
         sketchPath: string,
         fqbn: string,
         port?: string,
+        verbose?: boolean,
     ): Promise<PioRunResult> {
         const target = resolveTarget(fqbn)
         if (!target) {
@@ -267,6 +268,7 @@ export class PlatformIoService {
         if (phase === 'upload') {
             args.push('-t', 'upload', '--upload-port', port ?? '')
         }
+        if (verbose) args.push('-v')
 
         this.emitProgress(
             phase,

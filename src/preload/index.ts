@@ -126,11 +126,11 @@ const platformIoApi = {
     listBoards: (): Promise<DetectedBoardInfo[]> =>
         ipcRenderer.invoke('pio:list-boards'),
 
-    compile: (sketchPath: string, fqbn: string): Promise<CompileResult> =>
-        ipcRenderer.invoke('pio:compile', sketchPath, fqbn),
+    compile: (sketchPath: string, fqbn: string, verbose?: boolean): Promise<CompileResult> =>
+        ipcRenderer.invoke('pio:compile', sketchPath, fqbn, verbose),
 
-    upload: (sketchPath: string, fqbn: string, port: string): Promise<UploadResult> =>
-        ipcRenderer.invoke('pio:upload', sketchPath, fqbn, port),
+    upload: (sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<UploadResult> =>
+        ipcRenderer.invoke('pio:upload', sketchPath, fqbn, port, verbose),
 
     browseToolchainPack: (): Promise<string | null> =>
         ipcRenderer.invoke('pio:browse-toolchain-pack'),
@@ -194,6 +194,9 @@ const filesApi = {
 
     selectDirectory: (): Promise<string | null> =>
         ipcRenderer.invoke('files:select-directory'),
+
+    selectSavePath: (defaultName: string): Promise<string | null> =>
+        ipcRenderer.invoke('files:select-save-path', defaultName),
 }
 
 // ── Preferences API ──────────────────────────────────────────────────────────

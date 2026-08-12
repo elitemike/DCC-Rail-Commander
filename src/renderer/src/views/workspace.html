@@ -118,6 +118,11 @@
             <span if.bind="versionError" title.bind="versionError" class="text-xs text-red-400 shrink-0">⚠</span>
         </div>
 
+        <!-- Verbose compile preference — persisted app-wide, adds -v to the PlatformIO invocation -->
+        <div class="flex items-center mr-1" title="Pass -v to PlatformIO for verbose compile/upload output">
+            <input ref="verboseCompileEl" type="checkbox" title="Pass -v to PlatformIO for verbose compile/upload output" />
+        </div>
+
         <!-- ── COMPILE button (dev/mock mode only) ── -->
         <button if.bind="isMock" click.trigger="compile()" disabled.bind="isCompiling || !canCompile"
             title.bind="!canCompile ? 'Select a device with a port before compiling' : ''"
@@ -279,6 +284,10 @@
                     class="text-red-400 text-xs mr-2">✗ Failed</span>
                 <span if.bind="isCompiling && activeBottomTab === 'output'"
                     class="text-blue-400 text-xs mr-2">Compiling…</span>
+                <button if.bind="activeBottomTab === 'output'" click.trigger="copyCompileLog()" title="Copy output to clipboard"
+                    class="text-gray-600 hover:text-white text-xs mr-2 transition-colors">⧉ Copy</button>
+                <button if.bind="activeBottomTab === 'output'" click.trigger="saveCompileLog()" title="Save output to a file"
+                    class="text-gray-600 hover:text-white text-xs mr-2 transition-colors">⭳ Save</button>
                 <button if.bind="activeBottomTab === 'output'" click.trigger="clearCompileLog()"
                     class="text-gray-600 hover:text-white text-xs mr-2 transition-colors">✕ Clear</button>
                 <button click.trigger="closeBottomPanel()" title="Close panel"

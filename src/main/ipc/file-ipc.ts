@@ -37,4 +37,8 @@ export function registerFileIpcHandlers(fileService: FileService): void {
     ipcMain.handle('files:select-directory', async () => {
         return fileService.selectDirectory()
     })
+
+    ipcMain.handle('files:select-save-path', async (_event, defaultName: string) => {
+        return fileService.selectSavePath(defaultName)
+    })
 }
