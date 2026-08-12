@@ -235,6 +235,70 @@ describe('seedRuntime()', () => {
         expect(result.error).toContain('EACCES')
         expect(mockWriteFile).not.toHaveBeenCalled()
     })
+
+    // ── Isolation across concurrent seeding ─────────────────────────────────
+    //
+    // Unlike compile()/upload(), seedRuntime() is not queued behind a mutex —
+    // it can legitimately run twice at once (e.g. two windows, or a retry
+    // fired before the first attempt's promise resolves). The rename-into-place
+    // dance is what's supposed to make that safe; these tests exercise the race
+    // the code comment above seedRuntime() only describes.
+
+    it('tolerates losing the rename race when a concurrent seed already installed the same entry', async () => {
+        mockReaddir.mockResolvedValue(['atmelavr'])
+        let targetCheckCount = 0
+        mockExistsSync.mockImplementation((p: unknown) => {
+            const s = String(p)
+            if (s.includes('/ex-installer/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
+                targetCheckCount++
+                // First check (before copying) sees nothing installed yet; the
+                // second (after our rename fails) sees the winner's result.
+                return targetCheckCount > 1
+            }
+            return !s.includes('/ex-installer/platformio/')
+        })
+        mockRename.mockRejectedValueOnce(new Error('ENOTEMPTY: lost the rename race'))
+
+        const result = await seedRuntime()
+
+        expect(result.success).toBe(true)
+        expect(mockRm).toHaveBeenCalledWith(expect.stringContaining('.tmp-'), { recursive: true, force: true })
+    })
+
+    it('still fails when the rename is lost and no winner actually installed the entry', async () => {
+        mockReaddir.mockResolvedValue(['atmelavr'])
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).includes('/ex-installer/platformio/'))
+        mockRename.mockRejectedValueOnce(new Error('EACCES: permission denied'))
+
+        const result = await seedRuntime()
+
+        expect(result.success).toBe(false)
+        expect(result.error).toContain('EACCES')
+    })
+
+    it('lets two concurrent seedRuntime() calls both succeed without corrupting the core dir', async () => {
+        mockReaddir.mockResolvedValue(['atmelavr'])
+        let installed = false
+        mockExistsSync.mockImplementation((p: unknown) => {
+            const s = String(p)
+            if (s.includes('/ex-installer/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
+                return installed
+            }
+            return !s.includes('/ex-installer/platformio/')
+        })
+        mockRename.mockImplementation(async () => {
+            if (installed) throw new Error('ENOTEMPTY: someone else got there first')
+            installed = true
+        })
+
+        const [a, b] = await Promise.all([seedRuntime(), seedRuntime()])
+
+        expect(a.success).toBe(true)
+        expect(b.success).toBe(true)
+        // Both copied to their own temp dir; exactly one temp copy is discarded.
+        expect(mockCp).toHaveBeenCalledTimes(2)
+        expect(mockRm).toHaveBeenCalledTimes(1)
+    })
 })
 
 describe('isPlatformInstalled()', () => {

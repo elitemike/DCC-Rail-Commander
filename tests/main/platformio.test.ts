@@ -462,6 +462,49 @@ describe('build serialisation', () => {
         expect(first.success).toBe(false)
         expect(second.success).toBe(true)
     })
+
+    // Two different products/devices queued back-to-back must never bleed
+    // into each other's config, even though they share one service instance
+    // and one queue. The queue only guarantees they don't run at the same
+    // time — these tests guard against a mix-up in *which* args/ini go with
+    // which queued call.
+
+    it('gives each queued build its own project-dir and env, never mixing configs', async () => {
+        const svc = makeService()
+        await Promise.all([svc.compile('/sketch-a', MEGA), svc.compile('/sketch-b', ESP32)])
+
+        const [firstArgs, secondArgs] = mockSpawn.mock.calls.map((c) => c[1] as string[])
+        expect(firstArgs).toEqual(expect.arrayContaining(['--project-dir', '/sketch-a', '-e', 'mega2560']))
+        expect(secondArgs).toEqual(expect.arrayContaining(['--project-dir', '/sketch-b', '-e', 'ESP32']))
+    })
+
+    it('writes each queued build\'s platformio.ini scoped to its own sketch, not the other one', async () => {
+        const svc = makeService()
+        const iniBySketch: Record<string, string> = {}
+        mockWriteFile.mockImplementation(async (path: unknown, content: unknown) => {
+            const p = String(path)
+            if (p.endsWith('platformio.ini')) iniBySketch[p] = String(content)
+        })
+
+        await Promise.all([svc.compile('/sketch-a', MEGA), svc.compile('/sketch-b', ESP32)])
+
+        expect(iniBySketch['/sketch-a/platformio.ini']).toContain('[env:mega2560]')
+        expect(iniBySketch['/sketch-a/platformio.ini']).not.toContain('[env:ESP32]')
+        expect(iniBySketch['/sketch-b/platformio.ini']).toContain('[env:ESP32]')
+        expect(iniBySketch['/sketch-b/platformio.ini']).not.toContain('[env:mega2560]')
+    })
+
+    it('keeps upload port scoped to its own queued call when interleaved with a compile', async () => {
+        const svc = makeService()
+        await Promise.all([
+            svc.compile('/sketch-a', MEGA),
+            svc.upload('/sketch-b', ESP32, '/dev/ttyUSB7'),
+        ])
+
+        const [compileArgs, uploadArgs] = mockSpawn.mock.calls.map((c) => c[1] as string[])
+        expect(compileArgs).not.toContain('--upload-port')
+        expect(uploadArgs).toEqual(expect.arrayContaining(['--upload-port', '/dev/ttyUSB7', '--project-dir', '/sketch-b']))
+    })
 })
 
 // ── listBoards() ─────────────────────────────────────────────────────────────
