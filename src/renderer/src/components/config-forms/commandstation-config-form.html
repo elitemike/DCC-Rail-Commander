@@ -2,15 +2,15 @@
     <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
 
         <!-- ── Inner tab bar: General | WiFi | TrackManager ─────────────────── -->
-        <div class="flex items-center shrink-0 border-b border-white/10 bg-gray-900/40 px-3">
+        <div class="flex items-center shrink-0 border-b border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40 px-3">
             <button click.trigger="setConfigTab('general')"
                 class="px-3 py-2 text-xs font-medium border-b-2 transition-all mr-1 focus:outline-none"
-                class.bind="activeConfigTab === 'general' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                class.bind="activeConfigTab === 'general' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">
                 General
             </button>
             <button click.trigger="setConfigTab('wifi')"
                 class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
-                class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">
                 WiFi
             </button>
             <span if.bind="isCsb1"
@@ -26,27 +26,27 @@
             <div class="${activeConfigTab === 'general' ? 'flex flex-col gap-4 max-w-2xl' : 'hidden'}">
 
                 <!-- Motor driver -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-2">
-                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Motor Driver</label>
+                <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-2">
+                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Motor Driver</label>
                     <input ref="motorDriverEl" type="text" />
                 </div>
 
                 <!-- Display -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Display</label>
+                <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Display</label>
                     <input ref="displayEl" type="text" />
 
                     <!-- Scroll mode — only when a display is selected -->
                     <div
-                        class="${opts.display !== 'NONE' ? 'flex flex-col gap-2 pt-2 border-t border-white/10' : 'hidden'}">
-                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Scroll mode</label>
+                        class="${opts.display !== 'NONE' ? 'flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-white/10' : 'hidden'}">
+                        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Scroll mode</label>
                         <input ref="scrollModeEl" type="text" />
                     </div>
                 </div>
 
                 <!-- Options toggles -->
-                <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Options</span>
+                <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Options</span>
 
                     <!-- WiFi — hidden for CSB1 (always on) -->
                     <div if.bind="!isCsb1">
@@ -73,15 +73,15 @@
 
                 <!-- WiFi disabled warning -->
                 <div
-                    class="${!opts.enableWifi && !isCsb1 ? 'px-4 py-3 bg-yellow-950/40 border border-yellow-500/30 rounded-lg text-yellow-300 text-sm' : 'hidden'}">
+                    class="${!opts.enableWifi && !isCsb1 ? 'px-4 py-3 bg-yellow-50 dark:bg-yellow-950/40 border border-yellow-500/30 rounded-lg text-yellow-700 dark:text-yellow-300 text-sm' : 'hidden'}">
                     WiFi is disabled. Enable it on the General tab first.
                 </div>
 
                 <div class="${opts.enableWifi || isCsb1 ? 'flex flex-col gap-4' : 'hidden'}">
 
                     <!-- Mode -->
-                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mode</span>
+                    <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Mode</span>
                         <div class="flex gap-6">
                             <input ref="wifiModeApEl" type="radio" />
                             <input ref="wifiModeStaEl" type="radio" />
@@ -90,26 +90,26 @@
 
                     <!-- AP mode info box -->
                     <div
-                        class="${opts.wifiMode === 'ap' ? 'px-4 py-3 bg-blue-950/40 border border-blue-500/30 rounded-lg text-sm text-blue-200 leading-relaxed' : 'hidden'}">
-                        <p class="font-medium text-blue-300 mb-1">Access Point mode</p>
+                        class="${opts.wifiMode === 'ap' ? 'px-4 py-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-500/30 rounded-lg text-sm text-blue-200 leading-relaxed' : 'hidden'}">
+                        <p class="font-medium text-blue-700 dark:text-blue-300 mb-1">Access Point mode</p>
                         <p>The command station creates its own WiFi network. Nearby devices connect directly to it —
                             no existing router needed.</p>
-                        <p class="mt-1 text-blue-300/80">By default the firmware sets the network name to <span
+                        <p class="mt-1 text-blue-700/80 dark:text-blue-300/80">By default the firmware sets the network name to <span
                                 class="font-mono">DCCEX</span> and the password to <span class="font-mono">PASS</span>.
                             You can override these below, or click <span class="italic">Reset to defaults</span> to use
                             the firmware values.</p>
                     </div>
 
                     <!-- Common network fields -->
-                    <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                    <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
 
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs text-gray-400">Hostname</label>
+                            <label class="text-xs text-gray-500 dark:text-gray-400">Hostname</label>
                             <input ref="wifiHostnameEl" type="text" />
                         </div>
 
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs text-gray-400">
+                            <label class="text-xs text-gray-500 dark:text-gray-400">
                                 ${opts.wifiMode === 'ap' ? 'Custom network name' : 'Network SSID'}
                                 <span if.bind="opts.wifiMode === 'ap'" class="text-gray-600"> (optional — overrides
                                     firmware default)</span>
@@ -119,7 +119,7 @@
                         </div>
 
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs text-gray-400">
+                            <label class="text-xs text-gray-500 dark:text-gray-400">
                                 ${opts.wifiMode === 'ap' ? 'Custom password' : 'Password'}
                                 <span if.bind="opts.wifiMode === 'ap'" class="text-gray-600"> (optional — overrides
                                     firmware default)</span>
@@ -129,7 +129,7 @@
 
                         <!-- Channel — AP mode only -->
                         <div class="${opts.wifiMode === 'ap' ? 'flex items-center gap-3' : 'hidden'}">
-                            <label class="text-xs text-gray-400 w-24 shrink-0">Channel (1–11)</label>
+                            <label class="text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Channel (1–11)</label>
                             <div class="w-28">
                                 <input ref="wifiChannelEl" type="text" />
                             </div>

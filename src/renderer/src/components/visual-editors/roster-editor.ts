@@ -368,7 +368,7 @@ export class RosterEditorCustomElement {
             chip.textContent = '#define'
 
             const nameSpan = document.createElement('span')
-            nameSpan.className = 'text-sm font-medium text-gray-100 truncate flex-1'
+            nameSpan.className = 'text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1'
             nameSpan.textContent = data.displayText
 
             const countSpan = document.createElement('span')
@@ -380,7 +380,7 @@ export class RosterEditorCustomElement {
             textSpan.appendChild(countSpan)
         } else {
             const nameSpan = document.createElement('span')
-            nameSpan.className = 'text-sm text-gray-300 truncate flex-1'
+            nameSpan.className = 'text-sm text-gray-700 dark:text-gray-300 truncate flex-1'
             nameSpan.textContent = data.displayText
 
             const addrSpan = document.createElement('span')
@@ -388,7 +388,7 @@ export class RosterEditorCustomElement {
             addrSpan.textContent = `#${data.dccAddress}`
 
             const fnBadge = document.createElement('span')
-            fnBadge.className = 'px-1 py-0.5 text-xs rounded-full bg-gray-700 text-gray-300 shrink-0'
+            fnBadge.className = 'px-1 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 shrink-0'
             fnBadge.textContent = data.fnCount
 
             textSpan.appendChild(nameSpan)

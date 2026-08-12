@@ -1,0 +1,12 @@
+/* Syncfusion EJ2 "tailwind-dark" package styles — loaded via a dynamically
+   swapped <link>, not statically imported, so ThemeService can switch to
+   ej2-theme-light.css at runtime without a full page reload. See
+   src/renderer/src/services/theme.service.ts. */
+@import "@syncfusion/ej2-base/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-buttons/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-inputs/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-dropdowns/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-layouts/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-navigations/styles/tailwind-dark.css";
+@import "@syncfusion/ej2-navigations/styles/stepper/tailwind-dark.css";
+@import "@syncfusion/ej2-notifications/styles/tailwind-dark.css";

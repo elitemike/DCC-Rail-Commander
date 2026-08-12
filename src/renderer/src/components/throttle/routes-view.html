@@ -6,9 +6,9 @@
         <div if.bind="throttleService.routeStatuses.length > 0" class="flex flex-col gap-2">
             <div repeat.for="entry of throttleService.routeStatuses" data-testid="route-row"
                 data-route-id.bind="entry.id"
-                class="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/10">
+                class="flex items-center gap-3 px-4 py-3 rounded-lg bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10">
                 <span class="flex-1 min-w-0">
-                    <span class="block text-sm font-medium text-gray-100 truncate">${routeFor(entry.id).description}</span>
+                    <span class="block text-sm font-medium text-gray-900 dark:text-gray-100 truncate">${routeFor(entry.id).description}</span>
                     <span class="block text-xs text-gray-500">#${entry.id}</span>
                 </span>
                 <span data-testid="route-status-badge" data-status.bind="entry.status"
@@ -20,7 +20,7 @@
                 </span>
                 <button type="button" click.trigger="throttleService.triggerRoute(entry.id)"
                     data-testid="route-trigger-button"
-                    class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/10 bg-white/5 hover:bg-white/10 text-gray-200 transition-colors shrink-0 focus:outline-none">
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 text-gray-200 transition-colors shrink-0 focus:outline-none">
                     Trigger
                 </button>
             </div>

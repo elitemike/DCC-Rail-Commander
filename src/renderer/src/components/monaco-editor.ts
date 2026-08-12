@@ -10,6 +10,43 @@ import { registerDiagnosticProviders, revalidateModel } from '../config/dccex-va
 import { ConfigEditorState } from '../models/config-editor-state'
 import { buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
 import { getSharedConfigEditorState, setSharedConfigEditorState } from '../utils/exrail-editor-state'
+import { ThemeService } from '../services/theme.service'
+
+/** Defines both editor themes once — cheap and idempotent, so it's fine to call from every attach() rather than tracking whether it already ran. */
+function defineEditorThemes(): void {
+    // Based on vs-dark/vs with explicit squiggle colors — see the long
+    // comment at the dccex-dark definition below for why these are needed.
+    monaco.editor.defineTheme('dccex-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+            'editorError.foreground': '#f14c4c',
+            'editorError.border': '#f14c4c',
+            'editorWarning.foreground': '#cca700',
+            'editorWarning.border': '#cca700',
+            'editorInfo.foreground': '#75beff',
+            'editorInfo.border': '#75beff',
+            'editorHint.foreground': '#eeeee4',
+            'editorHint.border': '#eeeee4',
+        },
+    })
+    monaco.editor.defineTheme('dccex-light', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+            'editorError.foreground': '#e51400',
+            'editorError.border': '#e51400',
+            'editorWarning.foreground': '#b89500',
+            'editorWarning.border': '#b89500',
+            'editorInfo.foreground': '#1a85ff',
+            'editorInfo.border': '#1a85ff',
+            'editorHint.foreground': '#6c6c6c',
+            'editorHint.border': '#6c6c6c',
+        },
+    })
+}
 
 // ── Global filename-aware completion + hover providers (registered once) ──────
 // Stored on `window` so Vite HMR module re-evaluation cannot reset the flag.
@@ -141,6 +178,8 @@ function registerProviders(): void {
  */
 export class MonacoEditorCustomElement implements ICustomElementViewModel {
     private readonly configEditorState = resolve(ConfigEditorState)
+    private readonly themeService = resolve(ThemeService)
+    private _unsubTheme: (() => void) | null = null
     @bindable({ mode: BindingMode.twoWay }) value = ''
     @bindable language = 'cpp'
     @bindable readonly = false
@@ -161,33 +200,17 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
         setSharedConfigEditorState(this.configEditorState)
         registerProviders()
 
-        // Define a custom theme based on vs-dark that explicitly sets the
+        // Define custom themes based on vs-dark/vs that explicitly set the
         // squiggle foreground colors. Monaco's registerThemingParticipant
         // only injects SVG squiggle CSS when getColor(editorErrorForeground)
         // returns non-null. In bundled Electron file:// contexts the built-in
-        // vs-dark theme sometimes omits those color tokens, so we supply them
-        // here to guarantee the CSS is emitted through Monaco's own pipeline.
-        // Monaco v0.55.1 renders squiggles via CSS variables:
+        // vs-dark/vs themes sometimes omit those color tokens, so we supply
+        // them here to guarantee the CSS is emitted through Monaco's own
+        // pipeline. Monaco v0.55.1 renders squiggles via CSS variables:
         //   border-bottom: 4px double var(--vscode-editorError-border)
         // Those variables are only emitted by the theming system when the
-        // corresponding color token is non-null in the active theme.  The
-        // built-in vs-dark theme omits them in bundled Electron file://
-        // contexts, so we define our own theme that explicitly supplies them.
-        monaco.editor.defineTheme('dccex-dark', {
-            base: 'vs-dark',
-            inherit: true,
-            rules: [],
-            colors: {
-                'editorError.foreground': '#f14c4c',
-                'editorError.border': '#f14c4c',
-                'editorWarning.foreground': '#cca700',
-                'editorWarning.border': '#cca700',
-                'editorInfo.foreground': '#75beff',
-                'editorInfo.border': '#75beff',
-                'editorHint.foreground': '#eeeee4',
-                'editorHint.border': '#eeeee4',
-            },
-        })
+        // corresponding color token is non-null in the active theme.
+        defineEditorThemes()
 
         // Use a URI based on filename so completion/hover providers can identify
         // which file is active and return the correct per-file suggestions.
@@ -214,7 +237,7 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
 
         this.editor = monaco.editor.create(this.container, {
             model: this.model,
-            theme: 'dccex-dark',
+            theme: this.themeService.effective === 'dark' ? 'dccex-dark' : 'dccex-light',
             language: this.language,
             readOnly: this.readonly,
             automaticLayout: true,
@@ -287,6 +310,13 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
             revalidateModel(modelToValidate, editorInstance)
         }, 100)
 
+        // Monaco's theme is global (monaco.editor.setTheme), not per-instance —
+        // still fine to subscribe per editor since calling it again with the
+        // same theme name is a harmless no-op.
+        this._unsubTheme = this.themeService.onChange((effective) => {
+            monaco.editor.setTheme(effective === 'dark' ? 'dccex-dark' : 'dccex-light')
+        })
+
         // Propagate editor changes → binding
         this.changeDisposable = this.model.onDidChangeContent(() => {
             if (this.isUpdatingFromBinding) return
@@ -332,6 +362,8 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
         // text through their normal change.trigger handler — regardless of
         // whether teardown was triggered by a tab switch, route change, etc.
         this.flush()
+        this._unsubTheme?.()
+        this._unsubTheme = null
         this.changeDisposable?.dispose()
         this.editor?.dispose()
         // Only dispose the text model if it has no URI — URI models are cached by

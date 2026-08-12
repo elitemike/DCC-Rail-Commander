@@ -1,15 +1,15 @@
 <template>
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-slate-900 rounded-2xl border border-white/10 w-full max-w-lg shadow-2xl">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-lg shadow-2xl">
 
             <!-- Header -->
-            <div class="px-6 pt-6 pb-4 border-b border-white/10">
-                <h2 class="text-white text-lg font-semibold">Calibrate Servo</h2>
+            <div class="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10">
+                <h2 class="text-gray-900 dark:text-white text-lg font-semibold">Calibrate Servo</h2>
                 <p class="text-blue-300/70 text-sm mt-1">
                     ${turnoutLabel} &middot; Pin (VPin) ${turnout.pin}
                 </p>
 
-                <p if.bind="portStatus === 'connecting'" class="mt-2 text-xs text-gray-400 flex items-center gap-1.5">
+                <p if.bind="portStatus === 'connecting'" class="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
                     <svg class="w-3 h-3 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.37 0 0 5.37 0 12h4z" />
@@ -27,14 +27,14 @@
                 </p>
                 <p if.bind="sendError" class="mt-1 text-xs text-red-400">${sendError}</p>
                 <p if.bind="!sendError && lastSentCommand" class="mt-1 text-xs text-gray-500">
-                    Last sent: <span class="font-mono text-gray-400">${lastSentCommand}</span>
+                    Last sent: <span class="font-mono text-gray-500 dark:text-gray-400">${lastSentCommand}</span>
                 </p>
             </div>
 
             <!-- Body -->
             <div class="px-6 py-4 flex flex-col gap-5">
 
-                <div if.bind="errorMessage" class="px-3 py-2 bg-red-950/60 border border-red-500/40 rounded-md text-red-300 text-sm">
+                <div if.bind="errorMessage" class="px-3 py-2 bg-red-50 dark:bg-red-950/60 border border-red-500/40 rounded-md text-red-700 dark:text-red-300 text-sm">
                     ${errorMessage}
                 </div>
 
@@ -56,11 +56,11 @@
                 <!-- Numeric fields -->
                 <div class="flex gap-4">
                     <div class="flex flex-col gap-1.5 flex-1">
-                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Closed position</label>
+                        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Closed position</label>
                         <input ref="closedNumEl" type="text" />
                     </div>
                     <div class="flex flex-col gap-1.5 flex-1">
-                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Thrown position</label>
+                        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Thrown position</label>
                         <input ref="thrownNumEl" type="text" />
                     </div>
                 </div>
@@ -70,20 +70,20 @@
                     <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Test move</span>
                     <button click.trigger="testMove(closedPosition)" disabled.bind="!canTestMove" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
                                ${canTestMove
-                                   ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 cursor-pointer'
-                                   : 'bg-white/5 border border-white/10 text-gray-600 cursor-not-allowed'}">
+                                   ? 'bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 cursor-pointer'
+                                   : 'bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 cursor-not-allowed'}">
                         Close
                     </button>
                     <button click.trigger="testMove(midPosition)" disabled.bind="!canTestMove" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
                                ${canTestMove
-                                   ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 cursor-pointer'
-                                   : 'bg-white/5 border border-white/10 text-gray-600 cursor-not-allowed'}">
+                                   ? 'bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 cursor-pointer'
+                                   : 'bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 cursor-not-allowed'}">
                         Mid
                     </button>
                     <button click.trigger="testMove(thrownPosition)" disabled.bind="!canTestMove" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
                                ${canTestMove
-                                   ? 'bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 cursor-pointer'
-                                   : 'bg-white/5 border border-white/10 text-gray-600 cursor-not-allowed'}">
+                                   ? 'bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 cursor-pointer'
+                                   : 'bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 cursor-not-allowed'}">
                         Throw
                     </button>
                 </div>
@@ -91,9 +91,9 @@
                 <!-- Profile: applied on Save, and used by the Close/Mid/Throw test buttons above;
                      the numeric fields' stepper fine-tune moves still snap instantly for responsiveness. -->
                 <div class="flex flex-col gap-1.5">
-                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Profile</label>
+                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Profile</label>
                     <select
-                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                         value.bind="profile">
                         <option repeat.for="p of profiles" value.bind="p">${p}</option>
                     </select>
@@ -103,12 +103,12 @@
             <!-- Footer -->
             <div class="px-6 pb-6 pt-2 flex items-center justify-between gap-3">
                 <button click.trigger="swap()"
-                    class="px-4 py-2 rounded-lg text-sm text-gray-300 bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                    class="px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 transition-colors">
                     Swap
                 </button>
                 <div class="flex gap-2">
                     <button click.trigger="cancel()"
-                        class="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
+                        class="px-4 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/10 dark:hover:bg-white/10 transition-colors">
                         Cancel
                     </button>
                     <button click.trigger="save()"

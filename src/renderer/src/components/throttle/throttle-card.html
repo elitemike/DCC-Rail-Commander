@@ -1,13 +1,13 @@
-<div class="bg-gray-800/50 border border-white/10 rounded-lg p-5 flex flex-col gap-4">
+<div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-5 flex flex-col gap-4">
 
     <!-- Header -->
     <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1">
-            <p class="text-base font-semibold text-white truncate">${cab.name}</p>
+            <p class="text-base font-semibold text-gray-900 dark:text-white truncate">${cab.name}</p>
             <p class="text-xs text-gray-500 font-mono">Cab ${cab.cab}</p>
         </div>
         <button click.trigger="release()" title="Release throttle" data-testid="throttle-release"
-            class="w-8 h-8 flex items-center justify-center rounded bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white text-base font-bold transition-colors shrink-0">×</button>
+            class="w-8 h-8 flex items-center justify-center rounded bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
     </div>
 
     <!-- Direction + speed -->
@@ -15,13 +15,13 @@
         <div class="flex items-center gap-1.5">
             <button click.trigger="setDirection(0)" title="Reverse"
                 class="flex-1 px-3 py-2.5 rounded text-sm font-semibold transition-colors"
-                class.bind="cab.direction === 0 ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'">◀
+                class.bind="cab.direction === 0 ? 'bg-blue-600 text-white' : 'bg-gray-900/5 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-900/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'">◀
                 Rev</button>
             <button click.trigger="stop()" title="Stop"
                 class="flex-1 px-3 py-2.5 rounded text-sm font-semibold bg-red-700/70 hover:bg-red-600 text-red-100 transition-colors">Stop</button>
             <button click.trigger="setDirection(1)" title="Forward"
                 class="flex-1 px-3 py-2.5 rounded text-sm font-semibold transition-colors"
-                class.bind="cab.direction === 1 ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'">Fwd
+                class.bind="cab.direction === 1 ? 'bg-blue-600 text-white' : 'bg-gray-900/5 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-900/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'">Fwd
                 ▶</button>
         </div>
 

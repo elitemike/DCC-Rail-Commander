@@ -3,6 +3,7 @@ import { resolve } from 'aurelia'
 import { route } from '@aurelia/router'
 import { ConfigEditorState } from './models/config-editor-state'
 import { UsbService } from './services/usb.service'
+import { ThemeService } from './services/theme.service'
 
 @route({
     routes: [
@@ -16,6 +17,7 @@ export class App {
     private readonly configEditorState = resolve(ConfigEditorState)
     private readonly dialogService = resolve(IDialogService)
     private readonly usb = resolve(UsbService)
+    readonly themeService = resolve(ThemeService)
     private _unsubCloseRequested: (() => void) | null = null
 
     bound(): void {
@@ -30,6 +32,11 @@ export class App {
         // the servo calibration dialog calls it later, the scan (or its hotplug
         // subscriptions) is already in place instead of starting cold.
         void this.usb.initialize()
+        // Not awaited for the same reason — index.html's inline bootstrap
+        // script already applied the last-known theme from localStorage
+        // before first paint, so this just reconciles it against the
+        // authoritative (async) preference and wires up live switching.
+        void this.themeService.init()
     }
 
     unbinding(): void {
