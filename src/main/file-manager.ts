@@ -72,4 +72,17 @@ export class FileService {
         })
         return result.canceled ? null : result.filePaths[0] ?? null
     }
+
+    async selectSavePath(defaultName: string): Promise<string | null> {
+        const win = BrowserWindow.getFocusedWindow()
+        if (!win) return null
+        const result = await dialog.showSaveDialog(win, {
+            defaultPath: defaultName,
+            filters: [
+                { name: 'Text', extensions: ['txt', 'log'] },
+                { name: 'All Files', extensions: ['*'] },
+            ],
+        })
+        return result.canceled ? null : result.filePath ?? null
+    }
 }
