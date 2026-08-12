@@ -1,11 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Applies the last-known theme before any CSS/Aurelia loads, so a
+         Light-mode user doesn't see a flash of the (default) dark theme on
+         cold start. ThemeService keeps this key in sync on every change —
+         see src/renderer/src/services/theme.service.ts. This script must
+         stay inline (not a module) so it runs before first paint. -->
+    <script>
+        (function () {
+            try {
+                // document.body doesn't exist yet this early — only <html> is
+                // touched here. ThemeService.init() reconciles <body>'s
+                // e-dark-mode class (a Syncfusion-only concern) once it runs.
+                if (localStorage.getItem('ex-installer-theme-effective') === 'light') {
+                    document.documentElement.classList.remove('dark')
+                }
+            } catch (e) { /* localStorage unavailable — default to dark, matching the class already on <html> */ }
+        })()
+    </script>
 
     <script type="module" src="./src/main.ts"></script>
 

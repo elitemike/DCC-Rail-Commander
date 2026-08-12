@@ -1,6 +1,7 @@
 import { resolve } from 'aurelia'
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
 import { CheckBox } from '@syncfusion/ej2-buttons'
+import { ThemeService, type ThemeMode } from '../../services/theme.service'
 
 export interface SettingsDialogModel {
     autoConnect: boolean
@@ -21,6 +22,7 @@ export interface SettingsDialogModel {
  */
 export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly $dialog = resolve(IDialogController)
+    readonly theme = resolve(ThemeService)
 
     private model!: SettingsDialogModel
 
@@ -82,6 +84,11 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.sfVerboseCompile = undefined
         this.sfUseLatestProdVersion?.destroy()
         this.sfUseLatestProdVersion = undefined
+    }
+
+    /** Applies (and persists) the theme immediately — ThemeService is the source of truth, so there's no local mirrored field to keep in sync. */
+    setTheme(mode: ThemeMode): void {
+        void this.theme.setMode(mode)
     }
 
     close(): void {

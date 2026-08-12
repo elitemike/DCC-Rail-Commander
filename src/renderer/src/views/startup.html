@@ -6,12 +6,12 @@
         <div class="text-center mb-12">
             <div class="flex items-center justify-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-6 h-6 text-gray-900 dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
-                <h1 class="text-3xl font-bold text-white tracking-tight">EX-Installer</h1>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">EX-Installer</h1>
             </div>
             <p class="text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
         </div>
@@ -33,12 +33,12 @@
         <!-- ── Preparing the bundled toolchain (first run of a new build) ── -->
         <div if.bind="phase === 'seeding'" class="w-full max-w-sm flex flex-col gap-4">
             <div class="text-center">
-                <p class="text-white font-medium text-sm mb-1">${statusMessage}</p>
+                <p class="text-gray-900 dark:text-white font-medium text-sm mb-1">${statusMessage}</p>
                 <p class="text-blue-300/60 text-xs">
                     Unpacking the bundled build tools — this happens once per update.
                 </p>
             </div>
-            <div class="bg-white/10 rounded-full h-2 overflow-hidden">
+            <div class="bg-gray-900/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
                 <div class="h-full bg-blue-500 rounded-full transition-all duration-300" css="width: ${progress}%">
                 </div>
             </div>
@@ -47,16 +47,16 @@
 
         <!-- ── Toolchain pack prompt (boards outside the bundled set) ── -->
         <div if.bind="phase === 'toolchain-prompt'"
-            class="w-full max-w-sm bg-white/5 border border-amber-500/20 rounded-2xl p-6 flex flex-col gap-5">
+            class="w-full max-w-sm bg-gray-900/5 dark:bg-white/5 border border-amber-500/20 rounded-2xl p-6 flex flex-col gap-5">
             <div>
                 <div class="flex items-center gap-2 mb-1">
                     <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z" />
                     </svg>
-                    <h2 class="text-white font-semibold text-base">Toolchain Pack Required</h2>
+                    <h2 class="text-gray-900 dark:text-white font-semibold text-base">Toolchain Pack Required</h2>
                 </div>
-                <p class="text-gray-400 text-sm">
+                <p class="text-gray-500 dark:text-gray-400 text-sm">
                     EX-Installer bundles the AVR and ESP32 build toolchains. Other boards
                     (such as the STM32 Nucleo family) need a toolchain pack supplied from
                     a local archive.
@@ -68,7 +68,7 @@
                     ${browseBusy ? 'Opening...' : 'Import Toolchain Pack (.tar.gz / .zip)'}
                 </button>
                 <button click.trigger="skipToolchainPack()" disabled.bind="browseBusy"
-                    class="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-xs transition-colors disabled:opacity-50">
+                    class="w-full py-2.5 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-gray-500 dark:text-gray-400 text-xs transition-colors disabled:opacity-50">
                     Skip — continue without it
                 </button>
             </div>
@@ -92,7 +92,7 @@
                 </div>
             </div>
             <button click.trigger="retry()"
-                class="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white text-sm transition-colors">
+                class="w-full py-2.5 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white text-sm transition-colors">
                 Retry
             </button>
         </div>

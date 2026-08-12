@@ -1,13 +1,13 @@
-<div class="flex flex-col w-full h-full bg-[#0d1117] border-t border-white/10 overflow-hidden">
+<div class="flex flex-col w-full h-full bg-[#0d1117] border-t border-gray-200 dark:border-white/10 overflow-hidden">
 
     <!-- \u2500\u2500 Header bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 -->
-    <div class="flex items-center gap-3 px-3 py-1.5 bg-gray-900/80 border-b border-white/10 shrink-0">
+    <div class="flex items-center gap-3 px-3 py-1.5 bg-gray-50 dark:bg-gray-900/80 border-b border-gray-200 dark:border-white/10 shrink-0">
         <!-- Terminal icon -->
         <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        <span class="text-white text-sm font-semibold">Device Monitor</span>
+        <span class="text-gray-900 dark:text-white text-sm font-semibold">Device Monitor</span>
         <!-- Status badge -->
         <span class="text-xs font-mono" class.bind="statusColor">${statusText}</span>
 
@@ -23,7 +23,7 @@
                         ? 'bg-blue-700/50 hover:bg-blue-600/70 text-blue-200'
                         : qc.group === 'exrail'
                         ? 'bg-purple-700/50 hover:bg-purple-600/70 text-purple-200'
-                        : 'bg-white/5 hover:bg-white/15 text-gray-300'">
+                        : 'bg-gray-900/5 dark:bg-white/5 hover:bg-white/15 text-gray-700 dark:text-gray-300'">
                 ${qc.label}
             </button>
         </div>

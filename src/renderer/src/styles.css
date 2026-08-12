@@ -12,14 +12,19 @@
 @import "@fontsource/roboto/700.css";
 @import "@xterm/xterm/css/xterm.css";
 @import "tailwindcss";
-@import "@syncfusion/ej2-base/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-buttons/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-inputs/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-dropdowns/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-layouts/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-navigations/styles/tailwind-dark.css";
-@import "@syncfusion/ej2-navigations/styles/stepper/tailwind-dark.css";
-@import "@syncfusion/ej2-notifications/styles/tailwind-dark.css";
+
+/* Manual (class-based) dark mode instead of Tailwind v4's default
+   prefers-color-scheme media query — ThemeService toggles `.dark` on
+   <html> so `dark:` utilities respond to the app's own Light/Dark/System
+   setting rather than only the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Syncfusion EJ2 package CSS is NOT imported here — unlike Tailwind
+   utilities, EJ2's light/dark stylesheets both define the same global
+   selectors (e.g. .e-btn), so importing both would just have the
+   last-imported one win outright. Instead ThemeService swaps a single
+   <link> between ej2-theme-dark.css and ej2-theme-light.css at runtime —
+   see src/renderer/src/services/theme.service.ts. */
 
 /* ── Set Roboto as the global font ────────────────────────────────────── */
 @theme {
@@ -151,12 +156,19 @@ div.monaco-editor .squiggly-hint {
     gap: 12px;
     padding: 12px 16px;
     border-radius: 8px;
-    background: #1e2535;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #e2e8f0;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #1e293b;
     font-size: 0.875rem;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
     animation: toast-in 0.2s ease;
+}
+
+.dark .e-toast {
+    background: #1e2535;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes toast-in {
@@ -179,12 +191,20 @@ div.monaco-editor .squiggly-hint {
 .e-toast-title {
     font-weight: 600;
     margin-bottom: 2px;
+    color: #0f172a;
+}
+
+.dark .e-toast-title {
     color: #f1f5f9;
 }
 
 .e-toast-content {
-    color: #94a3b8;
+    color: #64748b;
     line-height: 1.4;
+}
+
+.dark .e-toast-content {
+    color: #94a3b8;
 }
 
 .e-toast-close-icon {
@@ -192,7 +212,7 @@ div.monaco-editor .squiggly-hint {
     background: none;
     border: none;
     cursor: pointer;
-    color: #94a3b8;
+    color: #64748b;
     font-size: 1.1rem;
     line-height: 1;
     padding: 0 0 0 4px;
@@ -200,6 +220,14 @@ div.monaco-editor .squiggly-hint {
 }
 
 .e-toast-close-icon:hover {
+    color: #0f172a;
+}
+
+.dark .e-toast-close-icon {
+    color: #94a3b8;
+}
+
+.dark .e-toast-close-icon:hover {
     color: #e2e8f0;
 }
 

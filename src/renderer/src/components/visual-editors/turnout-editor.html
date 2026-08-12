@@ -2,19 +2,19 @@
     <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
 
         <!-- Tab strip: Visual | Raw -->
-        <div class="flex items-center gap-0 border-b border-white/10 bg-gray-900/60 shrink-0 px-2">
+        <div class="flex items-center gap-0 border-b border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-gray-900/60 shrink-0 px-2">
             <button click.trigger="setTab('visual')"
                 class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
-                class.bind="activeTab === 'visual' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                class.bind="activeTab === 'visual' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
                 Visual
             </button>
             <button click.trigger="setTab('raw')"
                 class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
-                class.bind="activeTab === 'raw' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-white'">
+                class.bind="activeTab === 'raw' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
                 Raw
             </button>
             <span class="ml-auto flex items-baseline gap-1.5 px-3 py-2">
-                <span class="text-xs text-gray-400">${turnouts.length} entries</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">${turnouts.length} entries</span>
                 <span class="text-xs text-gray-600 font-mono">myTurnouts.h</span>
             </span>
         </div>
@@ -31,10 +31,10 @@
             <div id="turnout-splitter" style="height:100%;width:100%;">
 
                 <!-- Sidebar -->
-                <div class="flex flex-col overflow-hidden border-r border-white/10 bg-gray-900/40">
-                    <div class="flex items-center px-3 py-2.5 border-b border-white/10">
+                <div class="flex flex-col overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+                    <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
                         <span
-                            class="text-xs font-semibold text-gray-400 uppercase tracking-wider flex-1">Turnouts</span>
+                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Turnouts</span>
                         <button click.trigger="addEntry()"
                             class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
                             title="Add new turnout">+</button>
@@ -45,7 +45,7 @@
                             class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
                             class.bind="selectedIndex === $index
                             ? 'bg-blue-900/60 text-white font-medium'
-                            : 'text-gray-300 hover:bg-white/5 hover:text-white'">
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
                             <span class="flex-1 min-w-0 truncate">${getDisplayName(turnout)}</span>
                             <button
                                 class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
@@ -62,28 +62,28 @@
                 <div class="flex flex-col overflow-hidden">
                     <div if.bind="editBuffer" class="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
                         <div if.bind="errorMessage"
-                            class="px-3 py-2 bg-red-950/60 border border-red-500/40 rounded-md text-red-300 text-sm">
+                            class="px-3 py-2 bg-red-50 dark:bg-red-950/60 border border-red-500/40 rounded-md text-red-700 dark:text-red-300 text-sm">
                             ${errorMessage}
                         </div>
 
                         <!-- Input form: SERVO_TURNOUT -->
                         <div if.bind="editBuffer.type === 'SERVO'"
-                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4">
                             <div class="flex flex-col gap-4">
 
                                 <div class="flex gap-4">
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
-                                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pin
+                                        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pin
                                             (VPin)</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.pin" blur.trigger="onFieldBlur()" />
                                     </div>
                                 </div>
@@ -91,25 +91,25 @@
                                 <div class="flex gap-4">
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Active
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Active
                                             Angle</label>
                                         <input type="number" min="0" max="512"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.activeAngle" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Inactive
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Inactive
                                             Angle</label>
                                         <input type="number" min="0" max="512"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-28 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.inactiveAngle" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Profile</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Profile</label>
                                         <select
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.profile"
                                             change.trigger="updateProfile(editBuffer.profile)">
                                             <option repeat.for="p of profiles" value.bind="p">${p}</option>
@@ -119,37 +119,37 @@
 
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.description" placeholder="Enter description..."
                                         blur.trigger="onFieldBlur()" />
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Alias</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Alias</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="aliasInput" placeholder="Optional alias from myAliases.h"
                                         blur.trigger="onAliasBlur()" />
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comment</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.comment"
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Default
                                         State</label>
                                     <select
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.defaultState"
                                         change.trigger="updateDefaultState(editBuffer.defaultState)">
                                         <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
@@ -162,61 +162,61 @@
 
                         <!-- Input form: TURNOUT (DCC accessory decoder) -->
                         <div if.bind="editBuffer.type === 'DCC'"
-                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4">
                             <div class="flex flex-col gap-4">
                                 <div class="flex gap-4">
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Address</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Address</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.addr" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sub-Address</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Sub-Address</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.subAddr" blur.trigger="onFieldBlur()" />
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.description" placeholder="Enter description..."
                                         blur.trigger="onFieldBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Alias</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Alias</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="aliasInput" placeholder="Optional alias from myAliases.h"
                                         blur.trigger="onAliasBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comment</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.comment"
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Default
                                         State</label>
                                     <select
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.defaultState"
                                         change.trigger="updateDefaultState(editBuffer.defaultState)">
                                         <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
@@ -229,54 +229,54 @@
 
                         <!-- Input form: PIN_TURNOUT (GPIO) -->
                         <div if.bind="editBuffer.type === 'PIN'"
-                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4">
                             <div class="flex flex-col gap-4">
                                 <div class="flex gap-4">
                                     <div class="flex flex-col gap-1.5 flex-1">
                                         <label
-                                            class="text-xs font-semibold text-gray-400 uppercase tracking-wide">ID</label>
+                                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">ID</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.id" blur.trigger="onFieldBlur()" />
                                     </div>
                                     <div class="flex flex-col gap-1.5 flex-1">
-                                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pin
+                                        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pin
                                             (VPin)</label>
                                         <input type="number"
-                                            class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm w-24 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                             value.bind="editBuffer.pin" blur.trigger="onFieldBlur()" />
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.description" placeholder="Enter description..."
                                         blur.trigger="onFieldBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Alias</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Alias</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="aliasInput" placeholder="Optional alias from myAliases.h"
                                         blur.trigger="onAliasBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label
-                                        class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Comment</label>
+                                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comment</label>
                                     <input type="text"
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.comment"
                                         placeholder="Optional comment (appears after // in file)"
                                         blur.trigger="onFieldBlur()" />
                                 </div>
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Default
+                                    <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Default
                                         State</label>
                                     <select
-                                        class="bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                        class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
                                         value.bind="editBuffer.defaultState"
                                         change.trigger="updateDefaultState(editBuffer.defaultState)">
                                         <option repeat.for="state of defaultStates" value.bind="state">${state}</option>
@@ -289,9 +289,9 @@
 
                         <!-- Configuration summary + visual angle bar (SERVO only) -->
                         <div if.bind="editBuffer.type === 'SERVO'"
-                            class="bg-gray-800/50 border border-white/10 rounded-lg p-4">
+                            class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4">
                             <div class="flex items-center justify-between mb-3">
-                                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Configuration
+                                <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Configuration
                                     Summary</h3>
                                 <button click.trigger="openServoCalibration()"
                                     class="px-2.5 py-1 text-xs font-medium rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors">
@@ -318,13 +318,13 @@
                                 </div>
                                 <div class="flex flex-col gap-0.5">
                                     <span class="text-xs text-gray-500">Profile</span>
-                                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold text-white"
+                                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold text-gray-900 dark:text-white"
                                         class.bind="profileColor(editBuffer.profile)">${editBuffer.profile}</span>
                                 </div>
                             </div>
 
                             <!-- Angle visualisation bar -->
-                            <div class="relative h-5 bg-gray-700 rounded border border-white/10">
+                            <div class="relative h-5 bg-gray-700 rounded border border-gray-200 dark:border-white/10">
                                 <!-- Inactive angle marker (red) -->
                                 <div class="absolute -top-1 w-0.5 h-7 rounded transform -translate-x-1/2 bg-red-500"
                                     css="left: ${(editBuffer.inactiveAngle / 512) * 100}%"></div>

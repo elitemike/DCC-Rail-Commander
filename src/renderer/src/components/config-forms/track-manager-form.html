@@ -3,15 +3,15 @@
         <div class="flex flex-col gap-4 max-w-2xl">
 
             <!-- Track manager mode selector -->
-            <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track Configuration</span>
+            <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track Configuration</span>
                 <div class="flex gap-6">
                     <input ref="trackManagerModeDccOnlyEl" type="radio" />
                     <input ref="trackManagerModeDcOnlyEl" type="radio" />
                     <input ref="trackManagerModeMixedEl" type="radio" />
                 </div>
-                <div class="flex items-center gap-3 pt-2 border-t border-white/10">
-                    <label class="text-xs text-gray-400 shrink-0">Startup power</label>
+                <div class="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-white/10">
+                    <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Startup power</label>
                     <div class="w-64">
                         <input ref="startupPowerModeEl" type="text" />
                     </div>
@@ -19,8 +19,8 @@
             </div>
 
             <!-- Track A -->
-            <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track A</span>
+            <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track A</span>
                 <div class="flex items-center gap-4">
                     <!-- Type selector (mixed mode only) -->
                     <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
@@ -28,7 +28,7 @@
                             <input ref="trackATypeDccEl" type="radio" />
                             <input ref="trackATypeDcEl" type="radio" />
                         </div>
-                        <div class="w-px h-6 bg-white/10"></div>
+                        <div class="w-px h-6 bg-gray-900/10 dark:bg-white/10"></div>
                     </div>
                     <!-- Mode dropdown -->
                     <div class="w-36">
@@ -39,7 +39,7 @@
                     </div>
                     <!-- Loco ID (DC mode only) -->
                     <div class="${trackAIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                        <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
                         <div class="w-24">
                             <input ref="trackALocoIdEl" type="text" />
                         </div>
@@ -48,8 +48,8 @@
             </div>
 
             <!-- Track B -->
-            <div class="bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track B</span>
+            <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track B</span>
                 <div class="flex items-center gap-4">
                     <!-- Type selector (mixed mode only) -->
                     <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
@@ -57,7 +57,7 @@
                             <input ref="trackBTypeDccEl" type="radio" />
                             <input ref="trackBTypeDcEl" type="radio" />
                         </div>
-                        <div class="w-px h-6 bg-white/10"></div>
+                        <div class="w-px h-6 bg-gray-900/10 dark:bg-white/10"></div>
                     </div>
                     <!-- Mode dropdown -->
                     <div class="w-36">
@@ -68,7 +68,7 @@
                     </div>
                     <!-- Loco ID (DC mode only) -->
                     <div class="${trackBIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                        <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
                         <div class="w-24">
                             <input ref="trackBLocoIdEl" type="text" />
                         </div>
@@ -78,8 +78,8 @@
 
             <!-- Track C (only with stacked motor shield) -->
             <div
-                class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track C</span>
+                class="${hasStackedMotorShield ? 'bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track C</span>
                 <div class="flex items-center gap-4">
                     <!-- Type selector (mixed mode only) -->
                     <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
@@ -87,7 +87,7 @@
                             <input ref="trackCTypeDccEl" type="radio" />
                             <input ref="trackCTypeDcEl" type="radio" />
                         </div>
-                        <div class="w-px h-6 bg-white/10"></div>
+                        <div class="w-px h-6 bg-gray-900/10 dark:bg-white/10"></div>
                     </div>
                     <!-- Mode dropdown -->
                     <div class="w-36">
@@ -98,7 +98,7 @@
                     </div>
                     <!-- Loco ID (DC mode only) -->
                     <div class="${trackCIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                        <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
                         <div class="w-24">
                             <input ref="trackCLocoIdEl" type="text" />
                         </div>
@@ -108,8 +108,8 @@
 
             <!-- Track D (only with stacked motor shield) -->
             <div
-                class="${hasStackedMotorShield ? 'bg-gray-800/50 border border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Track D</span>
+                class="${hasStackedMotorShield ? 'bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3' : 'hidden'}">
+                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track D</span>
                 <div class="flex items-center gap-4">
                     <!-- Type selector (mixed mode only) -->
                     <div class="${trackManagerModeMixed ? 'flex items-center gap-4 shrink-0' : 'hidden'}">
@@ -117,7 +117,7 @@
                             <input ref="trackDTypeDccEl" type="radio" />
                             <input ref="trackDTypeDcEl" type="radio" />
                         </div>
-                        <div class="w-px h-6 bg-white/10"></div>
+                        <div class="w-px h-6 bg-gray-900/10 dark:bg-white/10"></div>
                     </div>
                     <!-- Mode dropdown -->
                     <div class="w-36">
@@ -128,7 +128,7 @@
                     </div>
                     <!-- Loco ID (DC mode only) -->
                     <div class="${trackDIsDc ? 'flex items-center gap-2' : 'hidden'}">
-                        <label class="text-xs text-gray-400 shrink-0">Loco / Cab address</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
                         <div class="w-24">
                             <input ref="trackDLocoIdEl" type="text" />
                         </div>
