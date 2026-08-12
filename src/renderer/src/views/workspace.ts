@@ -120,6 +120,11 @@ export class Workspace {
 
     closeBottomPanel(): void {
         this.splitterObj?.collapse(1)
+        // Keep showMonitor in sync with the panel's actual visibility — otherwise
+        // it stays true after closing via this button, and the next click on the
+        // Monitor toggle just flips it back to false (a no-op, since the panel is
+        // already collapsed) instead of reopening it.
+        this.showMonitor = false
     }
 
     async binding(): Promise<void> {
