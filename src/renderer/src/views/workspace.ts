@@ -51,7 +51,12 @@ export class Workspace {
         return this.deviceConnectionStatus === 'connected'
     }
 
-    selectThrottleSection(): void {
+    /** Throttle needs a live serial connection to send anything — auto-connect on entry if not already connected. */
+    async selectThrottleSection(): Promise<void> {
+        if (!this.portConnected) {
+            const ok = await this.connect()
+            if (!ok) return
+        }
         this.activeSection = 'throttle'
     }
 
@@ -82,9 +87,9 @@ export class Workspace {
     showDeviceMenu = false
     savedConfigs: SavedConfiguration[] = []
 
-    // ── Device monitor ────────────────────────────────────────────────────────
+    // ── Device monitor — a view only; it neither opens nor closes the port ────
     showMonitor = false
-    /** Persisted app-wide preference (not per-device) — whether checkDeviceConnection() is allowed to auto-open the Monitor on connect. Loaded in binding(), toggled via the checkbox next to the Monitor button. */
+    /** Persisted app-wide preference (not per-device) — whether checkDeviceConnection() is allowed to auto-connect (and, for now, also open the Monitor) once the device is detected. Loaded in binding(), toggled via the checkbox next to the Monitor button. */
     autoConnectMonitor = true
     autoConnectMonitorEl!: HTMLInputElement
     private sfAutoConnectMonitor?: CheckBox
@@ -94,8 +99,64 @@ export class Workspace {
     verboseCompileEl!: HTMLInputElement
     private sfVerboseCompile?: CheckBox
 
+    // ── Serial connection — the actual open/closed state of the port ─────────
+    /** True once connect() has successfully opened the selected device's port. The single source of truth for whether anything (Throttle, Monitor) can currently talk to the device — Monitor visibility is a separate, unrelated concern. */
+    portConnected = false
+    private _unsubUsbClosed: (() => void) | null = null
+
+    /**
+     * Opens the selected device's port. `openMonitor` additionally shows the
+     * Monitor panel once connected — used by the auto-connect path (see
+     * checkDeviceConnection()) to preserve today's "device appears, Monitor
+     * pops open" behavior; a future preference could make that its own
+     * separate toggle, but for now it's just a parameter here. Manual
+     * connects (the toolbar button, Throttle auto-connect) don't pass it, so
+     * they only ever establish the connection.
+     */
+    async connect(options?: { openMonitor?: boolean }): Promise<boolean> {
+        const port = this.state.selectedDevice?.port
+        if (!port) return false
+        if (this.portConnected) return true
+        try {
+            await this.usb.openPort(port, 115200)
+            this.portConnected = true
+        } catch (err) {
+            const msg = (err as Error).message
+            // Port already open from a previous session (e.g. after upload) — attach anyway.
+            if (/already open/i.test(msg)) {
+                this.portConnected = true
+            } else {
+                this.toastService.show({ title: 'Connect Failed', content: msg, cssClass: 'e-toast-danger' })
+                return false
+            }
+        }
+        if (options?.openMonitor && !this.showMonitor) {
+            this.activeBottomTab = 'monitor'
+            this.showMonitor = true
+            this.openBottomPanel()
+        }
+        return true
+    }
+
+    async disconnect(): Promise<void> {
+        const port = this.state.selectedDevice?.port
+        if (port) {
+            try {
+                if (await this.usb.isPortOpen(port)) await this.usb.closePort(port)
+            } catch {
+                // Best-effort — nothing meaningful to recover from here.
+            }
+        }
+        this.portConnected = false
+    }
+
+    async toggleConnect(): Promise<void> {
+        if (this.portConnected) await this.disconnect()
+        else await this.connect()
+    }
+
     // ── Live device connection status (port badge) ────────────────────────────
-    /** Whether the selected device currently answers at its recorded port — drives the port badge and auto-opening the Monitor. */
+    /** Whether the selected device currently answers at its recorded port — drives the port badge and gates the Throttle nav item. Independent of portConnected (that's whether *we've* opened it; this is whether it's physically there to open). */
     deviceConnectionStatus: 'checking' | 'connected' | 'disconnected' | 'unknown' = 'unknown'
     private _connectionCheckTimer: ReturnType<typeof setTimeout> | null = null
     private _unsubUsbAttached: (() => void) | null = null
@@ -183,12 +244,14 @@ export class Workspace {
      * just read-only here (never corrects the stored port itself).
      *
      * On a transition into 'connected' — not on every repeat check while
-     * already connected — the Monitor is auto-opened if it isn't already
-     * showing and autoConnectMonitor (a persisted app preference, not
-     * per-device) is on. Gating on the transition (rather than "is
-     * connected") means a user who's manually closed the Monitor won't have
-     * it pop back open on an unrelated hotplug event while the device was
-     * already live.
+     * already connected — connect() is called if autoConnectMonitor (a
+     * persisted app preference, not per-device) is on, passing openMonitor so
+     * it also pops the Monitor open, matching today's behavior. Gating on the
+     * transition (rather than "is live") means a user who's manually
+     * disconnected won't be auto-reconnected on an unrelated hotplug event
+     * while the device was already live. A transition OUT of live drops
+     * portConnected — the underlying port is gone either way, so there's
+     * nothing left for us to hold open.
      */
     async checkDeviceConnection(): Promise<void> {
         const device = this.state.selectedDevice
@@ -208,10 +271,10 @@ export class Workspace {
             const connected = mergeDetectedBoards(this.usb.serialPorts, cliBoards)
             const isLive = connected.some((b) => b.port === device.port)
             this.deviceConnectionStatus = isLive ? 'connected' : 'disconnected'
-            if (isLive && !wasConnected && !this.showMonitor && this.autoConnectMonitor) {
-                this.showMonitor = true
-                this.activeBottomTab = 'monitor'
-                this.openBottomPanel()
+            if (isLive && !wasConnected && this.autoConnectMonitor) {
+                await this.connect({ openMonitor: true })
+            } else if (!isLive && this.portConnected) {
+                this.portConnected = false
             }
         } catch {
             this.deviceConnectionStatus = 'disconnected'
@@ -324,6 +387,14 @@ export class Workspace {
         // attach events back-to-back.
         this._unsubUsbAttached = window.usb?.onAttached(() => this._scheduleConnectionCheck()) ?? null
         this._unsubUsbDetached = window.usb?.onDetached(() => this._scheduleConnectionCheck()) ?? null
+
+        // portConnected can go stale from outside connect()/disconnect() —
+        // an unplug, a driver error, anything that makes the underlying
+        // serialport instance close itself — so mirror the raw event rather
+        // than relying solely on our own open/close calls.
+        this._unsubUsbClosed = window.usb?.onClosed(({ path }) => {
+            if (path === this.state.selectedDevice?.port) this.portConnected = false
+        }) ?? null
     }
 
     detaching(): void {
@@ -341,8 +412,13 @@ export class Workspace {
         }
         this._unsubUsbAttached?.()
         this._unsubUsbDetached?.()
+        this._unsubUsbClosed?.()
         this._unsubUsbAttached = null
         this._unsubUsbDetached = null
+        this._unsubUsbClosed = null
+        // Don't leak an open port once the workspace itself goes away (e.g.
+        // navigating Home) — Monitor no longer owns this, so nothing else will.
+        if (this.portConnected) void this.disconnect()
     }
 
     /**
@@ -833,26 +909,14 @@ export class Workspace {
         const device = this.state.selectedDevice
         if (!device || !this.state.scratchPath) return
 
-        // The Monitor holds the port open for live traffic, but the uploader
-        // needs exclusive access to it during upload. Close it (if
-        // open) and remember to bring it back afterwards — success or
-        // failure — so watching the monitor doesn't mean manually closing
-        // and reopening it around every upload. Switching to the Output tab
-        // too avoids leaving the bottom panel showing a blank Monitor pane
-        // for the duration (its tab button itself is hidden while closed).
-        const monitorWasOpen = this.showMonitor
-        const wasOnMonitorTab = this.activeBottomTab === 'monitor'
-        if (monitorWasOpen) {
-            this.showMonitor = false
-            this.activeBottomTab = 'output'
-        }
-        try {
-            if (await this.usb.isPortOpen(device.port)) {
-                await this.usb.closePort(device.port)
-            }
-        } catch {
-            // Best-effort — ensureLivePort()/the upload call itself will surface a real problem.
-        }
+        // The uploader needs exclusive access to the port. Disconnect (if
+        // connected) and remember to reconnect afterwards — success or
+        // failure — so an active connection doesn't mean manually
+        // disconnecting around every upload. The Monitor, if open, just
+        // shows the resulting disconnect/reconnect like any other live
+        // status change — it's a view, not something upload needs to manage.
+        const wasConnected = this.portConnected
+        if (wasConnected) await this.disconnect()
 
         this.isCompiling = true
         this.compileError = null
@@ -904,10 +968,7 @@ export class Workspace {
             })
         } finally {
             this.isCompiling = false
-            if (monitorWasOpen) {
-                this.showMonitor = true
-                if (wasOnMonitorTab) this.activeBottomTab = 'monitor'
-            }
+            if (wasConnected) await this.connect()
         }
     }
 
@@ -925,6 +986,10 @@ export class Workspace {
 
     async switchToConfig(config: SavedConfiguration): Promise<void> {
         this.showDeviceMenu = false
+        // The port we're connected to (if any) belongs to the device we're
+        // switching away from — checkDeviceConnection() below decides whether
+        // to reconnect to the new one.
+        if (this.portConnected) await this.disconnect()
         this.state.selectedDevice = {
             name: config.deviceName,
             port: config.devicePort,
@@ -1022,6 +1087,10 @@ export class Workspace {
 
         const picked = (result as any).value as { port: string; fqbn: string } | null
         if (!picked?.port) return
+
+        // Still connected to the OLD port at this point — close it before
+        // repointing device.port, same reasoning as switchToConfig().
+        if (this.portConnected) await this.disconnect()
 
         device.port = picked.port
         if (picked.fqbn && (picked.fqbn.startsWith(device.fqbn) || !device.fqbn)) {

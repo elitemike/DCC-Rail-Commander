@@ -9,12 +9,15 @@ import type { SerialDeviceInfo, UsbDeviceInfo } from '../../../types/ipc'
  */
 export const IUsbService = DI.createInterface<UsbService>('IUsbService')
 
+type UsbWriteListener = (payload: { path: string; data: string }) => void
+
 export class UsbService {
     serialPorts: SerialDeviceInfo[] = []
     usbDevices: UsbDeviceInfo[] = []
     log: string[] = []
 
     private readonly unsubscribers: Array<() => void> = []
+    private readonly writeListeners: UsbWriteListener[] = []
     private initialized = false
 
     async initialize(): Promise<void> {
@@ -60,8 +63,28 @@ export class UsbService {
         await window.usb.openPort(path, baudRate)
     }
 
-    async write(path: string, data: string): Promise<void> {
+    /**
+     * `silent` skips the onWrite broadcast — used by the Serial Monitor
+     * itself, which already echoes its own typed/quick-send commands into
+     * its terminal and would otherwise show every command twice. Every other
+     * caller (throttle panel, config forms, etc.) leaves it unset so its
+     * writes become visible there, since without it those commands go out
+     * over serial with no visible trace anywhere in the app.
+     */
+    async write(path: string, data: string, options?: { silent?: boolean }): Promise<void> {
+        if (!options?.silent) {
+            this.writeListeners.forEach((fn) => fn({ path, data }))
+        }
         await window.usb.writeToPort(path, data)
+    }
+
+    /** Notified on every non-silent write(), regardless of which service/component sent it. */
+    onWrite(cb: UsbWriteListener): () => void {
+        this.writeListeners.push(cb)
+        return () => {
+            const idx = this.writeListeners.indexOf(cb)
+            if (idx !== -1) this.writeListeners.splice(idx, 1)
+        }
     }
 
     async closePort(path: string): Promise<void> {

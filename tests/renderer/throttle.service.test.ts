@@ -232,9 +232,16 @@ describe('ThrottleService power + e-stop', () => {
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<0>\n')
     })
 
-    it('emergencyStopAll sends <!>', async () => {
+    it('emergencyStopAll sends <!> and optimistically zeroes every acquired throttle\'s speed', async () => {
         const { service, write } = makeService()
+        service.acquire(3)
+        service.setSpeed(3, 80, 1)
+        service.acquire(7)
+        service.setSpeed(7, 40, 0)
+
         service.emergencyStopAll()
+
+        expect(service.throttles.map((t) => t.speed)).toEqual([0, 0])
         await flush(service)
         expect(write).toHaveBeenCalledWith('/dev/ttyACM1', '<!>\n')
     })

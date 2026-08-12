@@ -54,14 +54,30 @@ export class ThrottleCardCustomElement {
     private readonly _speedSubscriber = {
         handleChange: (speed: number) => {
             if (this.sfSlider && this.sfSlider.value !== speed) {
+                this._sliderPendingValue = speed
                 this.sfSlider.value = speed
                 this.sfSlider.refresh()
             }
             if (this.sfSpeedStepper && this.sfSpeedStepper.value !== speed) {
+                this._speedStepperPendingValue = speed
                 this.sfSpeedStepper.value = speed
             }
         },
     }
+
+    /**
+     * Syncfusion's Slider/NumericTextBox re-fire their own `change` callback
+     * when `.value` is set programmatically, not just on user interaction —
+     * so every `<l>` echo of our own `<t>` command that _speedSubscriber
+     * mirrors into these widgets would otherwise call setSpeed() again,
+     * sending another `<t>` command, getting echoed again, and so on: a real
+     * feedback loop, worst while actively dragging (fast ticks race the
+     * device's own reply latency, so a stale echo keeps landing and
+     * retriggering). Same echo-suppression pattern as
+     * servo-calibration-dialog.ts's _set*Value() helpers.
+     */
+    private _sliderPendingValue: number | null = null
+    private _speedStepperPendingValue: number | null = null
 
     private readonly _functionsSubscriber = {
         handleChange: () => {
@@ -98,6 +114,10 @@ export class ThrottleCardCustomElement {
             max: 126,
             value: this.cab.speed,
             change: (args) => {
+                if (typeof args.value === 'number' && this._sliderPendingValue === args.value) {
+                    this._sliderPendingValue = null
+                    return
+                }
                 if (typeof args.value === 'number') this.setSpeed(args.value)
             },
         })
@@ -112,6 +132,10 @@ export class ThrottleCardCustomElement {
             format: 'n0',
             value: this.cab.speed,
             change: (args) => {
+                if (typeof args.value === 'number' && this._speedStepperPendingValue === args.value) {
+                    this._speedStepperPendingValue = null
+                    return
+                }
                 if (typeof args.value === 'number') this.setSpeed(args.value)
             },
         })
@@ -168,15 +192,30 @@ export class ThrottleCardCustomElement {
             if (slot.isMomentary) {
                 // Not an SF toggle — 'e-active' here is purely visual feedback
                 // while the button is physically held down.
+                //
+                // `pressed` guards pointerup/pointerleave against firing from a
+                // press that started elsewhere — e.g. dragging the speed slider
+                // and releasing the mouse while it happens to be over this
+                // button. Without capturing the pointer, a plain pointerup
+                // fires on whatever element is under the cursor at release
+                // time, not on the element pointerdown originated from, so an
+                // unrelated drag ending here would otherwise send a spurious
+                // function-off command for a function that was never pressed.
+                let pressed = false
                 el.addEventListener('pointerdown', () => {
+                    pressed = true
                     el.classList.add('e-active')
                     this.pressFunction(slot)
                 })
                 el.addEventListener('pointerup', () => {
+                    if (!pressed) return
+                    pressed = false
                     el.classList.remove('e-active')
                     this.releaseFunction(slot)
                 })
                 el.addEventListener('pointerleave', () => {
+                    if (!pressed) return
+                    pressed = false
                     el.classList.remove('e-active')
                     this.releaseFunction(slot)
                 })

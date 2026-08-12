@@ -72,3 +72,46 @@ test('Monitor reopens with a single click after being closed via the panel\'s ow
     await monitorBtn.click()
     await expect(page.locator('serial-monitor')).toHaveCount(1)
 })
+
+/**
+ * Regression: the quick-send "E-Stop" button sent `<=>` (Track Manager
+ * config query) instead of `<!>` (actual emergency stop all) — a copy/paste
+ * mix-up, so clicking it never emergency-stopped anything.
+ */
+test('E-Stop quick-send button sends the real emergency-stop command', async ({ workspacePage: page }) => {
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+    await page.getByRole('button', { name: 'E-Stop', exact: true }).click()
+    await expect(page.locator('serial-monitor .xterm-rows')).toContainText('> <!>')
+})
+
+/**
+ * The core of this change: Monitor is just a view over the connection, not
+ * the thing that owns it. Closing the Monitor panel must not disconnect the
+ * port — Connect/Disconnect is now a separate, explicit control.
+ */
+test('closing the Monitor panel does not disconnect the port', async ({ workspacePage: page }) => {
+    const connectToggle = page.getByTestId('connect-toggle')
+    // The mock device auto-connects on load (see other tests in this file).
+    await expect(connectToggle).toHaveText('Disconnect', { timeout: 5_000 })
+
+    await page.getByRole('button', { name: 'Monitor' }).first().click()
+    await expect(page.locator('serial-monitor')).toHaveCount(0)
+
+    await expect(connectToggle).toHaveText('Disconnect')
+})
+
+test('Disconnect/Connect toggles the connection while the Monitor stays open as a view', async ({ workspacePage: page }) => {
+    const connectToggle = page.getByTestId('connect-toggle')
+    await expect(connectToggle).toHaveText('Disconnect', { timeout: 5_000 })
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+
+    await connectToggle.click()
+    await expect(connectToggle).toHaveText('Connect')
+    // The panel itself is untouched — still there, now just showing "not connected".
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+    await expect(page.locator('serial-monitor .xterm-rows')).toContainText('Disconnected')
+
+    await connectToggle.click()
+    await expect(connectToggle).toHaveText('Disconnect')
+    await expect(page.locator('serial-monitor .xterm-rows')).toContainText('Connected')
+})
