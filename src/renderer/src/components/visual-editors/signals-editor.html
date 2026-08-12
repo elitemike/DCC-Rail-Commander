@@ -20,22 +20,52 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
-            <div class="p-3 overflow-auto flex-1">
-                <div class="flex items-center justify-between mb-3">
-                    <div></div>
-                    <button class="btn" click.trigger="addSignal()">Add Signal</button>
+            <div class="flex-1 overflow-y-auto p-4">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <p class="text-xs text-gray-500">Signal heads made up of red/amber/green pins, driven by EX-RAIL.
+                    </p>
+                    <button click.trigger="addSignal()"
+                        class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                        Add Signal
+                    </button>
                 </div>
-                <div repeat.for="s of state.signals" class="mb-2 p-2 border rounded bg-gray-800">
-                    <div class="flex gap-2 items-center">
-                        <input value.two-way="s.red" placeholder="red" class="w-20" />
-                        <input value.two-way="s.amber" placeholder="amber" class="w-20" />
-                        <input value.two-way="s.green" placeholder="green" class="w-20" />
-                        <input value.two-way="s.description" placeholder="description" class="flex-1" />
-                        <button class="btn ml-2" click.trigger="removeSignal($index)">Delete</button>
+
+                <div if.bind="state.signals.length === 0"
+                    class="flex flex-col items-center justify-center gap-3 text-gray-600 py-16">
+                    <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M9 17.25v1.5m6-1.5v1.5m-9-9V6a3 3 0 013-3h6a3 3 0 013 3v3.75m-15 0v6a3 3 0 003 3h9a3 3 0 003-3v-6m-15 0h15" />
+                    </svg>
+                    <p class="text-sm">No signals yet. Click "Add Signal" to create one.</p>
+                </div>
+
+                <div if.bind="state.signals.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="s of state.signals"
+                        class="flex items-end gap-3 px-4 py-3 bg-gray-800/50 border border-white/10 rounded-lg hover:border-white/20 transition-colors">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-red-400 uppercase tracking-wide">Red</label>
+                            <input type="number" value.two-way="s.red"
+                                class="w-16 bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wide">Amber</label>
+                            <input type="number" value.two-way="s.amber"
+                                class="w-16 bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-green-400 uppercase tracking-wide">Green</label>
+                            <input type="number" value.two-way="s.green"
+                                class="w-16 bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <div class="flex flex-col gap-1 flex-1">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                            <input type="text" value.two-way="s.description" placeholder="Description"
+                                class="w-full bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <button click.trigger="removeSignal($index)" title="Remove signal"
+                            class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white text-base font-bold transition-colors shrink-0">×</button>
                     </div>
                 </div>
-                <div if.bind="state.signals.length === 0" class="text-xs text-gray-500 p-3">No signals. Click Add
-                    Signal.</div>
             </div>
         </div>
 

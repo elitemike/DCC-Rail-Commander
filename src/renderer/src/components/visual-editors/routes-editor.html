@@ -20,20 +20,38 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
-            <div class="p-3 overflow-auto flex-1">
-                <div class="flex items-center justify-between mb-3">
-                    <div></div>
-                    <button class="btn" click.trigger="addRoute()">Add Route</button>
+            <div class="flex-1 overflow-y-auto p-4">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <p class="text-xs text-gray-500">Routes runnable from a throttle or JMRI, each made up of a
+                        sequence of EX-RAIL commands.</p>
+                    <button click.trigger="addRoute()"
+                        class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                        Add Route
+                    </button>
                 </div>
-                <div repeat.for="r of state.routes" class="mb-2 p-2 border rounded bg-gray-800">
-                    <div class="flex gap-2 items-start">
-                        <div class="w-20">ID: ${r.id}</div>
-                        <input value.two-way="r.description" placeholder="description" class="flex-1" />
-                        <button class="btn ml-2" click.trigger="removeRoute($index)">Delete</button>
+
+                <div if.bind="state.routes.length === 0"
+                    class="flex flex-col items-center justify-center gap-3 text-gray-600 py-16">
+                    <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+                    </svg>
+                    <p class="text-sm">No routes yet. Click "Add Route" to create one.</p>
+                </div>
+
+                <div if.bind="state.routes.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="r of state.routes"
+                        class="flex flex-col gap-2 px-4 py-3 bg-gray-800/50 border border-white/10 rounded-lg hover:border-white/20 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-mono text-gray-400 shrink-0">Route #${r.id}</span>
+                            <input type="text" value.two-way="r.description" placeholder="Description"
+                                class="flex-1 bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            <button click.trigger="removeRoute($index)" title="Remove route"
+                                class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white text-base font-bold transition-colors shrink-0">×</button>
+                        </div>
+                        <textarea value.two-way="r.body" rows="4" placeholder="Route body"
+                            class="w-full bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-2 text-sm font-mono placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors resize-y"></textarea>
                     </div>
-                    <textarea value.two-way="r.body" class="w-full mt-2 h-24"></textarea>
-                </div>
-                <div if.bind="state.routes.length === 0" class="text-xs text-gray-500 p-3">No routes. Click Add Route.
                 </div>
             </div>
         </div>

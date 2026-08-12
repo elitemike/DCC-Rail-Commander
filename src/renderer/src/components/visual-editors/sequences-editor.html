@@ -20,20 +20,37 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
-            <div class="p-3 overflow-auto flex-1">
-                <div class="flex items-center justify-between mb-3">
-                    <div></div>
-                    <button class="btn" click.trigger="addSequence()">Add Sequence</button>
+            <div class="flex-1 overflow-y-auto p-4">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <p class="text-xs text-gray-500">Reusable EX-RAIL command sequences that routes and automation
+                        can call.</p>
+                    <button click.trigger="addSequence()"
+                        class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                        Add Sequence
+                    </button>
                 </div>
-                <div repeat.for="s of state.sequences" class="mb-2 p-2 border rounded bg-gray-800">
-                    <div class="flex gap-2 items-start">
-                        <div class="w-20">ID: ${s.id}</div>
-                        <button class="btn ml-2" click.trigger="removeSequence($index)">Delete</button>
+
+                <div if.bind="state.sequences.length === 0"
+                    class="flex flex-col items-center justify-center gap-3 text-gray-600 py-16">
+                    <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                    <p class="text-sm">No sequences yet. Click "Add Sequence" to create one.</p>
+                </div>
+
+                <div if.bind="state.sequences.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="s of state.sequences"
+                        class="flex flex-col gap-2 px-4 py-3 bg-gray-800/50 border border-white/10 rounded-lg hover:border-white/20 transition-colors">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-xs font-mono text-gray-400">Sequence #${s.id}</span>
+                            <button click.trigger="removeSequence($index)" title="Remove sequence"
+                                class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white text-base font-bold transition-colors shrink-0">×</button>
+                        </div>
+                        <textarea value.two-way="s.body" rows="4" placeholder="Sequence body"
+                            class="w-full bg-gray-900 border border-white/15 text-gray-100 rounded-md px-2.5 py-2 text-sm font-mono placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors resize-y"></textarea>
                     </div>
-                    <textarea value.two-way="s.body" class="w-full mt-2 h-24"></textarea>
                 </div>
-                <div if.bind="state.sequences.length === 0" class="text-xs text-gray-500 p-3">No sequences. Click Add
-                    Sequence.</div>
             </div>
         </div>
 
