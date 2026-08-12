@@ -10,9 +10,12 @@ Mock behaviour lives entirely in the **IPC layer** — the UI components have no
 
 | IPC handler | Mock mode behaviour |
 |---|---|
-| `pio:list-boards` | Returns `MOCK_SERIAL_PORTS` from `dev-mock.ts` mapped to board name + FQBN via VID:PID lookup |
-| `usb:list` / `usb:watch` | Returns / emits `MOCK_SERIAL_PORTS` |
-| Everything else | **Real** — git clone/pull/checkout, version tag listing, reading/writing files, PlatformIO `isRuntimeReady`, `getVersion`, `compile`, `upload`, preferences storage |
+| `pio:list-boards` | Gated by `IS_MOCK_DEVICE`. Returns `MOCK_SERIAL_PORTS` from `dev-mock.ts` mapped to board name + FQBN via VID:PID lookup |
+| `pio:compile` / `pio:upload` | Gated by `IS_MOCK_COMPILE`. Fast fake success responses instead of a real PlatformIO build/flash |
+| `usb:list-serial-ports` | Gated by `IS_MOCK_DEVICE`. Returns `MOCK_SERIAL_PORTS` |
+| `usb:list-usb-devices` | Gated by `IS_MOCK_DEVICE`. Returns `[]` |
+| `usb:open-port` / `usb:write-to-port` / `usb:close-port` / `usb:is-port-open` | Gated by `IS_MOCK_DEVICE`. Served by `MockSerialTransport` (`src/main/mock-serial-transport.ts`) instead of the real `UsbManager`, since mock port paths don't correspond to real hardware |
+| Everything else | **Real** — git clone/pull/checkout, version tag listing, reading/writing files, PlatformIO `isRuntimeReady`, `getVersion`, `getPlatforms`, `checkToolchain`, toolchain pack import, preferences storage |
 
 ### Per-device scratch folders
 
@@ -46,10 +49,12 @@ device mocking without bypassing the real compiler:
 | Launch command | Device mock | Compile mock |
 |---|---|---|
 | `pnpm dev` | **OFF** | **OFF** |
-| `pnpm dev:mock` | **ON** | **ON** |
-| `pnpm dev -- --mock-device` | **ON** | **OFF** |
+| `pnpm dev:mock` | **ON** | **OFF** |
 | `pnpm dev -- --mock-device --mock-compile` | **ON** | **ON** |
 | `pnpm build` (packaged) | **OFF** | **OFF** |
+
+`pnpm dev:mock` only passes `--mock-device` (see the `dev:mock` script in `package.json`) — add
+`--mock-compile` yourself if you also want fake compile/upload responses.
 
 Flags are independent — for example, `--mock-device` lets you use virtual boards
 while still running a real PlatformIO compile against the sketch.
@@ -67,17 +72,19 @@ Edit [`src/main/dev-mock.ts`](main/dev-mock.ts).
 
 ### Change which ports / boards appear
 
+`MOCK_SERIAL_PORTS` ships with eight boards out of the box (EX-CSB1, Mega 2560, Uno, Nano, Nano Every, an
+ESP32 via CP2102, a CH340 clone, and an FTDI adapter). Each entry looks like:
+
 ```ts
-export const MOCK_SERIAL_PORTS: SerialDeviceInfo[] = [
-    {
-        path: 'MOCK_COM3',
-        manufacturer: 'DCC-EX',
-        serialNumber: 'DCCEX-MOCK-0001',
-        vendorId: '2341',   // VID used for board name + FQBN lookup
-        productId: '0042',  // 0042 = Mega 2560
-    },
-    // add more entries here
-]
+{
+    // Arduino Mega 2560
+    path: '/dev/ttyACM1',
+    manufacturer: 'Arduino (www.arduino.cc)',
+    serialNumber: 'DEV-MEGA-0001',
+    vendorId: '2341',   // VID used for board name + FQBN lookup
+    productId: '0042',  // 0042 = Mega 2560
+},
+// add more entries here
 ```
 
 Common VID:PID values (full list in `src/types/boards.ts`):
@@ -88,6 +95,8 @@ Common VID:PID values (full list in `src/types/boards.ts`):
 | `2341:0042` | Arduino Mega 2560 |
 | `2341:0043` | Arduino Uno |
 | `10c4:ea60` | CP2102 serial adapter (board type unknown) |
+| `1a86:7523` | CH340 clone (Nano/Mega) |
+| `0403:6001` | FTDI USB-Serial adapter |
 
 ---
 
@@ -103,11 +112,14 @@ Common VID:PID values (full list in `src/types/boards.ts`):
 ```
 src/
 ├── main/
-│   ├── index.ts              ← IS_MOCK_DEVICE + IS_MOCK_COMPILE flag detection
-│   ├── dev-mock.ts           ← MOCK_SERIAL_PORTS, mock data
+│   ├── index.ts               ← IS_MOCK_DEVICE + IS_MOCK_COMPILE flag detection
+│   ├── dev-mock.ts            ← MOCK_SERIAL_PORTS
+│   ├── mock-serial-transport.ts ← fake open/write/close/is-open for mock ports
 │   └── ipc/
 │       ├── platformio-ipc.ts   ← list-boards mocked by IS_MOCK_DEVICE;
 │       │                          compile/upload mocked by IS_MOCK_COMPILE
 │       ├── git-ipc.ts          ← all real (no mock guards)
-│       └── usb-ipc.ts          ← list + watch mocked by IS_MOCK_DEVICE
+│       └── usb-ipc.ts          ← list-serial-ports/list-usb-devices mocked by
+│                                  IS_MOCK_DEVICE; open/write/close/is-open served
+│                                  by MockSerialTransport under IS_MOCK_DEVICE
 ```
