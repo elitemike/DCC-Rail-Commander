@@ -163,7 +163,18 @@
             Save
         </button>
 
-        <!-- Monitor button -->
+        <!-- Connect/Disconnect — the actual serial connection; Monitor below is just a view over it -->
+        <button click.trigger="toggleConnect()" data-testid="connect-toggle" disabled.bind="!state.selectedDevice?.port"
+            title.bind="portConnected ? 'Disconnect from ' + state.selectedDevice?.port : 'Connect to ' + (state.selectedDevice?.port || 'the selected device')"
+            class="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            class.bind="portConnected
+                    ? 'bg-emerald-700/40 border-emerald-500/50 text-emerald-300 hover:bg-emerald-700/60'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300 hover:text-white'">
+            <span class="w-1.5 h-1.5 rounded-full shrink-0" class.bind="portConnected ? 'bg-emerald-400' : 'bg-gray-500'"></span>
+            ${portConnected ? 'Disconnect' : 'Connect'}
+        </button>
+
+        <!-- Monitor button — a view toggle only; it does not open/close the connection -->
         <button click.trigger="toggleMonitor()"
             class="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors" class.bind="showMonitor
                     ? 'bg-green-700/40 border-green-500/50 text-green-300 hover:bg-green-700/60'
@@ -176,8 +187,8 @@
         </button>
 
         <!-- Auto-connect preference — persisted app-wide, not per-device -->
-        <div class="flex items-center" title="Automatically open and connect the Monitor whenever the device is detected">
-            <input ref="autoConnectMonitorEl" type="checkbox" title="Automatically open and connect the Monitor whenever the device is detected" />
+        <div class="flex items-center" title="Automatically connect (and open the Monitor) whenever the device is detected">
+            <input ref="autoConnectMonitorEl" type="checkbox" title="Automatically connect (and open the Monitor) whenever the device is detected" />
         </div>
     </div>
 
@@ -303,7 +314,7 @@
             <!-- Monitor content: in DOM only when showMonitor is on, hidden via Tailwind when Output tab is active -->
             <div if.bind="showMonitor" class="flex-1 overflow-hidden"
                 class.bind="activeBottomTab !== 'monitor' ? 'hidden' : ''">
-                <serial-monitor class="flex flex-col h-full"></serial-monitor>
+                <serial-monitor connected.bind="portConnected" class="flex flex-col h-full"></serial-monitor>
             </div>
 
         </div>

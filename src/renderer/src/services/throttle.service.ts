@@ -302,6 +302,11 @@ export class ThrottleService {
     }
 
     emergencyStopAll(): void {
+        // <!> is fire-and-forget on real hardware (no ack), so without this
+        // every acquired throttle-card would sit at its last speed and the
+        // button would look like it did nothing — mirror what setSpeed(0)
+        // does for a single loco's Stop button, for every acquired cab.
+        for (const t of this.throttles) t.speed = 0
         void this._send('<!>')
     }
 

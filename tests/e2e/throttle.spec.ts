@@ -58,6 +58,25 @@ test('Throttle nav item appears once connected, and opens an empty panel', async
     await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
 })
 
+/**
+ * Regression: Throttle has always needed a live serial connection to send
+ * anything, but that connection used to be an accidental side effect of the
+ * Monitor panel being open. Now that Monitor is just a view, clicking the
+ * Throttle nav item must establish the connection itself if it isn't already
+ * connected — otherwise every throttle command would silently go nowhere.
+ */
+test('selecting Throttle after manually disconnecting reconnects automatically', async ({ workspacePage: page }) => {
+    const connectToggle = page.getByTestId('connect-toggle')
+    await expect(connectToggle).toHaveText('Disconnect', { timeout: 5_000 })
+    await connectToggle.click()
+    await expect(connectToggle).toHaveText('Connect')
+
+    await openThrottleSection(page)
+
+    await expect(connectToggle).toHaveText('Disconnect')
+    await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
+})
+
 test('acquires a roster loco and a freeform address as separate cards in the grid', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
 
@@ -145,6 +164,39 @@ test('a momentary function activates on press and deactivates on release', async
     await expect(whistleButton).toHaveClass(/e-active/)
     await page.mouse.up()
     await expect(whistleButton).not.toHaveClass(/e-active/)
+})
+
+/**
+ * Regression: a momentary button's pointerup/pointerleave listeners used to
+ * fire unconditionally — so a drag that started elsewhere (e.g. the speed
+ * slider) and happened to end with the mouse released over a momentary
+ * function button sent a spurious function-off command for a function that
+ * was never pressed. Fixed by only honoring release events that follow this
+ * exact button's own pointerdown (see the `pressed` guard in
+ * _rebuildFunctionButtons()). A real cross-widget mouse drag reproduces this
+ * but is too coordinate/timing-sensitive for a reliable automated test, so
+ * this dispatches the same pointerup DOM event directly — the precise
+ * condition the fix guards against, regardless of how the pointer got there.
+ */
+test('a pointerup on a momentary button with no preceding pointerdown sends no function command', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await addFromRoster(page, 'Thomas (3)')
+    const card = cardFor(page, 'Cab 3')
+    await expect(card).toBeVisible()
+
+    if (await page.locator('serial-monitor').count() === 0) {
+        await page.getByRole('button', { name: 'Monitor' }).first().click()
+    }
+    const monitorOutput = page.locator('serial-monitor .xterm-rows')
+    await expect(monitorOutput).toBeVisible()
+
+    const whistleButton = card.getByRole('button', { name: 'WHISTLE', exact: true })
+    await whistleButton.dispatchEvent('pointerup')
+    await page.waitForTimeout(300)
+
+    await expect(whistleButton).not.toHaveClass(/e-active/)
+    const text = await monitorOutput.innerText()
+    expect(text).not.toContain('<F 3 2')
 })
 
 test('direction buttons update the highlighted state, and the speed stepper mirrors Stop', async ({ workspacePage: page }) => {
@@ -291,11 +343,86 @@ test('cancelling the power-off confirmation leaves power on', async ({ workspace
     await expect(powerToggle).toContainText('Track Power: ON')
 })
 
-test('E-Stop All is clickable without raising errors', async ({ workspacePage: page }) => {
+test('a single click on E-Stop All does not trigger it', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
     await page.getByTestId('throttle-estop-all').click()
+    // No assertion beyond "didn't throw" — a single click must be a no-op so
+    // the button can't be triggered by accident.
+    await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
+})
+
+test('double-clicking E-Stop All is clickable without raising errors', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await page.getByTestId('throttle-estop-all').dblclick()
     // No assertion beyond "didn't throw" — it's a fire-and-forget serial write.
     await expect(page.getByTestId('throttle-power-toggle')).toBeVisible()
+})
+
+/**
+ * Regression coverage: <!> has no ack on real hardware, and the Serial
+ * Monitor only echoed commands typed into it — so clicking E-Stop All
+ * produced serial traffic with no visible trace anywhere in the app. The
+ * Monitor now echoes any outgoing write, regardless of which panel sent it.
+ */
+test('E-Stop All shows up in the Serial Monitor even though the device never acks it', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    if (await page.locator('serial-monitor').count() === 0) {
+        await page.getByRole('button', { name: 'Monitor' }).first().click()
+    }
+    const monitorOutput = page.locator('serial-monitor .xterm-rows')
+    await expect(monitorOutput).toBeVisible()
+
+    await page.getByTestId('throttle-estop-all').dblclick()
+
+    await expect(monitorOutput).toContainText('» <!>')
+})
+
+/**
+ * Regression: dragging the speed Slider pushes the new value into the
+ * NumericTextBox stepper (to mirror it) via `.value =` — and Syncfusion
+ * re-fires a widget's own `change` callback on a programmatic set, not just
+ * user interaction. Without echo-suppression (see throttle-card.ts's
+ * _sliderPendingValue/_speedStepperPendingValue), that refire calls
+ * setSpeed() again with a stale value, which pushes back into the Slider,
+ * which refires again, forever: confirmed by instrumentation to genuinely
+ * oscillate between two stale speeds and flood `<t>` commands without limit
+ * — this is "the monitor goes in a loop" the bug report described. A single
+ * drag gesture must still resolve to exactly one `<t>` command per distinct
+ * value along the drag path, not an unbounded tail of extra ones.
+ */
+test('dragging the speed slider does not feed back into an unbounded stream of <t> commands', async ({ workspacePage: page }) => {
+    await openThrottleSection(page)
+    await addFromRoster(page, 'Thomas (3)')
+    const card = cardFor(page, 'Cab 3')
+    await expect(card).toBeVisible()
+
+    if (await page.locator('serial-monitor').count() === 0) {
+        await page.getByRole('button', { name: 'Monitor' }).first().click()
+    }
+    const monitorOutput = page.locator('serial-monitor .xterm-rows')
+    await expect(monitorOutput).toBeVisible()
+
+    const handle = card.locator('.e-handle').first()
+    const box = await handle.boundingBox()
+    if (!box) throw new Error('slider handle not found')
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    for (let i = 1; i <= 10; i++) {
+        await page.mouse.move(box.x + box.width / 2 + i * 15, box.y + box.height / 2, { steps: 1 })
+        await page.waitForTimeout(15)
+    }
+    await page.mouse.up()
+
+    // Give a feedback loop time to snowball if the echo-suppression regresses —
+    // an unfixed loop keeps sending long after the drag itself has ended.
+    await page.waitForTimeout(1_500)
+
+    const text = await monitorOutput.innerText()
+    const sends = text.split('\n').filter((line) => line.includes('» <t 3 '))
+    // A handful of distinct values from the drag path is expected; runaway
+    // feedback would produce far more (unbounded, and still growing).
+    expect(sends.length).toBeLessThanOrEqual(11)
+    expect(new Set(sends).size).toBe(sends.length)
 })
 
 /**

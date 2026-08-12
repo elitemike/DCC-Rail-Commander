@@ -20,14 +20,20 @@ function makeWorkspace(opts: {
     cliBoards?: DetectedBoardInfo[]
     listBoardsError?: boolean
     showMonitor?: boolean
+    portConnected?: boolean
     autoConnectMonitor?: boolean
+    openPortError?: string
 } = {}) {
     const workspace = Object.create(Workspace.prototype) as Workspace
 
     const uploadFn = vi.fn().mockResolvedValue({ success: true, output: 'Flash written successfully.' })
+    const openPortFn = opts.openPortError
+        ? vi.fn().mockRejectedValue(new Error(opts.openPortError))
+        : vi.fn().mockResolvedValue(undefined)
     const closePortFn = vi.fn().mockResolvedValue(undefined)
     const isPortOpenFn = vi.fn().mockResolvedValue(false)
     const preferencesSetFn = vi.fn().mockResolvedValue(undefined)
+    const toastShowFn = vi.fn()
 
     Object.assign(workspace, {
         state: {
@@ -39,7 +45,7 @@ function makeWorkspace(opts: {
             activeConfigId: null,
         },
         configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn() },
-        toastService: { show: vi.fn() },
+        toastService: { show: toastShowFn },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
         files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
         pio: {
@@ -53,12 +59,15 @@ function makeWorkspace(opts: {
             initialize: vi.fn().mockResolvedValue(undefined),
             refresh: vi.fn().mockResolvedValue(undefined),
             serialPorts: opts.serialPorts ?? [],
+            openPort: openPortFn,
             isPortOpen: isPortOpenFn,
             closePort: closePortFn,
         },
         deviceConnectionStatus: 'unknown',
         showMonitor: opts.showMonitor ?? false,
+        portConnected: opts.portConnected ?? false,
         autoConnectMonitor: opts.autoConnectMonitor ?? true,
+        activeSection: 'config',
         activeBottomTab: 'output',
         isCompiling: false,
         compileError: null,
@@ -68,8 +77,157 @@ function makeWorkspace(opts: {
         splitterObj: null,
     })
 
-    return { workspace, uploadFn, closePortFn, isPortOpenFn, preferencesSetFn }
+    return { workspace, uploadFn, openPortFn, closePortFn, isPortOpenFn, preferencesSetFn, toastShowFn }
 }
+
+// ── connect() / disconnect() / toggleConnect() ───────────────────────────────
+
+describe('Workspace.connect', () => {
+    it('opens the port and sets portConnected', async () => {
+        const { workspace, openPortFn } = makeWorkspace()
+
+        const ok = await workspace.connect()
+
+        expect(ok).toBe(true)
+        expect(openPortFn).toHaveBeenCalledWith('/dev/ttyACM0', 115200)
+        expect(workspace.portConnected).toBe(true)
+    })
+
+    it('is a no-op that reports success if already connected', async () => {
+        const { workspace, openPortFn } = makeWorkspace({ portConnected: true })
+
+        const ok = await workspace.connect()
+
+        expect(ok).toBe(true)
+        expect(openPortFn).not.toHaveBeenCalled()
+    })
+
+    it('does not open the Monitor unless explicitly asked to', async () => {
+        const { workspace } = makeWorkspace({ showMonitor: false })
+
+        await workspace.connect()
+
+        expect(workspace.showMonitor).toBe(false)
+    })
+
+    it('opens the Monitor when openMonitor is passed', async () => {
+        const { workspace } = makeWorkspace({ showMonitor: false })
+
+        await workspace.connect({ openMonitor: true })
+
+        expect(workspace.showMonitor).toBe(true)
+        expect(workspace.activeBottomTab).toBe('monitor')
+    })
+
+    it('treats "already open" as a successful attach rather than a failure', async () => {
+        const { workspace, toastShowFn } = makeWorkspace({ openPortError: 'Port already open elsewhere' })
+
+        const ok = await workspace.connect()
+
+        expect(ok).toBe(true)
+        expect(workspace.portConnected).toBe(true)
+        expect(toastShowFn).not.toHaveBeenCalled()
+    })
+
+    it('reports failure and toasts on a genuine open error', async () => {
+        const { workspace, toastShowFn } = makeWorkspace({ openPortError: 'Access denied' })
+
+        const ok = await workspace.connect()
+
+        expect(ok).toBe(false)
+        expect(workspace.portConnected).toBe(false)
+        expect(toastShowFn).toHaveBeenCalledWith(expect.objectContaining({ title: 'Connect Failed' }))
+    })
+
+    it('does nothing when there is no selected device port', async () => {
+        const { workspace, openPortFn } = makeWorkspace({ device: { ...DEVICE, port: '' } })
+
+        const ok = await workspace.connect()
+
+        expect(ok).toBe(false)
+        expect(openPortFn).not.toHaveBeenCalled()
+    })
+})
+
+describe('Workspace.disconnect', () => {
+    it('closes an open port and clears portConnected', async () => {
+        const { workspace, closePortFn, isPortOpenFn } = makeWorkspace({ portConnected: true })
+        isPortOpenFn.mockResolvedValue(true)
+
+        await workspace.disconnect()
+
+        expect(closePortFn).toHaveBeenCalledWith('/dev/ttyACM0')
+        expect(workspace.portConnected).toBe(false)
+    })
+
+    it('does not open the Monitor or otherwise touch it', async () => {
+        const { workspace } = makeWorkspace({ portConnected: true, showMonitor: true })
+
+        await workspace.disconnect()
+
+        expect(workspace.showMonitor).toBe(true)
+    })
+})
+
+describe('Workspace.toggleConnect', () => {
+    it('connects when not connected', async () => {
+        const { workspace, openPortFn } = makeWorkspace({ portConnected: false })
+
+        await workspace.toggleConnect()
+
+        expect(openPortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(true)
+    })
+
+    it('disconnects when connected', async () => {
+        const { workspace, closePortFn, isPortOpenFn } = makeWorkspace({ portConnected: true })
+        isPortOpenFn.mockResolvedValue(true)
+
+        await workspace.toggleConnect()
+
+        expect(closePortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(false)
+    })
+})
+
+// ── selectThrottleSection() ──────────────────────────────────────────────────
+
+describe('Workspace.selectThrottleSection', () => {
+    it('auto-connects before switching to the Throttle section when not already connected', async () => {
+        const { workspace, openPortFn } = makeWorkspace({ portConnected: false })
+
+        await workspace.selectThrottleSection()
+
+        expect(openPortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(true)
+        expect(workspace.activeSection).toBe('throttle')
+    })
+
+    it('does not open the Monitor as a side effect of the auto-connect', async () => {
+        const { workspace } = makeWorkspace({ portConnected: false, showMonitor: false })
+
+        await workspace.selectThrottleSection()
+
+        expect(workspace.showMonitor).toBe(false)
+    })
+
+    it('switches straight to Throttle without reconnecting if already connected', async () => {
+        const { workspace, openPortFn } = makeWorkspace({ portConnected: true })
+
+        await workspace.selectThrottleSection()
+
+        expect(openPortFn).not.toHaveBeenCalled()
+        expect(workspace.activeSection).toBe('throttle')
+    })
+
+    it('stays out of the Throttle section if the auto-connect fails', async () => {
+        const { workspace } = makeWorkspace({ portConnected: false, openPortError: 'Access denied' })
+
+        await workspace.selectThrottleSection()
+
+        expect(workspace.activeSection).toBe('config')
+    })
+})
 
 // ── checkDeviceConnection() ──────────────────────────────────────────────────
 
@@ -112,8 +270,8 @@ describe('Workspace.checkDeviceConnection', () => {
         expect(workspace.deviceConnectionStatus).toBe('connected')
     })
 
-    it('auto-opens the Monitor on a fresh transition into connected', async () => {
-        const { workspace } = makeWorkspace({
+    it('auto-connects (and opens the Monitor) on a fresh transition into connected', async () => {
+        const { workspace, openPortFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
             showMonitor: false,
@@ -121,6 +279,8 @@ describe('Workspace.checkDeviceConnection', () => {
 
         await workspace.checkDeviceConnection()
 
+        expect(openPortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(true)
         expect(workspace.showMonitor).toBe(true)
         expect(workspace.activeBottomTab).toBe('monitor')
     })
@@ -135,7 +295,7 @@ describe('Workspace.checkDeviceConnection', () => {
         await workspace.checkDeviceConnection()
         expect(workspace.showMonitor).toBe(true)
 
-        // User closes it manually.
+        // User closes it manually — the connection itself is untouched.
         workspace.showMonitor = false
 
         // An unrelated re-check (e.g. a hotplug event for some other device)
@@ -143,10 +303,11 @@ describe('Workspace.checkDeviceConnection', () => {
         await workspace.checkDeviceConnection()
 
         expect(workspace.showMonitor).toBe(false)
+        expect(workspace.portConnected).toBe(true)
     })
 
-    it('does not auto-open the Monitor on a fresh connect when autoConnectMonitor is off', async () => {
-        const { workspace } = makeWorkspace({
+    it('does not auto-connect on a fresh detect when autoConnectMonitor is off', async () => {
+        const { workspace, openPortFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
             showMonitor: false,
@@ -156,7 +317,23 @@ describe('Workspace.checkDeviceConnection', () => {
         await workspace.checkDeviceConnection()
 
         expect(workspace.deviceConnectionStatus).toBe('connected')
+        expect(openPortFn).not.toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(false)
         expect(workspace.showMonitor).toBe(false)
+    })
+
+    it('drops portConnected when the device stops being live', async () => {
+        const { workspace } = makeWorkspace({
+            serialPorts: [],
+            cliBoards: [],
+            portConnected: true,
+        })
+        workspace.deviceConnectionStatus = 'connected'
+
+        await workspace.checkDeviceConnection()
+
+        expect(workspace.deviceConnectionStatus).toBe('disconnected')
+        expect(workspace.portConnected).toBe(false)
     })
 
     it('does not touch the Monitor when the device is not connected', async () => {
@@ -182,71 +359,78 @@ describe('Workspace.setAutoConnectMonitor', () => {
     })
 })
 
-// ── upload() — Monitor pause/resume around the port-exclusive upload ────────
+// ── upload() — connect/disconnect around the port-exclusive upload ──────────
+// Monitor visibility is deliberately never touched here — it's just a view.
 
-describe('Workspace.upload monitor handling', () => {
-    it('closes an open Monitor connection before uploading and reopens it afterwards on success', async () => {
-        const { workspace, uploadFn, closePortFn, isPortOpenFn } = makeWorkspace({
+describe('Workspace.upload connection handling', () => {
+    it('disconnects before uploading and reconnects afterwards on success, leaving Monitor visibility untouched', async () => {
+        const { workspace, uploadFn, openPortFn, closePortFn, isPortOpenFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
             showMonitor: true,
+            portConnected: true,
         })
         workspace.activeBottomTab = 'monitor'
         isPortOpenFn.mockResolvedValue(true)
 
-        let monitorWasHiddenDuringUpload = false
+        let wasDisconnectedDuringUpload = false
         uploadFn.mockImplementation(async () => {
-            monitorWasHiddenDuringUpload = workspace.showMonitor === false
+            wasDisconnectedDuringUpload = workspace.portConnected === false
             return { success: true, output: 'Flash written successfully.' }
         })
 
         await workspace.upload()
 
         expect(closePortFn).toHaveBeenCalledWith('/dev/ttyACM0')
-        // closePort() must have been awaited before pio.upload() ran.
+        // close must be awaited before pio.upload() runs, and open must follow it.
         expect(closePortFn.mock.invocationCallOrder[0]).toBeLessThan(uploadFn.mock.invocationCallOrder[0])
-        expect(monitorWasHiddenDuringUpload).toBe(true)
+        expect(openPortFn.mock.invocationCallOrder[0]).toBeGreaterThan(uploadFn.mock.invocationCallOrder[0])
+        expect(wasDisconnectedDuringUpload).toBe(true)
+        expect(workspace.portConnected).toBe(true)
+        // Monitor was already showing and stays showing — upload never touches it.
         expect(workspace.showMonitor).toBe(true)
         expect(workspace.activeBottomTab).toBe('monitor')
         expect(workspace.compileSuccess).toBe(true)
     })
 
-    it('reopens the Monitor even when the upload fails', async () => {
-        const { workspace, uploadFn } = makeWorkspace({
+    it('reconnects even when the upload fails', async () => {
+        const { workspace, uploadFn, openPortFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
-            showMonitor: true,
+            portConnected: true,
         })
         uploadFn.mockResolvedValue({ success: false, output: '', error: 'esptool: port busy' })
 
         await workspace.upload()
 
         expect(workspace.compileSuccess).toBe(false)
-        expect(workspace.showMonitor).toBe(true)
+        expect(openPortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(true)
     })
 
-    it('does not force the Monitor open after upload when it was not open beforehand', async () => {
-        const { workspace } = makeWorkspace({
+    it('does not attempt to reconnect after upload when not connected beforehand', async () => {
+        const { workspace, openPortFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
-            showMonitor: false,
+            portConnected: false,
         })
 
         await workspace.upload()
 
-        expect(workspace.showMonitor).toBe(false)
+        expect(openPortFn).not.toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(false)
     })
 
-    it('does not attempt to close the port when the Monitor is not open and nothing has it open', async () => {
+    it('does not attempt to disconnect when not connected beforehand', async () => {
         const { workspace, closePortFn, isPortOpenFn } = makeWorkspace({
             serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
             cliBoards: [DEVICE],
-            showMonitor: false,
+            portConnected: false,
         })
-        isPortOpenFn.mockResolvedValue(false)
 
         await workspace.upload()
 
+        expect(isPortOpenFn).not.toHaveBeenCalled()
         expect(closePortFn).not.toHaveBeenCalled()
     })
 })

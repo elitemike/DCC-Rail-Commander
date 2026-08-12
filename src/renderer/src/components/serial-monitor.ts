@@ -1,4 +1,4 @@
-import { resolve } from 'aurelia'
+import { bindable, resolve } from 'aurelia'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { UsbService } from '../services/usb.service'
@@ -385,7 +385,7 @@ const QUICK_COMMANDS: Array<{ label: string; cmd: string; group: string }> = [
     { label: 'Prog On', cmd: '<1 PROG>', group: 'power' },
     { label: 'Prog Off', cmd: '<0 PROG>', group: 'power' },
     // Emergency
-    { label: 'E-Stop', cmd: '<=>', group: 'estop' },
+    { label: 'E-Stop', cmd: '<!>', group: 'estop' },
     // Lists
     { label: 'List Turnouts', cmd: '<J T>', group: 'list' },
     { label: 'List Automations', cmd: '<J A>', group: 'list' },
@@ -432,7 +432,14 @@ function colorizeResponse(line: string): string {
 export class SerialMonitorCustomElement {
     readonly quickCommands = QUICK_COMMANDS
     portLabel = ''
-    portStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected'
+    portStatus: 'disconnected' | 'connected' = 'disconnected'
+
+    /**
+     * Purely a view over whatever Workspace's connect()/disconnect() has
+     * already done to the port — this component never opens or closes it
+     * itself. Driven by `connected.bind="portConnected"` from workspace.html.
+     */
+    @bindable connected = false
 
     /** Container div xterm mounts into — set by ref="terminalEl" in template */
     terminalEl!: HTMLElement
@@ -450,8 +457,7 @@ export class SerialMonitorCustomElement {
     private unsubData?: () => void
     private unsubError?: () => void
     private unsubClosed?: () => void
-
-    private portOpenedByUs = false
+    private unsubWrite?: () => void
 
     private readonly usb = resolve(UsbService)
     private readonly state = resolve(InstallerState)
@@ -478,7 +484,14 @@ export class SerialMonitorCustomElement {
             if (generation !== this._attachGeneration) return
             this.initTerminal()
             this.subscribeToPort()
-            this.connectPort()
+            this._syncConnectionStatus()
+            if (this.connected) {
+                this.term.writeln(`${A.green}${A.bold}Connected · ${this.portLabel}${A.reset}  Type a command or use the quick-send buttons above.`)
+                this.term.writeln(`${A.dim}Tip: ↑/↓ history  •  Tab autocomplete  •  Ctrl+C clears input  •  Ctrl+L clears screen  •  ? or ? <prefix> for help${A.reset}`)
+            } else {
+                this.term.writeln(`${A.yellow}Not connected — use the Connect button above.${A.reset}`)
+            }
+            this.writePrompt()
         })
     }
 
@@ -488,14 +501,32 @@ export class SerialMonitorCustomElement {
         this.unsubData?.()
         this.unsubError?.()
         this.unsubClosed?.()
-
-        if (this.portOpenedByUs) {
-            const port = this.state.selectedDevice?.port
-            if (port) this.usb.closePort(port).catch(() => { })
-            this.portOpenedByUs = false
-        }
-
+        this.unsubWrite?.()
         this.disposeTerminal()
+    }
+
+    /**
+     * Reacts to Workspace flipping `portConnected` (Connect/Disconnect
+     * button, auto-connect, or the temporary close/reopen around an upload).
+     * A no-op before attached() — initTerminal() hasn't run yet, so there's
+     * nothing to write to; attached() reads the current value itself once
+     * the terminal exists.
+     */
+    connectedChanged(): void {
+        if (!this.term) return
+        this._syncConnectionStatus()
+        if (this.connected) {
+            this.term.writeln(`${A.green}${A.bold}Connected · ${this.portLabel}${A.reset}`)
+        } else {
+            this.term.writeln(`${A.yellow}Disconnected.${A.reset}`)
+        }
+        this.writePrompt()
+    }
+
+    private _syncConnectionStatus(): void {
+        const port = this.state.selectedDevice?.port
+        this.portStatus = this.connected ? 'connected' : 'disconnected'
+        this.portLabel = this.connected ? (port ?? '') : ''
     }
 
     /**
@@ -601,45 +632,23 @@ export class SerialMonitorCustomElement {
 
         this.unsubClosed = window.usb.onClosed(({ path }) => {
             if (path !== this.state.selectedDevice?.port) return
-            this.portOpenedByUs = false
-            this.portStatus = 'disconnected'
-            this.portLabel = ''
+            // Workspace's own onClosed subscription is what flips
+            // `portConnected` (and thus our `connected` bindable) — this is
+            // just the immediate terminal feedback, not a state change.
             this.term.writeln(`\r\n${A.yellow}[port closed]${A.reset}`)
         })
-    }
 
-    private async connectPort(): Promise<void> {
-        const port = this.state.selectedDevice?.port
-        if (!port) {
-            this.term.writeln(`${A.yellow}No device selected — open a device first.${A.reset}`)
-            this.portStatus = 'error'
-            return
-        }
-
-        this.portStatus = 'connecting'
-        this.portLabel = port
-        this.term.writeln(`${A.cyan}Connecting to ${port} @ 115200 baud...${A.reset}`)
-
-        try {
-            await this.usb.openPort(port, 115200)
-            this.portOpenedByUs = true
-            this.portStatus = 'connected'
-            this.term.writeln(`${A.green}${A.bold}Connected.${A.reset}  Type a command or use the quick-send buttons above.`)
-            this.term.writeln(`${A.dim}Tip: ↑/↓ history  •  Tab autocomplete  •  Ctrl+C clears input  •  Ctrl+L clears screen  •  ? or ? <prefix> for help${A.reset}`)
-        } catch (err) {
-            const msg = (err as Error).message
-            // Port already open from a previous session (e.g. after upload) — attach anyway
-            if (/already open/i.test(msg)) {
-                this.portOpenedByUs = false
-                this.portStatus = 'connected'
-                this.term.writeln(`${A.green}${A.bold}Attached to ${port}.${A.reset}`)
-            } else {
-                this.portStatus = 'error'
-                this.term.writeln(`${A.red}Failed: ${msg}${A.reset}`)
-            }
-        }
-
-        this.writePrompt()
+        // Commands written by other parts of the app (e.g. the Throttle
+        // panel's E-Stop All / power buttons) otherwise go out over serial
+        // with no visible trace anywhere — echo them here the same way a
+        // typed command is echoed, so "did that actually send?" has an answer.
+        this.unsubWrite = this.usb.onWrite(({ path, data }) => {
+            if (path !== this.state.selectedDevice?.port) return
+            // Matches how an async incoming line is handled below — interleaves
+            // with an in-progress typed command the same way device output
+            // already does, rather than trying to preserve/redraw the input line.
+            this.term.writeln(`${A.magenta}» ${data.trim()}${A.reset}`)
+        })
     }
 
     // ── Input handling ────────────────────────────────────────────────────
@@ -834,7 +843,10 @@ export class SerialMonitorCustomElement {
             return
         }
         try {
-            await this.usb.write(port, cmd + '\n')
+            // silent: already visible here — either just typed on this line,
+            // or echoed by sendQuickCommand below — so the onWrite broadcast
+            // that other panels rely on for visibility would just duplicate it.
+            await this.usb.write(port, cmd + '\n', { silent: true })
         } catch (err) {
             this.term.writeln(`${A.red}[SEND ERROR] ${(err as Error).message}${A.reset}`)
         }
@@ -849,20 +861,10 @@ export class SerialMonitorCustomElement {
     }
 
     get statusColor(): string {
-        switch (this.portStatus) {
-            case 'connected': return 'text-green-400'
-            case 'connecting': return 'text-yellow-400'
-            case 'error': return 'text-red-400'
-            default: return 'text-gray-500'
-        }
+        return this.portStatus === 'connected' ? 'text-green-400' : 'text-gray-500'
     }
 
     get statusText(): string {
-        switch (this.portStatus) {
-            case 'connected': return `Connected · ${this.portLabel}`
-            case 'connecting': return `Connecting to ${this.portLabel}...`
-            case 'error': return 'Not connected'
-            default: return 'Disconnected'
-        }
+        return this.portStatus === 'connected' ? `Connected · ${this.portLabel}` : 'Disconnected'
     }
 }
