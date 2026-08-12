@@ -21,7 +21,6 @@ import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
-import { CheckBox } from '@syncfusion/ej2-buttons'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
 
@@ -89,15 +88,15 @@ export class Workspace {
 
     // ── Device monitor — a view only; it neither opens nor closes the port ────
     showMonitor = false
-    /** Persisted app-wide preference (not per-device) — whether checkDeviceConnection() is allowed to auto-connect (and, for now, also open the Monitor) once the device is detected. Loaded in binding(), toggled via the checkbox next to the Monitor button. */
+    /** Persisted app-wide preference (not per-device) — whether checkDeviceConnection() is allowed to auto-connect once the device is detected. Loaded in binding(), toggled from the Settings dialog. */
     autoConnectMonitor = true
-    autoConnectMonitorEl!: HTMLInputElement
-    private sfAutoConnectMonitor?: CheckBox
+    /** Persisted app-wide preference — whether a fresh auto-connect also opens the Monitor (see checkDeviceConnection()). Loaded in binding(), toggled from the Settings dialog. */
+    showMonitorOnConnect = true
 
-    /** Persisted app-wide preference — whether compile()/upload() pass -v to PlatformIO. Loaded in binding(), toggled via the checkbox next to the version selector. */
+    /** Persisted app-wide preference — whether compile()/upload() pass -v to PlatformIO. Loaded in binding(), toggled from the Settings dialog. */
     verboseCompile = false
-    verboseCompileEl!: HTMLInputElement
-    private sfVerboseCompile?: CheckBox
+    /** Persisted app-wide preference — whether loadVersions() always overrides the version selection with the latest Prod release. Loaded in binding(), toggled from the Settings dialog. */
+    useLatestProdVersion = true
 
     // ── Serial connection — the actual open/closed state of the port ─────────
     /** True once connect() has successfully opened the selected device's port. The single source of truth for whether anything (Throttle, Monitor) can currently talk to the device — Monitor visibility is a separate, unrelated concern. */
@@ -213,11 +212,15 @@ export class Workspace {
         await this.loadSavedConfigs()
         await this.refreshConfigFilesFromDisk()
         this.configEditorState.loadFromInstallerState()
+        this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
+        this.showMonitorOnConnect = (await this.preferences.get<boolean>('showMonitorOnConnect')) ?? true
+        this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
+        this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
         // Fire-and-forget: a git call that can be slow (or fail entirely
         // offline) and must never block the rest of the view from rendering.
+        // Started after the preferences above are loaded so it reads a
+        // settled useLatestProdVersion rather than racing its default.
         void this.loadVersions()
-        this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
-        this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         // Fire-and-forget: re-scans serial ports/boards to confirm the
         // selected device is actually plugged in, updating the port badge
         // and (on a fresh connect, if autoConnectMonitor is on) auto-opening
@@ -225,16 +228,45 @@ export class Workspace {
         void this.checkDeviceConnection()
     }
 
-    /** Persists the auto-connect-Monitor preference — called from the checkbox next to the Monitor button. */
+    /** Persists the auto-connect preference — called from the Settings dialog. */
     setAutoConnectMonitor(enabled: boolean): void {
         this.autoConnectMonitor = enabled
         void this.preferences.set('autoConnectMonitor', enabled)
     }
 
-    /** Persists the verbose-compile preference — called from the checkbox next to the version selector. */
+    /** Persists the show-Monitor-on-connect preference — called from the Settings dialog. */
+    setShowMonitorOnConnect(enabled: boolean): void {
+        this.showMonitorOnConnect = enabled
+        void this.preferences.set('showMonitorOnConnect', enabled)
+    }
+
+    /** Persists the verbose-compile preference — called from the Settings dialog. */
     setVerboseCompile(enabled: boolean): void {
         this.verboseCompile = enabled
         void this.preferences.set('verboseCompile', enabled)
+    }
+
+    /** Persists the use-latest-Prod-version preference — called from the Settings dialog. */
+    setUseLatestProdVersion(enabled: boolean): void {
+        this.useLatestProdVersion = enabled
+        void this.preferences.set('useLatestProdVersion', enabled)
+    }
+
+    /** Opens the app-wide Settings dialog. Each toggle applies (and persists) immediately via its callback — there is nothing to "save" on close. */
+    openSettings(): void {
+        void this.dialogService.open({
+            component: () => import('../components/dialogs/settings-dialog').then(m => m.SettingsDialog).catch(() => null),
+            model: {
+                autoConnect: this.autoConnectMonitor,
+                showMonitorOnConnect: this.showMonitorOnConnect,
+                verboseCompile: this.verboseCompile,
+                useLatestProdVersion: this.useLatestProdVersion,
+                onAutoConnectChange: (v: boolean) => this.setAutoConnectMonitor(v),
+                onShowMonitorOnConnectChange: (v: boolean) => this.setShowMonitorOnConnect(v),
+                onVerboseCompileChange: (v: boolean) => this.setVerboseCompile(v),
+                onUseLatestProdVersionChange: (v: boolean) => this.setUseLatestProdVersion(v),
+            },
+        })
     }
 
     /**
@@ -245,8 +277,8 @@ export class Workspace {
      *
      * On a transition into 'connected' — not on every repeat check while
      * already connected — connect() is called if autoConnectMonitor (a
-     * persisted app preference, not per-device) is on, passing openMonitor so
-     * it also pops the Monitor open, matching today's behavior. Gating on the
+     * persisted app preference, not per-device) is on, passing openMonitor
+     * per the separate showMonitorOnConnect preference. Gating on the
      * transition (rather than "is live") means a user who's manually
      * disconnected won't be auto-reconnected on an unrelated hotplug event
      * while the device was already live. A transition OUT of live drops
@@ -272,7 +304,7 @@ export class Workspace {
             const isLive = connected.some((b) => b.port === device.port)
             this.deviceConnectionStatus = isLive ? 'connected' : 'disconnected'
             if (isLive && !wasConnected && this.autoConnectMonitor) {
-                await this.connect({ openMonitor: true })
+                await this.connect({ openMonitor: this.showMonitorOnConnect })
             } else if (!isLive && this.portConnected) {
                 this.portConnected = false
             }
@@ -294,7 +326,7 @@ export class Workspace {
         this.versions = this.state.selectedVersion ? [this.state.selectedVersion] : []
     }
 
-    /** Load available firmware version tags for the active device's repo. The latest Prod release is always selected. */
+    /** Load available firmware version tags for the active device's repo. The latest Prod release is selected unless useLatestProdVersion is off and a version is already selected. */
     async loadVersions(): Promise<void> {
         const repoPath = this.state.repoPath
         if (!repoPath) {
@@ -315,12 +347,16 @@ export class Workspace {
             }
             const tags = await this.git.listTags(repoPath)
             this.versions = sortVersionsDescending(tags)
-            const latest = pickLatestVersion(this.versions)
-            if (latest) {
-                this.state.selectedVersion = latest
-            } else if (this.state.selectedVersion && !this.versions.includes(this.state.selectedVersion)) {
-                // Couldn't fetch anything (e.g. offline) — keep whatever was
-                // already known selectable rather than clearing it out.
+            // Nothing selected yet still needs a sane default even with the
+            // preference off — it only preserves an *existing* selection.
+            if (this.useLatestProdVersion || !this.state.selectedVersion) {
+                const latest = pickLatestVersion(this.versions)
+                if (latest) this.state.selectedVersion = latest
+            }
+            if (this.state.selectedVersion && !this.versions.includes(this.state.selectedVersion)) {
+                // Couldn't fetch anything (e.g. offline), or the preference is
+                // off and the selected version isn't tagged locally — keep it
+                // selectable rather than silently dropping it.
                 this.versions = [this.state.selectedVersion, ...this.versions]
             }
         } catch (err) {
@@ -367,20 +403,6 @@ export class Workspace {
         })
         this.sfVersion.appendTo(this.versionEl)
 
-        this.sfAutoConnectMonitor = new CheckBox({
-            label: 'Auto-connect',
-            checked: this.autoConnectMonitor,
-            change: (args) => this.setAutoConnectMonitor(args.checked),
-        })
-        this.sfAutoConnectMonitor.appendTo(this.autoConnectMonitorEl)
-
-        this.sfVerboseCompile = new CheckBox({
-            label: 'Verbose',
-            checked: this.verboseCompile,
-            change: (args) => this.setVerboseCompile(args.checked),
-        })
-        this.sfVerboseCompile.appendTo(this.verboseCompileEl)
-
         // Re-check whenever a USB device is plugged/unplugged — covers both
         // the selected board coming online after the workspace already loaded,
         // and it going away mid-session. Debounced since a hub can fire several
@@ -402,10 +424,6 @@ export class Workspace {
         this.splitterObj = null
         this.sfVersion?.destroy()
         this.sfVersion = undefined
-        this.sfAutoConnectMonitor?.destroy()
-        this.sfAutoConnectMonitor = undefined
-        this.sfVerboseCompile?.destroy()
-        this.sfVerboseCompile = undefined
         if (this._connectionCheckTimer) {
             clearTimeout(this._connectionCheckTimer)
             this._connectionCheckTimer = null
