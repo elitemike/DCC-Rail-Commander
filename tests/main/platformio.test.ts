@@ -7,6 +7,7 @@
  * streaming, failure modes, and build serialisation.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { join } from 'path'
 
 vi.mock('electron', () => ({
     app: { getPath: vi.fn(() => '/mock/home'), isPackaged: false },
@@ -119,7 +120,7 @@ describe('generated platformio.ini', () => {
     it('is written into the sketch directory before building', async () => {
         const svc = makeService()
         await svc.compile('/my/sketch', MEGA)
-        expect(mockWriteFile).toHaveBeenCalledWith('/my/sketch/platformio.ini', expect.any(String), 'utf-8')
+        expect(mockWriteFile).toHaveBeenCalledWith(join('/my/sketch', 'platformio.ini'), expect.any(String), 'utf-8')
     })
 
     it('declares the resolved platform, board and env for the FQBN', async () => {
@@ -176,7 +177,7 @@ describe('generated platformio.ini', () => {
 
     it('omits the sketch libraries/ dir when it has none', async () => {
         const svc = makeService()
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).endsWith('/my/sketch/libraries'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).endsWith(join('/my/sketch', 'libraries')))
         await svc.compile('/my/sketch', MEGA)
         expect(lastIni()).not.toContain('/my/sketch/libraries')
     })
@@ -487,10 +488,10 @@ describe('build serialisation', () => {
 
         await Promise.all([svc.compile('/sketch-a', MEGA), svc.compile('/sketch-b', ESP32)])
 
-        expect(iniBySketch['/sketch-a/platformio.ini']).toContain('[env:mega2560]')
-        expect(iniBySketch['/sketch-a/platformio.ini']).not.toContain('[env:ESP32]')
-        expect(iniBySketch['/sketch-b/platformio.ini']).toContain('[env:ESP32]')
-        expect(iniBySketch['/sketch-b/platformio.ini']).not.toContain('[env:mega2560]')
+        expect(iniBySketch[join('/sketch-a', 'platformio.ini')]).toContain('[env:mega2560]')
+        expect(iniBySketch[join('/sketch-a', 'platformio.ini')]).not.toContain('[env:ESP32]')
+        expect(iniBySketch[join('/sketch-b', 'platformio.ini')]).toContain('[env:ESP32]')
+        expect(iniBySketch[join('/sketch-b', 'platformio.ini')]).not.toContain('[env:mega2560]')
     })
 
     it('keeps upload port scoped to its own queued call when interleaved with a compile', async () => {
@@ -615,7 +616,7 @@ describe('importToolchainPack()', () => {
     it('rejects an archive that is not a toolchain pack', async () => {
         const svc = makeService()
         mockReaddir.mockResolvedValue(['some-other-thing'])
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).includes('/tmp/'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/tmp/'))
         const result = await svc.importToolchainPack('/downloads/holiday-photos.zip')
         expect(result.success).toBe(false)
         expect(result.error).toMatch(/toolchain pack/i)

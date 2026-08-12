@@ -97,14 +97,19 @@ test.describe('Compile button', () => {
         await expect(outputPanel).not.toContainText('Compile successful!')
     })
 
-    test('Copy button copies the compile output to the clipboard', async ({ workspacePage }) => {
+    test('Copy button copies the compile output to the clipboard', async ({ workspacePage, electronApp }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
 
         await workspacePage.locator('button[title="Copy output to clipboard"]').click()
         await expect(workspacePage.locator('.e-toast-success').last()).toContainText('Copied', { timeout: 5_000 })
 
-        const clipboardText = await workspacePage.evaluate(() => navigator.clipboard.readText())
+        // Read via Electron's native clipboard module rather than the renderer's
+        // navigator.clipboard.readText(): reading through the web Clipboard API
+        // requires a 'clipboard-read' permission grant that Electron doesn't hand
+        // out by default, so it can silently resolve empty even though the app's
+        // own writeText() (which needs no such grant) already succeeded.
+        const clipboardText = await electronApp.evaluate(({ clipboard }) => clipboard.readText())
         expect(clipboardText).toContain('Compiling for')
         expect(clipboardText).toContain('✓ Compile successful!')
     })
