@@ -55,7 +55,7 @@ export interface DetectedBoard {
 /** Build/upload subprocess timeout. Matches the previous backend's 5 minutes. */
 const RUN_TIMEOUT_MS = 300_000
 
-/** PlatformIO colourises output even when redirected; strip it before display. */
+/** Used only to test for blank lines — the ANSI itself is kept and forwarded so xterm can render color. */
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1B\[[0-9;]*[A-Za-z]/g
 
@@ -288,8 +288,7 @@ export class PlatformIoService {
 
             const stream = (text: string) => {
                 for (const line of text.split(/\r\n|\r|\n/)) {
-                    const trimmed = line.replace(ANSI, '').trim()
-                    if (trimmed) this.emitProgress(phase, trimmed)
+                    if (line.replace(ANSI, '').trim()) this.emitProgress(phase, line)
                 }
             }
 
