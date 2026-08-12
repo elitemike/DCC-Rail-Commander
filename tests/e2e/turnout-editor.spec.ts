@@ -36,6 +36,9 @@ async function switchToVisual(page: import('@playwright/test').Page) {
 
 async function openAutomationEditor(page: import('@playwright/test').Page) {
     await page.getByText('Automation', { exact: true }).first().click()
+    // automation-editor defaults to its Visual (TrackManager) tab; the Raw
+    // Monaco view only mounts after switching tabs.
+    await page.getByRole('button', { name: 'Raw' }).click()
     await expect(page.locator('file-editor-panel div.monaco-editor')).toBeVisible()
     await page.waitForTimeout(400)
 }
@@ -66,6 +69,15 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
         if (i < lines.length - 1) await page.keyboard.press('Enter')
     }
     await page.waitForTimeout(500)
+}
+
+// Scoped to the visual entry list — a bare page.getByText() can match a
+// leftover Monaco syntax-highlight token from the (hidden but still-mounted)
+// Raw editor pane, which is a strict-mode violation that's timing-sensitive
+// (Monaco doesn't unmount its last-rendered view-lines the instant it's
+// hidden) and so flakier on some machines than others.
+function turnoutEntry(page: import('@playwright/test').Page, text: string) {
+    return page.locator('nav[aria-label="Turnouts"]').getByText(text)
 }
 
 async function getDetailTextInput(page: import('@playwright/test').Page, label: string, index = 0) {
@@ -190,7 +202,7 @@ test.describe('Turnout Editor', () => {
 
         await switchToVisual(page)
 
-        await expect(page.getByText('Coal Siding')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'Coal Siding')).toBeVisible({ timeout: 5_000 })
         await expect(page.getByText('3 entries')).toBeVisible()
     })
 
@@ -207,8 +219,8 @@ test.describe('Turnout Editor', () => {
 
         await switchToVisual(page)
 
-        await expect(page.getByText('Engine Shed')).toBeVisible({ timeout: 5_000 })
-        await expect(page.getByText('Yard Entry')).not.toBeVisible()
+        await expect(turnoutEntry(page, 'Engine Shed')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'Yard Entry')).not.toBeVisible()
     })
 
     test('entry removed in raw disappears from visual after switching tab', async ({ workspacePage: page }) => {
@@ -221,8 +233,8 @@ test.describe('Turnout Editor', () => {
 
         await switchToVisual(page)
 
-        await expect(page.getByText('Main Line Junction')).toBeVisible({ timeout: 5_000 })
-        await expect(page.getByText('Yard Entry')).not.toBeVisible()
+        await expect(turnoutEntry(page, 'Main Line Junction')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'Yard Entry')).not.toBeVisible()
         await expect(page.getByText('1 entries')).toBeVisible()
     })
 
@@ -238,7 +250,7 @@ test.describe('Turnout Editor', () => {
         await switchToVisual(page)
 
         // Water Tower should appear
-        await expect(page.getByText('Water Tower')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'Water Tower')).toBeVisible({ timeout: 5_000 })
 
         // Click on it to edit, change description
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Water Tower' }).click()
@@ -442,7 +454,7 @@ test.describe('Turnout Editor', () => {
         await setMonacoContent(page, content)
         await switchToVisual(page)
 
-        await expect(page.getByText('DCC Switch 1')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'DCC Switch 1')).toBeVisible({ timeout: 5_000 })
         await expect(page.getByText('3 entries')).toBeVisible()
 
         await switchToRaw(page)
@@ -494,7 +506,7 @@ test.describe('Turnout Editor', () => {
         await setMonacoContent(page, content)
         await switchToVisual(page)
 
-        await expect(page.getByText('Pin Switch A')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'Pin Switch A')).toBeVisible({ timeout: 5_000 })
         await expect(page.getByText('3 entries')).toBeVisible()
 
         await switchToRaw(page)
@@ -547,9 +559,9 @@ test.describe('Turnout Editor', () => {
         await setMonacoContent(page, content)
         await switchToVisual(page)
 
-        await expect(page.getByText('Servo Switch')).toBeVisible({ timeout: 5_000 })
-        await expect(page.getByText('DCC Switch')).toBeVisible()
-        await expect(page.getByText('Pin Switch')).toBeVisible()
+        await expect(turnoutEntry(page, 'Servo Switch')).toBeVisible({ timeout: 5_000 })
+        await expect(turnoutEntry(page, 'DCC Switch')).toBeVisible()
+        await expect(turnoutEntry(page, 'Pin Switch')).toBeVisible()
         await expect(page.getByText('3 entries')).toBeVisible()
 
         await switchToRaw(page)
