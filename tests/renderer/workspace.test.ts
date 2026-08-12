@@ -22,7 +22,12 @@ function makeWorkspace(opts: {
     showMonitor?: boolean
     portConnected?: boolean
     autoConnectMonitor?: boolean
+    showMonitorOnConnect?: boolean
     openPortError?: string
+    repoPath?: string | null
+    selectedVersion?: string | null
+    tags?: string[]
+    useLatestProdVersion?: boolean
 } = {}) {
     const workspace = Object.create(Workspace.prototype) as Workspace
 
@@ -34,6 +39,7 @@ function makeWorkspace(opts: {
     const isPortOpenFn = vi.fn().mockResolvedValue(false)
     const preferencesSetFn = vi.fn().mockResolvedValue(undefined)
     const toastShowFn = vi.fn()
+    const listTagsFn = vi.fn().mockResolvedValue(opts.tags ?? [])
 
     Object.assign(workspace, {
         state: {
@@ -43,11 +49,15 @@ function makeWorkspace(opts: {
             sourceFolder: null,
             savedConfigurations: [],
             activeConfigId: null,
+            repoPath: opts.repoPath === undefined ? '/repo' : opts.repoPath,
+            selectedVersion: opts.selectedVersion ?? null,
         },
         configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn() },
         toastService: { show: toastShowFn },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
         files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
+        git: { pull: vi.fn().mockResolvedValue(undefined), listTags: listTagsFn },
+        useLatestProdVersion: opts.useLatestProdVersion ?? true,
         pio: {
             listBoards: opts.listBoardsError
                 ? vi.fn().mockRejectedValue(new Error('board scan failed'))
@@ -67,6 +77,7 @@ function makeWorkspace(opts: {
         showMonitor: opts.showMonitor ?? false,
         portConnected: opts.portConnected ?? false,
         autoConnectMonitor: opts.autoConnectMonitor ?? true,
+        showMonitorOnConnect: opts.showMonitorOnConnect ?? true,
         activeSection: 'config',
         activeBottomTab: 'output',
         isCompiling: false,
@@ -77,7 +88,7 @@ function makeWorkspace(opts: {
         splitterObj: null,
     })
 
-    return { workspace, uploadFn, openPortFn, closePortFn, isPortOpenFn, preferencesSetFn, toastShowFn }
+    return { workspace, uploadFn, openPortFn, closePortFn, isPortOpenFn, preferencesSetFn, toastShowFn, listTagsFn }
 }
 
 // ── connect() / disconnect() / toggleConnect() ───────────────────────────────
@@ -322,6 +333,21 @@ describe('Workspace.checkDeviceConnection', () => {
         expect(workspace.showMonitor).toBe(false)
     })
 
+    it('auto-connects without opening the Monitor when showMonitorOnConnect is off', async () => {
+        const { workspace, openPortFn } = makeWorkspace({
+            serialPorts: [{ path: '/dev/ttyACM0', manufacturer: 'Arduino', serialNumber: 'X', vendorId: '2341', productId: '0042' }],
+            cliBoards: [DEVICE],
+            showMonitor: false,
+            showMonitorOnConnect: false,
+        })
+
+        await workspace.checkDeviceConnection()
+
+        expect(openPortFn).toHaveBeenCalled()
+        expect(workspace.portConnected).toBe(true)
+        expect(workspace.showMonitor).toBe(false)
+    })
+
     it('drops portConnected when the device stops being live', async () => {
         const { workspace } = makeWorkspace({
             serialPorts: [],
@@ -346,6 +372,59 @@ describe('Workspace.checkDeviceConnection', () => {
     })
 })
 
+// ── loadVersions() — useLatestProdVersion preference ─────────────────────────
+
+describe('Workspace.loadVersions', () => {
+    it('overrides the selected version with the latest Prod tag when useLatestProdVersion is on', async () => {
+        const { workspace } = makeWorkspace({
+            selectedVersion: 'v5.3.0-Prod',
+            tags: ['v5.3.0-Prod', 'v5.4.0-Prod', 'v5.5.0-Devel'],
+            useLatestProdVersion: true,
+        })
+
+        await workspace.loadVersions()
+
+        expect(workspace.state.selectedVersion).toBe('v5.4.0-Prod')
+    })
+
+    it('keeps a manually chosen version when useLatestProdVersion is off', async () => {
+        const { workspace } = makeWorkspace({
+            selectedVersion: 'v5.3.0-Prod',
+            tags: ['v5.3.0-Prod', 'v5.4.0-Prod'],
+            useLatestProdVersion: false,
+        })
+
+        await workspace.loadVersions()
+
+        expect(workspace.state.selectedVersion).toBe('v5.3.0-Prod')
+    })
+
+    it('still picks the latest Prod tag when useLatestProdVersion is off but nothing is selected yet', async () => {
+        const { workspace } = makeWorkspace({
+            selectedVersion: null,
+            tags: ['v5.3.0-Prod', 'v5.4.0-Prod'],
+            useLatestProdVersion: false,
+        })
+
+        await workspace.loadVersions()
+
+        expect(workspace.state.selectedVersion).toBe('v5.4.0-Prod')
+    })
+
+    it('keeps a manually chosen version selectable even when it is not among the fetched tags', async () => {
+        const { workspace } = makeWorkspace({
+            selectedVersion: 'v5.2.0-Prod',
+            tags: ['v5.4.0-Prod'],
+            useLatestProdVersion: false,
+        })
+
+        await workspace.loadVersions()
+
+        expect(workspace.state.selectedVersion).toBe('v5.2.0-Prod')
+        expect(workspace.versions).toContain('v5.2.0-Prod')
+    })
+})
+
 // ── setAutoConnectMonitor() — persisted app-wide preference ─────────────────
 
 describe('Workspace.setAutoConnectMonitor', () => {
@@ -356,6 +435,45 @@ describe('Workspace.setAutoConnectMonitor', () => {
 
         expect(workspace.autoConnectMonitor).toBe(false)
         expect(preferencesSetFn).toHaveBeenCalledWith('autoConnectMonitor', false)
+    })
+})
+
+// ── setShowMonitorOnConnect() / setVerboseCompile() / setUseLatestProdVersion() ──
+// Same "persisted app-wide preference" shape as setAutoConnectMonitor, now
+// surfaced from the Settings dialog rather than a toolbar checkbox.
+
+describe('Workspace.setShowMonitorOnConnect', () => {
+    it('updates the field and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace({ showMonitorOnConnect: true })
+
+        workspace.setShowMonitorOnConnect(false)
+
+        expect(workspace.showMonitorOnConnect).toBe(false)
+        expect(preferencesSetFn).toHaveBeenCalledWith('showMonitorOnConnect', false)
+    })
+})
+
+describe('Workspace.setVerboseCompile', () => {
+    it('updates the field and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.verboseCompile = false
+
+        workspace.setVerboseCompile(true)
+
+        expect(workspace.verboseCompile).toBe(true)
+        expect(preferencesSetFn).toHaveBeenCalledWith('verboseCompile', true)
+    })
+})
+
+describe('Workspace.setUseLatestProdVersion', () => {
+    it('updates the field and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.useLatestProdVersion = true
+
+        workspace.setUseLatestProdVersion(false)
+
+        expect(workspace.useLatestProdVersion).toBe(false)
+        expect(preferencesSetFn).toHaveBeenCalledWith('useLatestProdVersion', false)
     })
 })
 

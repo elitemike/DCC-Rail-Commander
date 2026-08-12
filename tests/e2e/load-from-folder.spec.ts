@@ -452,11 +452,11 @@ test.describe('Load from Folder — device header present in config.h', () => {
 
         await expect(homePage.getByText('Device Monitor', { exact: true })).toBeVisible({ timeout: 5_000 })
 
-        const autoConnectCheckbox = homePage
-            .locator('label', { hasText: 'Auto-connect' })
-            .locator('input[type="checkbox"]')
+        await homePage.getByTestId('settings-button').click()
+        const autoConnectCheckbox = homePage.getByTestId('settings-auto-connect')
         await expect(autoConnectCheckbox).toBeChecked()
         await autoConnectCheckbox.uncheck({ force: true })
+        await homePage.getByRole('button', { name: 'Done' }).click()
 
         // Leave and reopen the same saved config — a fresh Workspace instance
         // whose binding() must read the persisted preference from disk, not
@@ -469,10 +469,10 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await expect(homePage.getByTestId('port-badge')).toHaveAttribute('title', /Device connected/, { timeout: 5_000 })
         await expect(homePage.getByText('Device Monitor', { exact: true })).not.toBeVisible()
 
-        const autoConnectCheckboxAfterReload = homePage
-            .locator('label', { hasText: 'Auto-connect' })
-            .locator('input[type="checkbox"]')
+        await homePage.getByTestId('settings-button').click()
+        const autoConnectCheckboxAfterReload = homePage.getByTestId('settings-auto-connect')
         await expect(autoConnectCheckboxAfterReload).not.toBeChecked()
+        await homePage.getByRole('button', { name: 'Done' }).click()
     })
 
 })
