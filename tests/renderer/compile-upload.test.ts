@@ -137,7 +137,7 @@ describe('Workspace.upload — port reconciliation', () => {
 
         await ws.upload()
 
-        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM5')
+        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM5', undefined)
         expect(ws.state.selectedDevice?.port).toBe('/dev/ttyACM5')
         expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Port Updated' }))
     })
@@ -163,7 +163,7 @@ describe('Workspace.upload — pio.upload invocation', () => {
     it('calls upload with scratchPath, fqbn, and port', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO } })
         await ws.upload()
-        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM0')
+        expect((ws as any).pio.upload).toHaveBeenCalledWith('/mock/scratch/CommandStation-EX', 'arduino:avr:mega', '/dev/ttyACM0', undefined)
     })
 
     it('does not call pio.compile', async () => {
@@ -386,7 +386,7 @@ describe('Workspace.compile() — EX-CSB1 full configuration', () => {
     })
 
     it('calls pio.compile with the CSB1 sketch path and FQBN', () => {
-        expect(mockCompile).toHaveBeenCalledWith(CSB1_REPO, 'esp32:esp32:esp32s3')
+        expect(mockCompile).toHaveBeenCalledWith(CSB1_REPO, 'esp32:esp32:esp32s3', undefined)
     })
 
     it('writes config.h to the correct path before compiling', () => {

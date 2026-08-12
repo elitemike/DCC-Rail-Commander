@@ -378,19 +378,19 @@ describe('Workspace.compile — pio.compile invocation', () => {
     it('calls pio.compile with the correct scratchPath', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).pio.compile).toHaveBeenCalledWith(SCRATCH, megaDevice.fqbn)
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(SCRATCH, megaDevice.fqbn, undefined)
     })
 
     it('calls pio.compile with the correct fqbn for Mega', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: megaDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'arduino:avr:mega')
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'arduino:avr:mega', undefined)
     })
 
     it('calls pio.compile with the correct fqbn for ESP32-S3', async () => {
         const ws = makeWorkspace({ state: { selectedDevice: espDevice, repoPath: REPO, configFiles: [] } })
         await ws.compile()
-        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'esp32:esp32:esp32s3')
+        expect((ws as any).pio.compile).toHaveBeenCalledWith(expect.any(String), 'esp32:esp32:esp32s3', undefined)
     })
 
     it('calls pio.compile exactly once per compile() call', async () => {

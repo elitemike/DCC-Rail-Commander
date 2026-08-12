@@ -118,8 +118,8 @@ export interface PlatformIoElectronApi {
     /** Whether the toolchain for a board's FQBN is available locally. */
     checkToolchain: (fqbn: string) => Promise<{ installed: boolean; version: string | null }>
     listBoards: () => Promise<DetectedBoardInfo[]>
-    compile: (sketchPath: string, fqbn: string) => Promise<CompileResult>
-    upload: (sketchPath: string, fqbn: string, port: string) => Promise<UploadResult>
+    compile: (sketchPath: string, fqbn: string, verbose?: boolean) => Promise<CompileResult>
+    upload: (sketchPath: string, fqbn: string, port: string, verbose?: boolean) => Promise<UploadResult>
     browseToolchainPack: () => Promise<string | null>
     importToolchainPack: (archivePath: string) => Promise<{ success: boolean; error?: string }>
     onProgress: (cb: (payload: { phase: string; message: string }) => void) => () => void
@@ -156,6 +156,7 @@ export interface FileElectronApi {
     deleteFiles: (filePath: string) => Promise<void>
     getInstallDir: (subdir?: string) => Promise<string>
     selectDirectory: () => Promise<string | null>
+    selectSavePath: (defaultName: string) => Promise<string | null>
 }
 
 // ── Preferences ──────────────────────────────────────────────────────────────

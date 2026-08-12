@@ -43,4 +43,8 @@ export class FileService {
     async selectDirectory(): Promise<string | null> {
         return window.files.selectDirectory()
     }
+
+    async selectSavePath(defaultName: string): Promise<string | null> {
+        return window.files.selectSavePath(defaultName)
+    }
 }
