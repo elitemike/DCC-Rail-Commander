@@ -188,6 +188,15 @@ export interface WindowElectronApi {
     onFullScreenChanged: (cb: (value: boolean) => void) => () => void
 }
 
+// ── Theme ────────────────────────────────────────────────────────────────────
+
+export interface ThemeElectronApi {
+    /** The OS's current dark/light preference, read natively (not via CSS media query). */
+    shouldUseDarkColors: () => Promise<boolean>
+    /** Subscribe to live OS-level theme changes. Returns an unsubscribe function. */
+    onUpdated: (cb: (shouldUseDarkColors: boolean) => void) => () => void
+}
+
 declare global {
     interface Window {
         usb: UsbElectronApi
@@ -198,5 +207,6 @@ declare global {
         preferences: PreferencesElectronApi
         config: ConfigElectronApi
         electronWindow: WindowElectronApi
+        theme: ThemeElectronApi
     }
 }
