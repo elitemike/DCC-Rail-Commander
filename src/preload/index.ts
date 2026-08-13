@@ -226,6 +226,20 @@ const configApi = {
 
 contextBridge.exposeInMainWorld('config', configApi)
 
+// ── Theme API ────────────────────────────────────────────────────────────────
+const themeApi = {
+    shouldUseDarkColors: (): Promise<boolean> =>
+        ipcRenderer.invoke('theme:should-use-dark-colors'),
+
+    onUpdated: (cb: (shouldUseDarkColors: boolean) => void) => {
+        const handler = (_: IpcRendererEvent, dark: boolean) => cb(dark)
+        ipcRenderer.on('theme:updated', handler)
+        return () => ipcRenderer.off('theme:updated', handler)
+    },
+}
+
+contextBridge.exposeInMainWorld('theme', themeApi)
+
 // ── Window API ───────────────────────────────────────────────────────────────
 const windowApi = {
     onCloseRequested: (cb: () => void) => {

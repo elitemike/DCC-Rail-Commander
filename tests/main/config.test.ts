@@ -114,6 +114,11 @@ describe('bool() helper via env-var overrides', () => {
         expect(config.disableDBus).toBe(false)
     })
 
+    it('DISABLE_DBUS=1 sets disableDBus to true', async () => {
+        const config = await loadConfigWithEnv({ DISABLE_DBUS: '1' })
+        expect(config.disableDBus).toBe(true)
+    })
+
     it('DISABLE_MEDIA_SESSION=0 sets disableMediaSession to false', async () => {
         const config = await loadConfigWithEnv({ DISABLE_MEDIA_SESSION: '0' })
         expect(config.disableMediaSession).toBe(false)
@@ -122,5 +127,57 @@ describe('bool() helper via env-var overrides', () => {
     it('DISABLE_MEDIA_SESSION=1 sets disableMediaSession to true', async () => {
         const config = await loadConfigWithEnv({ DISABLE_MEDIA_SESSION: '1' })
         expect(config.disableMediaSession).toBe(true)
+    })
+})
+
+describe('disableDBus auto-detection on Linux (no explicit DISABLE_DBUS)', () => {
+    /**
+     * On Linux with no override, disableDBus should only default to true when
+     * there's no display (truly headless: CI, remote SSH, WSL without an X
+     * server) — a real desktop session needs D-Bus for things like OS
+     * dark/light theme detection (see ThemeService), so it must stay enabled
+     * whenever DISPLAY or WAYLAND_DISPLAY is set.
+     */
+    async function loadConfigAsLinux(env: Record<string, string | undefined>) {
+        const originalPlatform = process.platform
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+        const saved: Record<string, string | undefined> = {}
+        for (const key of ['DISABLE_DBUS', 'DISPLAY', 'WAYLAND_DISPLAY']) saved[key] = process.env[key]
+        for (const key of ['DISABLE_DBUS', 'DISPLAY', 'WAYLAND_DISPLAY']) delete process.env[key]
+        for (const [k, v] of Object.entries(env)) {
+            if (v !== undefined) process.env[k] = v
+        }
+
+        vi.resetModules()
+        const mod = await import('../../src/main/config')
+
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) delete process.env[k]
+            else process.env[k] = v
+        }
+
+        return mod.config
+    }
+
+    it('defaults to true (disabled) when neither DISPLAY nor WAYLAND_DISPLAY is set', async () => {
+        const config = await loadConfigAsLinux({})
+        expect(config.disableDBus).toBe(true)
+    })
+
+    it('defaults to false (enabled) when DISPLAY is set', async () => {
+        const config = await loadConfigAsLinux({ DISPLAY: ':0' })
+        expect(config.disableDBus).toBe(false)
+    })
+
+    it('defaults to false (enabled) when WAYLAND_DISPLAY is set', async () => {
+        const config = await loadConfigAsLinux({ WAYLAND_DISPLAY: 'wayland-0' })
+        expect(config.disableDBus).toBe(false)
+    })
+
+    it('explicit DISABLE_DBUS still wins over a present DISPLAY', async () => {
+        const config = await loadConfigAsLinux({ DISPLAY: ':0', DISABLE_DBUS: '1' })
+        expect(config.disableDBus).toBe(true)
     })
 })

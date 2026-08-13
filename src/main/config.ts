@@ -19,7 +19,10 @@ export interface AppConfig {
 
     /**
      * Suppress D-Bus connection errors on Linux systems without a session bus
-     * (e.g. remote SSH, headless). Set DISABLE_DBUS=0 to override.
+     * (e.g. remote SSH, headless, CI). Defaults to disabled only when there's
+     * no display (no DISPLAY/WAYLAND_DISPLAY) — a real desktop session needs
+     * D-Bus for things like OS dark/light theme detection, so it must stay
+     * enabled there. Set DISABLE_DBUS=0/1 to override the auto-detection.
      */
     disableDBus: boolean
 
@@ -47,7 +50,10 @@ function bool(envVar: string | undefined, defaultValue: boolean): boolean {
 
 export const config: AppConfig = {
     disableHardwareAcceleration: bool(process.env['DISABLE_HW_ACCEL'], true),
-    disableDBus: bool(process.env['DISABLE_DBUS'], process.platform === 'linux'),
+    disableDBus: bool(
+        process.env['DISABLE_DBUS'],
+        process.platform === 'linux' && !process.env['DISPLAY'] && !process.env['WAYLAND_DISPLAY'],
+    ),
     disableMediaSession: bool(process.env['DISABLE_MEDIA_SESSION'], process.platform === 'linux'),
     window: {
         width: 1920,

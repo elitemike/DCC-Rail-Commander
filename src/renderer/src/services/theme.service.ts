@@ -25,24 +25,36 @@ const EJ2_LINK_ID = 'ej2-theme-stylesheet'
  */
 export class ThemeService {
     private readonly preferences = resolve(PreferencesService)
-    private readonly media = window.matchMedia('(prefers-color-scheme: dark)')
     private readonly listeners = new Set<(effective: EffectiveTheme) => void>()
     private ej2Link: HTMLLinkElement | null = null
-    private mediaListenerAttached = false
+    private systemListenerAttached = false
 
     mode: ThemeMode = 'dark'
 
+    /**
+     * OS-level dark/light preference, read via `window.theme` (Electron's
+     * native `nativeTheme` module over IPC — see main/ipc/theme-ipc.ts). This
+     * reads the OS setting natively on every platform (Windows registry,
+     * macOS effectiveAppearance, Linux GSettings) rather than depending on
+     * the renderer's `prefers-color-scheme` CSS media query, which on Linux
+     * can silently fail to track the OS if the app's D-Bus session isn't
+     * available.
+     */
+    private systemPrefersDark = false
+
     get effective(): EffectiveTheme {
-        return this.mode === 'system' ? (this.media.matches ? 'dark' : 'light') : this.mode
+        return this.mode === 'system' ? (this.systemPrefersDark ? 'dark' : 'light') : this.mode
     }
 
     /** Loads the persisted preference and applies it. Call once at startup. */
     async init(): Promise<void> {
         this.mode = (await this.preferences.get<ThemeMode>('theme')) ?? 'dark'
+        this.systemPrefersDark = await window.theme.shouldUseDarkColors()
         this.apply()
-        if (!this.mediaListenerAttached) {
-            this.mediaListenerAttached = true
-            this.media.addEventListener('change', () => {
+        if (!this.systemListenerAttached) {
+            this.systemListenerAttached = true
+            window.theme.onUpdated((dark) => {
+                this.systemPrefersDark = dark
                 if (this.mode === 'system') this.apply()
             })
         }

@@ -5,6 +5,7 @@ import { registerGitIpcHandlers } from './git-ipc'
 import { registerFileIpcHandlers } from './file-ipc'
 import { registerPreferencesIpcHandlers } from './preferences-ipc'
 import { registerConfigIpcHandlers } from './config-ipc'
+import { registerThemeIpcHandlers } from './theme-ipc'
 import type { UsbManager } from '../usb-manager'
 import type { PythonRunner } from '../python-runner'
 import type { PlatformIoService } from '../platformio'
@@ -33,4 +34,5 @@ export function registerAllIpcHandlers(services: IpcServices): void {
     registerFileIpcHandlers(services.fileService)
     registerPreferencesIpcHandlers(services.preferencesService)
     registerConfigIpcHandlers()
+    registerThemeIpcHandlers()
 }
