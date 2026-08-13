@@ -1,8 +1,27 @@
 import { bindable, resolve } from 'aurelia'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { UsbService } from '../services/usb.service'
 import { InstallerState } from '../models/installer-state'
+import { ThemeService } from '../services/theme.service'
+
+const DARK_THEME: ITheme = {
+    background: '#0d1117',
+    foreground: '#c9d1d9',
+    cursor: '#58a6ff',
+    selectionBackground: '#264f78',
+    black: '#0d1117',
+    brightBlack: '#30363d',
+}
+
+const LIGHT_THEME: ITheme = {
+    background: '#f9fafb',
+    foreground: '#1f2937',
+    cursor: '#1d4ed8',
+    selectionBackground: '#bfdbfe',
+    black: '#f9fafb',
+    brightBlack: '#9ca3af',
+}
 
 // ── EXRAIL / DCC-EX autocomplete command list ───────────────────────────────
 // Source: https://dcc-ex.com/exrail/exrail-command-reference.html
@@ -447,6 +466,7 @@ export class SerialMonitorCustomElement {
     private term!: Terminal
     private fitAddon!: FitAddon
     private resizeObserver?: ResizeObserver
+    private _unsubTheme: (() => void) | null = null
 
     // Input state
     private inputBuffer = ''
@@ -461,6 +481,7 @@ export class SerialMonitorCustomElement {
 
     private readonly usb = resolve(UsbService)
     private readonly state = resolve(InstallerState)
+    private readonly themeService = resolve(ThemeService)
 
     /**
      * Guards the deferred init below. document.fonts.load() can resolve after
@@ -502,6 +523,8 @@ export class SerialMonitorCustomElement {
         this.unsubError?.()
         this.unsubClosed?.()
         this.unsubWrite?.()
+        this._unsubTheme?.()
+        this._unsubTheme = null
         this.disposeTerminal()
     }
 
@@ -566,14 +589,7 @@ export class SerialMonitorCustomElement {
         this.disposeTerminal()
 
         this.term = new Terminal({
-            theme: {
-                background: '#0d1117',
-                foreground: '#c9d1d9',
-                cursor: '#58a6ff',
-                selectionBackground: '#264f78',
-                black: '#0d1117',
-                brightBlack: '#30363d',
-            },
+            theme: this.themeService.effective === 'dark' ? DARK_THEME : LIGHT_THEME,
             fontFamily: '"JetBrains Mono NF", "JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
             fontSize: 12,
             lineHeight: 1.4,
@@ -585,6 +601,11 @@ export class SerialMonitorCustomElement {
         this.fitAddon = new FitAddon()
         this.term.loadAddon(this.fitAddon)
         this.term.open(this.terminalEl)
+
+        this._unsubTheme?.()
+        this._unsubTheme = this.themeService.onChange((effective) => {
+            this.term.options.theme = effective === 'dark' ? DARK_THEME : LIGHT_THEME
+        })
 
         // Ctrl+C is otherwise wired (via onData below) to clear the input line —
         // only hijack it for copy when there's an active selection, so the
@@ -861,7 +882,7 @@ export class SerialMonitorCustomElement {
     }
 
     get statusColor(): string {
-        return this.portStatus === 'connected' ? 'text-green-400' : 'text-gray-500'
+        return this.portStatus === 'connected' ? 'text-green-600 dark:text-green-400' : 'text-gray-500'
     }
 
     get statusText(): string {

@@ -1,14 +1,36 @@
-import { Terminal } from '@xterm/xterm'
+import { resolve } from 'aurelia'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { CanvasAddon } from '@xterm/addon-canvas'
+import { ThemeService } from '../services/theme.service'
+
+const DARK_THEME: ITheme = {
+    background: '#111827',
+    foreground: '#c9d1d9',
+    cursor: '#111827',
+    selectionBackground: '#264f78',
+    black: '#111827',
+    brightBlack: '#30363d',
+}
+
+const LIGHT_THEME: ITheme = {
+    background: '#f9fafb',
+    foreground: '#1f2937',
+    cursor: '#f9fafb',
+    selectionBackground: '#bfdbfe',
+    black: '#f9fafb',
+    brightBlack: '#9ca3af',
+}
 
 export class CompileOutputTerminalCustomElement {
     /** Container div xterm mounts into — set by ref="terminalEl" in template */
     terminalEl!: HTMLElement
 
+    private readonly themeService = resolve(ThemeService)
     private term!: Terminal
     private fitAddon!: FitAddon
     private resizeObserver?: ResizeObserver
+    private _unsubTheme: (() => void) | null = null
     /**
      * Guards the deferred initTerminal() below. document.fonts.load() can
      * resolve after this component has been torn down and re-attached one or
@@ -35,6 +57,8 @@ export class CompileOutputTerminalCustomElement {
     detaching(): void {
         this._attachGeneration++
         this.resizeObserver?.disconnect()
+        this._unsubTheme?.()
+        this._unsubTheme = null
         this.disposeTerminal()
     }
 
@@ -74,14 +98,7 @@ export class CompileOutputTerminalCustomElement {
         this.disposeTerminal()
 
         this.term = new Terminal({
-            theme: {
-                background: '#111827',
-                foreground: '#c9d1d9',
-                cursor: '#111827',
-                selectionBackground: '#264f78',
-                black: '#111827',
-                brightBlack: '#30363d',
-            },
+            theme: this.themeService.effective === 'dark' ? DARK_THEME : LIGHT_THEME,
             fontFamily: '"JetBrains Mono NF", "JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
             fontSize: 12,
             lineHeight: 1.4,
@@ -96,6 +113,11 @@ export class CompileOutputTerminalCustomElement {
         this.term.loadAddon(this.fitAddon)
         this.term.open(this.terminalEl)
         this.term.loadAddon(new CanvasAddon())
+
+        this._unsubTheme?.()
+        this._unsubTheme = this.themeService.onChange((effective) => {
+            this.term.options.theme = effective === 'dark' ? DARK_THEME : LIGHT_THEME
+        })
 
         // disableStdin only blocks input, not selection — but with nothing to
         // send a browser's native Ctrl/Cmd+C never reaches this terminal, since
