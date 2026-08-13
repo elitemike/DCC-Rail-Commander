@@ -19,6 +19,15 @@
    setting rather than only the OS preference. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* xterm.css hardcodes .xterm-viewport's background to #000 — that's the
+   canvas/DOM scroll layer sitting behind terminal text, and it doesn't
+   follow the ITheme.background passed to `new Terminal()`. Make it
+   transparent so the app's own light/dark background (set on each
+   terminal's wrapper element) shows through instead of a fixed black. */
+.xterm .xterm-viewport {
+    background-color: transparent;
+}
+
 /* Syncfusion EJ2 package CSS is NOT imported here — unlike Tailwind
    utilities, EJ2's light/dark stylesheets both define the same global
    selectors (e.g. .e-btn), so importing both would just have the
@@ -138,23 +147,59 @@ div.monaco-editor .squiggly-hint {
     background-size: auto 3px !important;
 }
 
+/* html/body have no explicit height/overflow constraint of their own — the
+   app's h-screen/overflow-hidden root div clips everything mounted inside
+   <my-app>, but .e-toast-container is appended directly to document.body
+   (see toast.service.ts) so it sits outside that clipped root. A fixed-
+   position box that grows past the viewport (e.g. several stacked toasts)
+   still expands the document's scrollable area per spec, giving the whole
+   app an unwanted scrollbar. Pin html/body to the viewport so nothing
+   appended to body, now or later, can do that. */
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
 /* ── App toast notifications ────────────────────────────────────────────── */
-.e-toast-container {
+/* Syncfusion's ej2-notifications CSS (imported by ej2-theme-{dark,light}.css,
+   swapped in at runtime by ThemeService) ships its own
+   `.e-toast-container { position: relative }` plus a higher-specificity
+   `.e-toast-container.e-toast-bottom-right { bottom: 10px; right: 10px }`
+   for the widget's JS-driven positioning, which we don't use. Its link tag
+   always lands after this stylesheet in <head>, so on an equal-specificity
+   `.e-toast-container` rule it would win the tie outright, and its two-class
+   `.e-toast-bottom-right` rule beats a one-class selector regardless of
+   order — either way our fixed bottom-right positioning gets discarded and
+   the container renders inline after <my-app>, off the bottom of the page.
+   Match all three classes toast.service.ts actually sets on the container
+   (see its `className` there) so this rule outranks both of theirs. */
+.e-toast-container.e-toast-util.e-toast-bottom-right {
     position: fixed;
     bottom: 24px;
     right: 24px;
+    left: auto;
+    top: auto;
     z-index: 10000;
     display: flex;
     flex-direction: column;
     gap: 8px;
     max-width: 400px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
 }
 
-.e-toast {
+/* Scoped under the container's full class list (see the comment above
+   .e-toast-container.e-toast-util.e-toast-bottom-right) so this also
+   outranks Syncfusion's `.e-toast-container .e-toast` — otherwise its
+   `display: inline-flex`, `padding: 18px`, `margin: 0 0 10px` win the
+   cascade and fight our own flex/gap layout. */
+.e-toast-container.e-toast-util.e-toast-bottom-right .e-toast {
     display: flex;
     align-items: flex-start;
     gap: 12px;
     padding: 12px 16px;
+    margin: 0;
     border-radius: 8px;
     background: #fff;
     border: 1px solid rgba(0, 0, 0, 0.1);
@@ -164,7 +209,7 @@ div.monaco-editor .squiggly-hint {
     animation: toast-in 0.2s ease;
 }
 
-.dark .e-toast {
+.dark .e-toast-container.e-toast-util.e-toast-bottom-right .e-toast {
     background: #1e2535;
     border-color: rgba(255, 255, 255, 0.1);
     color: #e2e8f0;

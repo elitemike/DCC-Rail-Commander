@@ -1,6 +1,6 @@
 <template>
     <div
-        class="min-h-screen bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 flex flex-col items-center justify-center p-8">
+        class="min-h-screen bg-linear-to-br from-slate-100 via-blue-50 to-slate-200 dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 flex flex-col items-center justify-center p-8">
 
         <!-- Logo / title -->
         <div class="text-center mb-12">
@@ -13,7 +13,7 @@
                 </div>
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">EX-Installer</h1>
             </div>
-            <p class="text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
+            <p class="text-blue-600 dark:text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
         </div>
 
         <!-- ── No saved configs: onboarding ── -->
@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <p class="text-gray-900 dark:text-white font-semibold text-base">New Device</p>
-                    <p class="text-blue-300/70 text-sm mt-1 leading-relaxed">Connect and configure a new
+                    <p class="text-blue-700/80 dark:text-blue-300/70 text-sm mt-1 leading-relaxed">Connect and configure a new
                         Arduino-compatible board</p>
                 </div>
             </button>
@@ -45,7 +45,7 @@
                 </div>
                 <div>
                     <p class="text-gray-900 dark:text-white font-semibold text-base">Load from Folder</p>
-                    <p class="text-green-300/70 text-sm mt-1 leading-relaxed">Open an existing configuration directory
+                    <p class="text-green-700/80 dark:text-green-300/70 text-sm mt-1 leading-relaxed">Open an existing configuration directory
                     </p>
                 </div>
             </button>
@@ -93,7 +93,7 @@
                         </div>
                         <div class="min-w-0">
                             <p class="text-gray-900 dark:text-white font-medium text-sm truncate">${config.name}</p>
-                            <p class="text-blue-300 text-xs mt-0.5">${config.deviceName} · ${config.productName}</p>
+                            <p class="text-blue-700 dark:text-blue-300 text-xs mt-0.5">${config.deviceName} · ${config.productName}</p>
                             <p class="text-gray-500 text-xs mt-1">${config.version} &middot; ${config.devicePort}</p>
                             <p class="text-gray-600 text-xs mt-0.5">${formatDate(config.lastModified)}</p>
                         </div>

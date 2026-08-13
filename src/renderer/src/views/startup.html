@@ -1,6 +1,6 @@
 <template>
     <div
-        class="min-h-screen bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 flex flex-col items-center justify-center p-8">
+        class="min-h-screen bg-linear-to-br from-slate-100 via-blue-50 to-slate-200 dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 flex flex-col items-center justify-center p-8">
 
         <!-- Logo / title -->
         <div class="text-center mb-12">
@@ -13,7 +13,7 @@
                 </div>
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">EX-Installer</h1>
             </div>
-            <p class="text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
+            <p class="text-blue-600 dark:text-blue-300 text-sm">DCC-EX Device Configuration &amp; Programming Tool</p>
         </div>
 
         <!-- ── Splash (initial render, before attached() fires) ── -->
@@ -27,14 +27,14 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
             </svg>
-            <p class="text-blue-300 text-sm">${statusMessage}</p>
+            <p class="text-blue-600 dark:text-blue-300 text-sm">${statusMessage}</p>
         </div>
 
         <!-- ── Preparing the bundled toolchain (first run of a new build) ── -->
         <div if.bind="phase === 'seeding'" class="w-full max-w-sm flex flex-col gap-4">
             <div class="text-center">
                 <p class="text-gray-900 dark:text-white font-medium text-sm mb-1">${statusMessage}</p>
-                <p class="text-blue-300/60 text-xs">
+                <p class="text-blue-700/70 dark:text-blue-300/60 text-xs">
                     Unpacking the bundled build tools — this happens once per update.
                 </p>
             </div>
@@ -73,22 +73,22 @@
                 </button>
             </div>
             <div if.bind="browseError"
-                class="bg-red-900/20 border border-red-500/30 rounded-xl p-3 text-red-300 text-xs">
+                class="bg-red-100 dark:bg-red-900/20 border border-red-400 dark:border-red-500/30 rounded-xl p-3 text-red-800 dark:text-red-300 text-xs">
                 ${browseError}
             </div>
         </div>
 
         <!-- ── Error ── -->
         <div if.bind="phase === 'error'"
-            class="w-full max-w-sm bg-red-900/20 border border-red-500/30 rounded-2xl p-6 flex flex-col gap-4">
+            class="w-full max-w-sm bg-red-100 dark:bg-red-900/20 border border-red-400 dark:border-red-500/30 rounded-2xl p-6 flex flex-col gap-4">
             <div class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 </svg>
                 <div>
-                    <p class="text-red-300 font-medium text-sm">Setup failed</p>
-                    <p class="text-red-400/80 text-xs mt-1">${error}</p>
+                    <p class="text-red-800 dark:text-red-300 font-medium text-sm">Setup failed</p>
+                    <p class="text-red-700/80 dark:text-red-400/80 text-xs mt-1">${error}</p>
                 </div>
             </div>
             <button click.trigger="retry()"

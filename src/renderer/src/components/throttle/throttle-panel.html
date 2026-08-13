@@ -7,7 +7,7 @@
             title.bind="throttleService.trackPower === true ? 'Turn track power off' : 'Turn track power on'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
             class.bind="throttleService.trackPower === true
-                ? 'bg-green-700/40 hover:bg-green-700/60 border-green-500/50 text-green-300'
+                ? 'bg-green-100 dark:bg-green-700/40 hover:bg-green-200 dark:hover:bg-green-700/60 border-green-400 dark:border-green-500/50 text-green-800 dark:text-green-300'
                 : throttleService.trackPower === false
                     ? 'bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300'
                     : 'bg-gray-900/5 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500'">

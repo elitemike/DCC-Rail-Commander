@@ -14,13 +14,13 @@
                 <span data-testid="route-status-badge" data-status.bind="entry.status"
                     class="px-2.5 py-1 rounded text-xs font-semibold shrink-0"
                     class.bind="entry.status === 'MATCHED'
-                        ? 'bg-green-700/60 text-green-200 border border-green-500/50'
-                        : 'bg-red-900/50 text-red-300 border border-red-500/40'">
+                        ? 'bg-green-100 dark:bg-green-700/60 text-green-800 dark:text-green-200 border border-green-400 dark:border-green-500/50'
+                        : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-400 dark:border-red-500/40'">
                     ${entry.status === 'MATCHED' ? 'Active' : 'Inactive'}
                 </span>
                 <button type="button" click.trigger="throttleService.triggerRoute(entry.id)"
                     data-testid="route-trigger-button"
-                    class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 text-gray-200 transition-colors shrink-0 focus:outline-none">
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 text-gray-700 dark:text-gray-200 transition-colors shrink-0 focus:outline-none">
                     Trigger
                 </button>
             </div>
