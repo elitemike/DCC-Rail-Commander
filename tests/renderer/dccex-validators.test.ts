@@ -279,3 +279,80 @@ describe('getDefineNames (via validateRoster integration)', () => {
         expect(undefinedWarnings).toHaveLength(1)
     })
 })
+
+// ── Turnout ID uniqueness (myTurnouts.h) ──────────────────────────────────────
+
+describe('validateTurnoutIdUniqueness', () => {
+    it('flags a duplicate ID shared by two SERVO_TURNOUT entries', () => {
+        const text = [
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+            'SERVO_TURNOUT(200, 26, 410, 205, Fast, "Yard Entry")',
+        ].join('\n')
+
+        const markers = _runValidatorsForTest('myTurnouts.h', text)
+        const dupWarnings = markers.filter((m) => m.message.includes('already used by another entry'))
+        expect(dupWarnings).toHaveLength(1)
+    })
+
+    it('flags a duplicate ID shared across different turnout macro types', () => {
+        const text = [
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+            'TURNOUT(200, 10, 1, "Yard Exit")',
+            'PIN_TURNOUT(200, 30, "Siding")',
+        ].join('\n')
+
+        const markers = _runValidatorsForTest('myTurnouts.h', text)
+        const dupWarnings = markers.filter((m) => m.message.includes('already used by another entry'))
+        expect(dupWarnings).toHaveLength(2)
+    })
+
+    it('does not flag distinct IDs across different turnout types', () => {
+        const text = [
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+            'TURNOUT(201, 10, 1, "Yard Exit")',
+            'PIN_TURNOUT(202, 30, "Siding")',
+        ].join('\n')
+
+        const markers = _runValidatorsForTest('myTurnouts.h', text)
+        const dupWarnings = markers.filter((m) => m.message.includes('already used by another entry'))
+        expect(dupWarnings).toHaveLength(0)
+    })
+})
+
+// ── ALIAS target-reference validator (myAliases.h) ────────────────────────────
+
+describe('validateAliasTargets', () => {
+    const baseData = {
+        aliases: [],
+        roster: [],
+        turnouts: [{ id: 200, type: 'SERVO' as const, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow' as const, description: 'Junction', defaultState: 'CLOSED' as const }],
+        sensors: [],
+        routes: [],
+        sequences: [],
+    }
+
+    it('flags an ALIAS value that matches no configured object', () => {
+        const text = 'ALIAS(MAIN_YARD, 999)'
+
+        const markers = _runValidatorsForTest('myAliases.h', text, baseData)
+        const warnings = markers.filter((m) => m.message.includes('does not match any configured'))
+        expect(warnings).toHaveLength(1)
+        expect(warnings[0].severity).toBe(WARNING)
+    })
+
+    it('does not flag an ALIAS value that matches a configured turnout ID', () => {
+        const text = 'ALIAS(MAIN_YARD, 200)'
+
+        const markers = _runValidatorsForTest('myAliases.h', text, baseData)
+        const warnings = markers.filter((m) => m.message.includes('does not match any configured'))
+        expect(warnings).toHaveLength(0)
+    })
+
+    it('does not flag an ALIAS with no value (EX-RAIL auto-assigns one)', () => {
+        const text = 'ALIAS(MAIN_YARD)'
+
+        const markers = _runValidatorsForTest('myAliases.h', text, baseData)
+        const warnings = markers.filter((m) => m.message.includes('does not match any configured'))
+        expect(warnings).toHaveLength(0)
+    })
+})
