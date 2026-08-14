@@ -1,0 +1,21 @@
+<template>
+    <div class="flex items-center gap-1.5 flex-wrap">
+        <select data-field="pin-source" value.bind="source" change.trigger="onSourceChange()"
+            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+            <option model.bind="'direct'">Direct MCU pin</option>
+            <option repeat.for="d of boardSources" model.bind="d.instanceId">${boardLabel(d.instanceId)}</option>
+        </select>
+
+        <input if.bind="source === 'direct'" type="number" data-field="pin-value"
+            value.two-way="value" blur.trigger="onDirectBlur()"
+            class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+
+        <select if.bind="source !== 'direct'" data-field="pin-channel"
+            value.bind="channel" change.trigger="onChannelChange()"
+            class="w-24 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+            <option repeat.for="ch of channelOptions()" model.bind="ch">Ch ${ch}</option>
+        </select>
+
+        <span if.bind="source !== 'direct'" class="text-xs text-gray-500 dark:text-gray-400">VPin ${value}</span>
+    </div>
+</template>

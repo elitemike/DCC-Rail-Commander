@@ -30,7 +30,7 @@ export class SensorsEditorCustomElement {
 
     addSensor() {
         const nextId = (this.state.sensors[this.state.sensors.length - 1]?.id ?? 0) + 1
-        this.state.sensors = [...this.state.sensors, { id: nextId, pin: 0, description: 'New Sensor' }]
+        this.state.sensors = [...this.state.sensors, { id: nextId, pin: this.state.nextFreeVpin, description: 'New Sensor' }]
         this.state.syncAll()
     }
 

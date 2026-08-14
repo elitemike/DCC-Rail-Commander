@@ -34,6 +34,14 @@ import {
     type AliasEntry,
     type AliasTargetType,
 } from '../utils/myAutomationParser'
+import {
+    parseHalDevicesFromAutomation,
+    computeVpinAllocations,
+    findNextFreeVpin,
+    findVpinConflicts as findVpinConflictsInAllocations,
+    type HalDeviceInstance,
+    type VpinAllocation,
+} from '../config/hal-devices'
 
 /**
  * Open/close tag that delimits the auto-managed #include block at the top of
@@ -41,6 +49,7 @@ import {
  * line, matching the pattern used by the device header in config.h.
  */
 export const MANAGED_INCLUDES_TAG = '// ==== EX-Installer Required Includes ===='
+export const MANAGED_HAL_DEVICES_TAG = '// ==== EX-Installer HAL Devices ===='
 export const MANAGED_TRACK_MANAGER_TAG = '// ==== EX-Installer TrackManager ===='
 export const MANAGED_TURNOUT_DEFAULTS_TAG = '// ==== EX-Installer Turnout Defaults ===='
 
@@ -59,6 +68,16 @@ export function extractAutomationCustomContent(content: string): string {
         if (closeIdx !== -1) {
             const afterClose = closeIdx + MANAGED_INCLUDES_TAG.length
             text = text.slice(0, openIdx) + text.slice(afterClose)
+        }
+    }
+
+    // Remove the managed HAL Devices block (open tag … close tag, inclusive)
+    const hdOpenIdx = text.indexOf(MANAGED_HAL_DEVICES_TAG)
+    if (hdOpenIdx !== -1) {
+        const hdCloseIdx = text.indexOf(MANAGED_HAL_DEVICES_TAG, hdOpenIdx + MANAGED_HAL_DEVICES_TAG.length)
+        if (hdCloseIdx !== -1) {
+            const afterClose = hdCloseIdx + MANAGED_HAL_DEVICES_TAG.length
+            text = text.slice(0, hdOpenIdx) + text.slice(afterClose)
         }
     }
 
@@ -585,6 +604,29 @@ export class ConfigEditorState {
     // ── Preserved content (non-ROSTER/TURNOUT lines from imported myAutomation.h)
     preservedAutomationContent = ''
 
+    // ── Generated HAL Devices section (accessory boards — see hal-devices.ts) ─
+    generatedHalDevicesContent = ''
+
+    /** Structured accessory-board list, derived from the managed block's raw text (see hal-devices.ts's round-trip comments). */
+    get halDevices(): HalDeviceInstance[] {
+        return parseHalDevicesFromAutomation(this.generatedHalDevicesContent)
+    }
+
+    /** Every VPin currently claimed by a turnout, sensor, signal, or HAL device. */
+    get vpinAllocations(): VpinAllocation[] {
+        return computeVpinAllocations(this.turnouts, this.sensors, this.signals, this.halDevices)
+    }
+
+    /** First free VPin at/after 100 (0-99 conventionally reserved for physical MCU pins). */
+    get nextFreeVpin(): number {
+        return findNextFreeVpin(this.vpinAllocations)
+    }
+
+    /** Allocations overlapping the given range, excluding one by source (e.g. the row being edited). */
+    findVpinConflicts(start: number, count: number, excludeSource?: string): VpinAllocation[] {
+        return findVpinConflictsInAllocations(this.vpinAllocations, start, count, excludeSource)
+    }
+
     // ── Generated track manager AUTOSTART section ────────────────────────────
     generatedTrackManagerContent = ''
 
@@ -644,6 +686,15 @@ export class ConfigEditorState {
             sections.push('// Do not remove them — they are required for the installer to function correctly.')
             sections.push(...includes)
             sections.push(MANAGED_INCLUDES_TAG)
+        }
+
+        if (this.generatedHalDevicesContent.trim()) {
+            if (sections.length > 0) sections.push('')
+            sections.push(MANAGED_HAL_DEVICES_TAG)
+            sections.push('// This HAL Devices block is managed by EX-Installer.')
+            sections.push('// Do not edit inside this block manually.')
+            sections.push(this.generatedHalDevicesContent.trim())
+            sections.push(MANAGED_HAL_DEVICES_TAG)
         }
 
         if (this.generatedTrackManagerContent.trim()) {
@@ -710,6 +761,7 @@ export class ConfigEditorState {
         this.sequences = []
         this.aliases = []
         this.preservedAutomationContent = ''
+        this.generatedHalDevicesContent = ''
         this.generatedTrackManagerContent = ''
 
         let automationContent = ''
@@ -740,6 +792,9 @@ export class ConfigEditorState {
                 // itself — otherwise it stays empty until the TrackManager form
                 // is visited, and the block would be dropped on next save.
                 this.generatedTrackManagerContent = extractManagedBlockBody(f.content, MANAGED_TRACK_MANAGER_TAG)
+                // Rehydrate the HAL Devices managed-block state the same way —
+                // otherwise it stays empty until the Accessories tab is visited.
+                this.generatedHalDevicesContent = extractManagedBlockBody(f.content, MANAGED_HAL_DEVICES_TAG)
             }
         }
 
@@ -797,6 +852,7 @@ export class ConfigEditorState {
         const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
         if (automationFile) {
             this.generatedTrackManagerContent = extractManagedBlockBody(automationFile.content, MANAGED_TRACK_MANAGER_TAG)
+            this.generatedHalDevicesContent = extractManagedBlockBody(automationFile.content, MANAGED_HAL_DEVICES_TAG)
         }
         for (const f of this.installerState.configFiles) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
@@ -832,6 +888,7 @@ export class ConfigEditorState {
             this.roster.length > 0 ||
             this.turnouts.length > 0 ||
             this.customFileNames.length > 0 ||
+            this.generatedHalDevicesContent.trim().length > 0 ||
             hasBuiltInContent('mySignals.h') ||
             hasBuiltInContent('mySensors.h') ||
             hasBuiltInContent('myRoutes.h') ||
@@ -878,6 +935,13 @@ export class ConfigEditorState {
                 f.content = this._preserveDeviceHeader(this.configHContent, f.content)
             }
         }
+    }
+
+    /** Called by hal-devices-form on every edit. Same shape as syncTrackManager(). */
+    syncHalDevices(content: string): void {
+        this.generatedHalDevicesContent = content.trim()
+        this.hasChanges = true
+        this._ensureAutomationFile()
     }
 
     syncTrackManager(trackManagerContent: string): void {

@@ -13,7 +13,7 @@ import { TextBox, NumericTextBox } from '@syncfusion/ej2-inputs'
 import { CheckBox, RadioButton, Button } from '@syncfusion/ej2-buttons'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 
-type ConfigTab = 'general' | 'wifi'
+type ConfigTab = 'general' | 'wifi' | 'accessories'
 
 const FALLBACK_DRIVERS_GENERIC = [
     'STANDARD_MOTOR_SHIELD',
