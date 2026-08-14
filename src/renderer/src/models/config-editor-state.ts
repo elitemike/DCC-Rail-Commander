@@ -623,8 +623,8 @@ export class ConfigEditorState {
     }
 
     /** Allocations overlapping the given range, excluding one by source (e.g. the row being edited). */
-    findVpinConflicts(start: number, count: number, excludeSource?: string): VpinAllocation[] {
-        return findVpinConflictsInAllocations(this.vpinAllocations, start, count, excludeSource)
+    findVpinConflicts(start: number, count: number, excludeSource?: string, onlyKind?: VpinAllocation['kind']): VpinAllocation[] {
+        return findVpinConflictsInAllocations(this.vpinAllocations, start, count, excludeSource, onlyKind)
     }
 
     // ── Generated track manager AUTOSTART section ────────────────────────────

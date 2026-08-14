@@ -90,13 +90,18 @@ export class HalDevicesFormCustomElement {
         return Array.from({ length: count }, (_, i) => i)
     }
 
-    /** VPin ranges this device overlaps with (excluding itself) — shown as an inline warning. */
+    /**
+     * Other HAL boards' VPin ranges this device's range overlaps with (excluding itself) — shown
+     * as an inline warning. Deliberately restricted to `onlyKind: 'device'`: a turnout/sensor/
+     * signal using one of this board's own channels is the normal, expected way of consuming it,
+     * not a conflict — see VpinAllocation.kind.
+     */
     conflictsFor(device: HalDeviceInstance): string[] {
         const board = this.board(device)
         if (!board || board.pinCount === 0 || device.vpinStart == null) return []
         const source = `${board.label}: ${device.label}`
         return this.editorState
-            .findVpinConflicts(device.vpinStart, board.pinCount, source)
+            .findVpinConflicts(device.vpinStart, board.pinCount, source, 'device')
             .map(c => c.source)
     }
 

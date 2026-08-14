@@ -1,6 +1,7 @@
 import { bindable, BindingMode, resolve } from 'aurelia'
 import { ConfigEditorState } from '../models/config-editor-state'
 import { getHalBoard } from '../config/hal-boards'
+import type { HalBoardDefinition } from '../config/hal-boards'
 import {
     DIRECT_PIN_SOURCE,
     getBoardSources,
@@ -37,6 +38,8 @@ export class VpinPickerCustomElement {
     @bindable({ mode: BindingMode.twoWay }) value = 0
     /** Optional — called after value changes via this picker (board/channel pick, or blur in Direct mode). Editors using an edit-buffer + blur-commit pattern (e.g. turnout-editor) wire this to their commit handler. */
     @bindable onCommit: (() => void) | null = null
+    /** Optional — restricts the board dropdown to boards whose `pinRole` matches (e.g. "servo" for a turnout's pin, "sensor" for a sensor's). Unset shows every board, as before. */
+    @bindable role: HalBoardDefinition['pinRole'] | null = null
 
     source: string = DIRECT_PIN_SOURCE
     channel = 1
@@ -53,7 +56,7 @@ export class VpinPickerCustomElement {
     }
 
     get boardSources(): HalDeviceInstance[] {
-        return getBoardSources(this.editorState.halDevices)
+        return getBoardSources(this.editorState.halDevices, this.role ?? undefined)
     }
 
     boardLabel(instanceId: string): string {

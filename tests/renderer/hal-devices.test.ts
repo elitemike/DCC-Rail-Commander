@@ -141,10 +141,10 @@ describe('VPin registry', () => {
 
     it('computeVpinAllocations aggregates turnouts, sensors, signals, and HAL devices', () => {
         const allocations = computeVpinAllocations(turnouts, sensors, signals, halDevices)
-        expect(allocations).toContainEqual({ start: 25, count: 1, source: 'Turnout: Points' })
-        expect(allocations).toContainEqual({ start: 30, count: 1, source: 'Sensor: Occupancy' })
-        expect(allocations).toContainEqual({ start: 40, count: 1, source: 'Signal (red): Home' })
-        expect(allocations).toContainEqual({ start: 164, count: 16, source: 'RT DCD-16 Block Sensor: Yard block detector' })
+        expect(allocations).toContainEqual({ start: 25, count: 1, source: 'Turnout: Points', kind: 'consumer' })
+        expect(allocations).toContainEqual({ start: 30, count: 1, source: 'Sensor: Occupancy', kind: 'consumer' })
+        expect(allocations).toContainEqual({ start: 40, count: 1, source: 'Signal (red): Home', kind: 'consumer' })
+        expect(allocations).toContainEqual({ start: 164, count: 16, source: 'RT DCD-16 Block Sensor: Yard block detector', kind: 'device' })
     })
 
     it('excludes a multiplexer from allocations (0 vpins)', () => {
@@ -188,5 +188,58 @@ describe('VPin registry', () => {
     it('findVpinConflicts returns nothing for a non-overlapping range', () => {
         const allocations = computeVpinAllocations([], [], [], halDevices)
         expect(findVpinConflicts(allocations, 200, 5)).toEqual([])
+    })
+
+    it('findVpinConflicts without onlyKind flags a turnout using one of a device\'s own channels', () => {
+        // This is the previously-buggy default behaviour, still needed by the
+        // "give me a free direct pin" auto-suggest path — it must keep avoiding
+        // both other consumers and HAL device capacity.
+        const turnoutOnDevice: Turnout[] = [
+            { type: 'SERVO', id: 1, pin: 170, activeAngle: 400, inactiveAngle: 100, profile: 'Slow', description: 'On device', comment: '', defaultState: 'CLOSED' },
+        ]
+        const allocations = computeVpinAllocations(turnoutOnDevice, [], [], halDevices)
+        expect(findVpinConflicts(allocations, 164, 16).map(c => c.source)).toContain('Turnout: On device')
+    })
+
+    it('findVpinConflicts with onlyKind "device" does not flag a turnout legitimately using one of the device\'s own channels', () => {
+        // This is the bug reported against the Accessories tab: a PCA9685 board
+        // showed "VPin range overlaps Turnout: ..." for every turnout that was
+        // simply using one of its own channels — not an actual conflict.
+        const turnoutOnDevice: Turnout[] = [
+            { type: 'SERVO', id: 1, pin: 170, activeAngle: 400, inactiveAngle: 100, profile: 'Slow', description: 'On device', comment: '', defaultState: 'CLOSED' },
+        ]
+        const allocations = computeVpinAllocations(turnoutOnDevice, [], [], halDevices)
+        const source = 'RT DCD-16 Block Sensor: Yard block detector'
+        expect(findVpinConflicts(allocations, 164, 16, source, 'device')).toEqual([])
+    })
+
+    it('findVpinConflicts with onlyKind "device" still flags a genuinely overlapping second device', () => {
+        const overlappingDevice = device({ boardId: 'pca9555_sh', label: 'Second board', vpinStart: 170 })
+        const allocations = computeVpinAllocations([], [], [], [...halDevices, overlappingDevice])
+        const source = 'RT DCD-16 Block Sensor: Yard block detector'
+        const conflicts = findVpinConflicts(allocations, 164, 16, source, 'device')
+        expect(conflicts.map(c => c.source)).toContain('PCA9555: Second board')
+    })
+})
+
+describe('parseHalDevicesFromAutomation — deterministic instance ids', () => {
+    it('parsing the same text twice produces the same instance ids', () => {
+        const block = generateHalDevicesBlock([device()])
+        const firstParse = parseHalDevicesFromAutomation(block)
+        const secondParse = parseHalDevicesFromAutomation(block)
+        expect(secondParse[0].instanceId).toBe(firstParse[0].instanceId)
+    })
+
+    it('a device behind a multiplexer resolves to the same parentMuxInstanceId across repeated parses', () => {
+        const mux = device({ instanceId: 'hal-mux', boardId: 'rt_i2c_iso_mux', label: 'Yard multiplexer', address: 0x71, vpinStart: null })
+        const child = device({ instanceId: 'hal-child', parentMuxInstanceId: 'hal-mux', muxChannel: 2 })
+        const block = generateHalDevicesBlock([mux, child])
+
+        const first = parseHalDevicesFromAutomation(block)
+        const second = parseHalDevicesFromAutomation(block)
+        const firstChild = first.find(d => d.boardId === 'rt_dcd_16')!
+        const secondChild = second.find(d => d.boardId === 'rt_dcd_16')!
+
+        expect(secondChild.parentMuxInstanceId).toBe(firstChild.parentMuxInstanceId)
     })
 })

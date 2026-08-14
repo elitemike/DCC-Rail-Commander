@@ -254,7 +254,7 @@ export class TurnoutEditorCustomElement {
     }
 
     // ── Add / remove entries ──────────────────────────────────────────────────
-    addEntry(): void {
+    async addEntry(): Promise<void> {
         if (this.editBuffer !== null) this.commitBuffer()
         const ts = this.state.turnouts
         const maxId = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
@@ -264,10 +264,18 @@ export class TurnoutEditorCustomElement {
         while (this.state.findVpinConflicts(maxPin, 1).length > 0) {
             maxPin += 1
         }
+
+        // New entries are always SERVO — pick the driving pin up front (Direct
+        // MCU pin, or a channel on a PWM-capable HAL board) before creating the
+        // entry, rather than silently assigning one and letting the user hunt
+        // for the pin field afterwards.
+        const pin = await this._pickPin(maxPin)
+        if (pin === null) return
+
         const newEntry: Turnout = {
             type: 'SERVO',
             id: maxId,
-            pin: maxPin,
+            pin,
             activeAngle: 400,
             inactiveAngle: 100,
             profile: 'Slow',
@@ -278,9 +286,25 @@ export class TurnoutEditorCustomElement {
         this.state.addTurnoutEntry(newEntry)
         const idx = this.state.turnouts.length - 1
         this._setBuffer(idx, this.state.turnouts[idx])
-        // New entries are always SERVO — jump straight into calibration so
-        // the user can set a sensible position before doing anything else.
+        // Jump straight into calibration so the user can set a sensible
+        // position before doing anything else.
         void this.openServoCalibration()
+    }
+
+    /** Opens the small pin-select popup, pre-filled with `defaultPin`. Returns the chosen pin, or null if cancelled. */
+    private async _pickPin(defaultPin: number): Promise<number | null> {
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../dialogs/pin-select-dialog').then(m => m.PinSelectDialog).catch(() => null),
+            model: {
+                pin: defaultPin,
+                role: 'servo',
+                message: 'New turnouts use a servo — choose the VPin that drives it.',
+            },
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return null
+        return (result.value as { pin: number }).pin
     }
 
     async removeEntryByIndex(index: number, event?: Event): Promise<void> {

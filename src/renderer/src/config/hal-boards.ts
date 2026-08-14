@@ -70,21 +70,28 @@ export const HAL_BOARD_CATALOG: HalBoardDefinition[] = [
         docsUrl: 'https://rosscoe.com/Documents/RT_I2C_ISO_MUX_operation_manual.pdf',
     },
     {
-        id: 'rt_pca9555_sh',
-        label: 'RT PCA9555 (headers soldered)',
-        vendor: 'Rosscoe',
+        id: 'pca9555_sh',
+        label: 'PCA9555',
+        vendor: 'Generic',
         chip: 'PCA9555',
         pinCount: 16,
         pinRole: 'sensor',
         isMultiplexer: false,
         addressMode: 'fixed-list',
         addressOptions: PCA9555_ADDRESS_OPTIONS,
-        defaultAddress: 0x20,
+        // Not 0x20/0x21 — EX-CommandStation pre-registers two MCP23017s at those
+        // addresses unconditionally at boot (see pin-vpin-allocations docs), and
+        // a PCA9555 declared there would just be silently ignored by DCC-EX's own
+        // HAL overlap check. 0x22 is DCC-EX's documented recommendation for a
+        // first generic PCA9555. (rt_dcd_16 keeps 0x20 — that's RT_DCD_16's own
+        // documented factory default, not a free choice, and it's normally wired
+        // behind a multiplexer sub-bus anyway, which sidesteps the collision.)
+        defaultAddress: 0x22,
     },
     {
-        id: 'rt_pca9685_sh',
-        label: 'RT PCA9685 (headers soldered)',
-        vendor: 'Rosscoe',
+        id: 'pca9685_sh',
+        label: 'PCA9685',
+        vendor: 'Generic',
         chip: 'PCA9685',
         pinCount: 16,
         pinRole: 'servo',

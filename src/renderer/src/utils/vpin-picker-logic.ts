@@ -8,6 +8,7 @@
  * "board + 1-based channel".
  */
 import { getHalBoard } from '../config/hal-boards'
+import type { HalBoardDefinition } from '../config/hal-boards'
 import type { HalDeviceInstance } from '../config/hal-devices'
 
 export const DIRECT_PIN_SOURCE = 'direct'
@@ -17,11 +18,17 @@ export interface VpinSourceChannel {
     channel: number
 }
 
-/** HAL devices that expose selectable VPin channels (excludes multiplexers, which consume none). */
-export function getBoardSources(halDevices: HalDeviceInstance[]): HalDeviceInstance[] {
+/**
+ * HAL devices that expose selectable VPin channels (excludes multiplexers, which consume none).
+ * When `role` is given, further restricts to boards whose `pinRole` matches — e.g. a servo
+ * turnout's pin has no sensible use for a sensor-only GPIO expander board, and vice versa.
+ */
+export function getBoardSources(halDevices: HalDeviceInstance[], role?: HalBoardDefinition['pinRole']): HalDeviceInstance[] {
     return halDevices.filter(d => {
         const board = getHalBoard(d.boardId)
-        return !!board && board.pinCount > 0 && d.vpinStart != null
+        if (!board || board.pinCount <= 0 || d.vpinStart == null) return false
+        if (role && board.pinRole !== role) return false
+        return true
     })
 }
 

@@ -237,10 +237,13 @@ test.describe('Servo Calibration', () => {
         expect(content).not.toContain('SERVO_TURNOUT(200, 25, 300')
     })
 
-    test('clicking "Add new turnout" opens the calibration modal immediately', async ({ workspacePage: page }) => {
+    test('clicking "Add new turnout" prompts for a pin, then opens the calibration modal', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
         await page.getByTitle('Add new turnout').click()
+
+        await expect(dialog(page).getByText('Select Pin', { exact: true })).toBeVisible()
+        await dialog(page).getByRole('button', { name: 'Continue' }).click()
 
         await expect(dialog(page).getByText('Calibrate Servo', { exact: true })).toBeVisible()
         // New entries default to activeAngle 400 / inactiveAngle 100.
