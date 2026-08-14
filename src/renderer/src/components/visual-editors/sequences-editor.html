@@ -73,7 +73,7 @@
                         </div>
 
                         <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                            <exrail-block-canvas kind="sequence" initial-body.bind="selectedSequence.body" defined.bind="defined"
+                            <exrail-block-canvas component.ref="blockCanvas" kind="sequence" initial-body.bind="selectedSequence.body" defined.bind="defined"
                                 on-body-change.bind="makeBodyChangeHandler(selectedSequence.id)"></exrail-block-canvas>
                         </div>
                         <textarea else value.two-way="selectedSequence.body"

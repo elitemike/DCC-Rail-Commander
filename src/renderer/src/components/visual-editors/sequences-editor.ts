@@ -12,6 +12,8 @@ export class SequencesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
+    /** Ref to the mounted exrail-block-canvas — reused across sequence selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
+    blockCanvas: { reload(body: string): void } | null = null
 
     private splitterObj: Splitter | null = null
     /** Guards the queueTask() below — this component (or its #sequences-splitter, gated behind activeTab === 'visual') can be torn down before the deferred Splitter creation runs, which would otherwise append a live widget into a detached/stale element and leave a broken splitterObj for detaching() to (potentially) throw on. */
@@ -56,6 +58,7 @@ export class SequencesEditorCustomElement {
 
     selectEntry(s: SequenceEntry): void {
         this.selectedId = s.id
+        this.blockCanvas?.reload(s.body)
     }
 
     /** Looks the sequence up by id at call time rather than closing over `s` — updateSequence() replaces the sequences array with new entry objects on every call, so a captured `s` reference goes stale after the first edit. */
@@ -123,6 +126,7 @@ export class SequencesEditorCustomElement {
         this.state.sequences = [...this.state.sequences, { id: nextId, body: '' }]
         this.state.syncAll()
         this.selectedId = nextId
+        this.blockCanvas?.reload('')
     }
 
     removeSequence(idx: number, event?: Event) {
@@ -132,6 +136,7 @@ export class SequencesEditorCustomElement {
         this.state.syncAll()
         if (this.selectedId === removedId) {
             this.selectedId = this.state.sequences[0]?.id ?? null
+            this.blockCanvas?.reload(this.selectedSequence?.body ?? '')
         }
     }
 
