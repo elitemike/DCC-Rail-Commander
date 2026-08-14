@@ -13,6 +13,11 @@
                 class.bind="activeConfigTab === 'wifi' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">
                 WiFi
             </button>
+            <button click.trigger="setConfigTab('accessories')"
+                class="px-3 py-2 text-xs font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeConfigTab === 'accessories' ? 'border-blue-400 text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">
+                Accessories
+            </button>
             <span if.bind="isCsb1"
                 class="ml-auto px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                 EX-CSB1
@@ -142,6 +147,11 @@
 
                     </div>
                 </div>
+            </div>
+
+            <!-- ── ACCESSORIES tab ────────────────────────────────────────────── -->
+            <div class="${activeConfigTab === 'accessories' ? 'flex flex-col' : 'hidden'}">
+                <hal-devices-form></hal-devices-form>
             </div>
 
         </div><!-- end scrollable body -->

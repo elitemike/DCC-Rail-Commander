@@ -24,6 +24,7 @@ import { ConfigEditorState } from './models/config-editor-state'
 
 // Config editor components
 import { MonacoEditorCustomElement } from './components/monaco-editor'
+import { VpinPickerCustomElement } from './components/vpin-picker'
 import { RosterEditorCustomElement } from './components/visual-editors/roster-editor'
 import { TurnoutEditorCustomElement } from './components/visual-editors/turnout-editor'
 import { ConfigHEditorCustomElement } from './components/visual-editors/config-h-editor'
@@ -42,6 +43,7 @@ import { AliasesEditorCustomElement } from './components/visual-editors/aliases-
 import { SerialMonitorCustomElement } from './components/serial-monitor'
 import { CommandstationConfigFormCustomElement } from './components/config-forms/commandstation-config-form'
 import { TrackManagerFormCustomElement } from './components/config-forms/track-manager-form'
+import { HalDevicesFormCustomElement } from './components/config-forms/hal-devices-form'
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
 import { ThrottlePanelCustomElement } from './components/throttle/throttle-panel'
 import { ThrottleCardCustomElement } from './components/throttle/throttle-card'
@@ -85,6 +87,7 @@ new Aurelia()
         Registration.singleton(ConfigEditorState, ConfigEditorState),
         // Config editor custom elements
         MonacoEditorCustomElement,
+        VpinPickerCustomElement,
         RosterEditorCustomElement,
         TurnoutEditorCustomElement,
         ConfigHEditorCustomElement,
@@ -101,6 +104,7 @@ new Aurelia()
         SerialMonitorCustomElement,
         CommandstationConfigFormCustomElement,
         TrackManagerFormCustomElement,
+        HalDevicesFormCustomElement,
         IOExpanderConfigFormCustomElement,
         ThrottlePanelCustomElement,
         ThrottleCardCustomElement,

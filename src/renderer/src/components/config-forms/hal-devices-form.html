@@ -1,0 +1,113 @@
+<template>
+    <div class="flex flex-col gap-4 max-w-3xl">
+
+        <!-- VPin summary + add-board picker -->
+            <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                        VPins in use: <span class="font-semibold text-gray-900 dark:text-white">${vpinsInUse}</span>
+                        &middot; Next free VPin: <span class="font-semibold text-gray-900 dark:text-white">${nextFreeVpin}</span>
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <select value.bind="boardToAdd"
+                            class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option repeat.for="b of catalog" value.bind="b.id">${b.label}</option>
+                        </select>
+                        <button click.trigger="addDevice()"
+                            class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                            Add Board
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div if.bind="devices.length === 0"
+                class="flex flex-col items-center justify-center gap-3 text-gray-600 py-16">
+                <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-sm">No accessory boards yet. Pick a board above and click "Add Board".</p>
+            </div>
+
+            <!-- Device rows -->
+            <div repeat.for="device of devices" data-board-id.bind="device.boardId" data-instance-id.bind="device.instanceId"
+                class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        ${boardLabel(device.boardId)}
+                    </span>
+                    <button click.trigger="removeDevice($index)" title="Remove board"
+                        class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">&times;</button>
+                </div>
+
+                <div class="flex items-end gap-3 flex-wrap">
+                    <!-- Friendly name -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+                        <input type="text" value.two-way="device.label" input.trigger="onFieldChange()"
+                            class="w-48 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                    </div>
+
+                    <!-- Address: fixed-list dropdown or bounded free entry -->
+                    <div class="flex flex-col gap-1" if.bind="board(device).addressMode === 'fixed-list'">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">I2C Address</label>
+                        <select data-field="address" value.bind="device.address" change.trigger="onFieldChange()"
+                            class="w-28 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option repeat.for="addr of board(device).addressOptions" model.bind="addr">${formatAddress(addr)}</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-1" if.bind="board(device).addressMode === 'free-entry'">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">I2C Address (${formatAddress(device.address)})</label>
+                        <input type="number" data-field="address" min.bind="board(device).addressRange[0]" max.bind="board(device).addressRange[1]"
+                            value.two-way="device.address" input.trigger="onFieldChange()"
+                            class="w-24 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                    </div>
+
+                    <!-- Behind multiplexer -->
+                    <div class="flex flex-col gap-1" if.bind="!board(device).isMultiplexer && multiplexers.length > 0">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Behind Multiplexer</label>
+                        <select data-field="parentMux" value.bind="device.parentMuxInstanceId" change.trigger="onFieldChange()"
+                            class="w-44 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option model.bind="''">(top-level bus)</option>
+                            <option repeat.for="m of multiplexers" model.bind="m.instanceId">${m.label}</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-1" if.bind="device.parentMuxInstanceId">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Channel</label>
+                        <select data-field="muxChannel" value.bind="device.muxChannel" change.trigger="onFieldChange()"
+                            class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                            <option repeat.for="ch of channelOptions(device)" model.bind="ch">${ch}</option>
+                        </select>
+                    </div>
+
+                    <!-- VPin start -->
+                    <div class="flex flex-col gap-1" if.bind="board(device).pinCount > 0">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">VPin Start</label>
+                        <input type="number" data-field="vpinStart" value.two-way="device.vpinStart" input.trigger="onFieldChange()"
+                            class="w-24 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                    </div>
+
+                    <span if.bind="board(device).pinCount > 0" class="text-xs text-gray-500 dark:text-gray-400 pb-1.5">
+                        Uses VPins ${device.vpinStart}&ndash;${device.vpinStart + board(device).pinCount - 1}
+                    </span>
+
+                    <button if.bind="board(device).pinRole === 'sensor'" click.trigger="addSensorsFromDevice(device)"
+                        class="ml-auto shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white transition-colors">
+                        Add ${board(device).pinCount} Sensors from this Device
+                    </button>
+                </div>
+
+                <!-- Conflict warnings -->
+                <div if.bind="addressConflict(device)"
+                    class="text-xs text-amber-600 dark:text-amber-400">
+                    ⚠ Another device on this bus already uses this I2C address.
+                </div>
+                <div repeat.for="conflict of conflictsFor(device)"
+                    class="text-xs text-amber-600 dark:text-amber-400">
+                    ⚠ VPin range overlaps ${conflict}
+                </div>
+            </div>
+
+    </div>
+</template>

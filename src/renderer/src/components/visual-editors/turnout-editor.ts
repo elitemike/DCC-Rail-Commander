@@ -231,7 +231,9 @@ export class TurnoutEditorCustomElement {
     }
 
     // ── Field blur handlers (commit on leave) ─────────────────────────────────
-    onFieldBlur(): void {
+    // Arrow-function field (not a method) so the bare reference stays bound to
+    // `this` when passed to <vpin-picker on-commit.bind="onFieldBlur">.
+    onFieldBlur = (): void => {
         this.commitBuffer()
     }
 
@@ -257,7 +259,11 @@ export class TurnoutEditorCustomElement {
         const ts = this.state.turnouts
         const maxId = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
         const servoEntries = ts.filter((t): t is ServoTurnout => t.type === 'SERVO')
-        const maxPin = servoEntries.length > 0 ? Math.max(...servoEntries.map(t => t.pin)) + 1 : 101
+        let maxPin = servoEntries.length > 0 ? Math.max(...servoEntries.map(t => t.pin)) + 1 : 101
+        // Skip past any VPin already claimed by a sensor, signal, or HAL accessory board.
+        while (this.state.findVpinConflicts(maxPin, 1).length > 0) {
+            maxPin += 1
+        }
         const newEntry: Turnout = {
             type: 'SERVO',
             id: maxId,

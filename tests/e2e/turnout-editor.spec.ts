@@ -142,7 +142,8 @@ test.describe('Turnout Editor', () => {
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
-        const defaultStateSelect = page.locator('#turnout-splitter').getByRole('combobox').nth(1)
+        const defaultStateSelect = page.locator('#turnout-splitter')
+            .locator('label', { hasText: /Default\s+State/i }).locator('..').locator('select')
         await defaultStateSelect.selectOption('THROWN')
 
         await openAutomationEditor(page)
@@ -156,7 +157,8 @@ test.describe('Turnout Editor', () => {
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
-        const defaultStateSelect = page.locator('#turnout-splitter').getByRole('combobox').nth(1)
+        const defaultStateSelect = page.locator('#turnout-splitter')
+            .locator('label', { hasText: /Default\s+State/i }).locator('..').locator('select')
         await defaultStateSelect.selectOption('THROWN')
         await defaultStateSelect.selectOption('CLOSED')
 

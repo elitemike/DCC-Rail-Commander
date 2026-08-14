@@ -486,6 +486,29 @@ const EXRAIL_BODY_COMPLETIONS: CompletionSnippet[] = [
             note: 'DONE is a standalone keyword and does not take arguments.',
         },
     },
+    {
+        label: 'HAL',
+        detail: 'HAL(deviceType, vpin, pinCount, address)',
+        documentation: 'Declare an I2C HAL device (expander, servo driver, multiplexer-attached board) without needing myHal.cpp.',
+        insertText: 'HAL(${1:PCA9555}, ${2:164}, ${3:16}, ${4:0x20})',
+        hover: {
+            title: 'HAL',
+            description: 'Declares a HAL device — an I2C GPIO/servo expander or similar accessory board — starting at the given VPin. Behind an I2C multiplexer, replace the address with `{I2CMux_n, SubBus_n, address}`.',
+            example: 'HAL(PCA9555, 164, 16, 0x20)\nHAL(PCA9555, 180, 16, {I2CMux_1, SubBus_2, 0x20})',
+            note: 'The Accessories tab on Device Settings manages this for supported boards — hand-edit here only for devices outside that catalog.',
+        },
+    },
+    {
+        label: 'JMRI_SENSOR',
+        detail: 'JMRI_SENSOR(vpin[, count])',
+        documentation: 'Expose a range of VPins as <S> sensors visible to JMRI.',
+        insertText: 'JMRI_SENSOR(${1:164}, ${2:16})',
+        hover: {
+            title: 'JMRI_SENSOR',
+            description: 'Creates JMRI-visible sensors for a VPin (or contiguous range of VPins) — typically the range declared by a HAL() device.',
+            example: 'JMRI_SENSOR(164, 16)',
+        },
+    },
 ]
 
 const EXRAIL_BLOCK_COMPLETIONS: CompletionSnippet[] = [
