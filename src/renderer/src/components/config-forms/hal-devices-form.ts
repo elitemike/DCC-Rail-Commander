@@ -73,6 +73,21 @@ export class HalDevicesFormCustomElement {
         return '0x' + addr.toString(16).padStart(2, '0')
     }
 
+    /** Commits a hex address typed into a free-entry board's I2C Address field. Reverts to the last valid value if out of range or unparsable. */
+    onAddressBlur(device: HalDeviceInstance, event: Event): void {
+        const target = event.target as HTMLInputElement
+        const board = this.board(device)
+        const range = board?.addressRange
+        if (range) {
+            const n = parseInt(target.value, 16)
+            if (!isNaN(n) && n >= range[0] && n <= range[1]) {
+                device.address = n
+                this.onFieldChange()
+            }
+        }
+        target.value = this.formatAddress(device.address)
+    }
+
     boardLabel(boardId: string): string {
         return getHalBoard(boardId)?.label ?? boardId
     }
