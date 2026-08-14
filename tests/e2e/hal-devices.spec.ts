@@ -72,3 +72,87 @@ test.describe('Accessories — HAL Devices', () => {
             .toContainText(`HAL(PCA9555, ${vpinStart}, 16, {I2CMux_1, SubBus_2, 0x20})`)
     })
 })
+
+/** Adds a PCA9685 board (defaults to address 0x40, VPin 100) and returns once its row is visible. */
+async function addPca9685(page: import('@playwright/test').Page) {
+    await page.locator('hal-devices-form select').first().selectOption({ label: 'PCA9685' })
+    await page.locator('hal-devices-form').getByRole('button', { name: 'Add Board' }).click()
+    const deviceRow = page.locator('hal-devices-form [data-board-id="pca9685_sh"]')
+    await expect(deviceRow).toBeVisible()
+    return deviceRow
+}
+
+/** Adds a new (always-SERVO) turnout, picks the given board's channel 1 in the pin-select popup, then saves calibration unchanged. */
+async function addTurnoutOnBoardChannel(page: import('@playwright/test').Page, boardOptionLabel: string) {
+    await page.getByText('Turnouts', { exact: true }).first().click()
+    await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+    await page.getByTitle('Add new turnout').click()
+
+    const pinDialog = page.getByRole('dialog')
+    await expect(pinDialog.getByText('Select Pin', { exact: true })).toBeVisible()
+    await pinDialog.locator('[data-field="pin-source"]').selectOption({ label: boardOptionLabel })
+    await pinDialog.getByRole('button', { name: 'Continue' }).click()
+
+    await expect(pinDialog.getByText('Calibrate Servo', { exact: true })).toBeVisible()
+    await pinDialog.getByRole('button', { name: 'Save' }).click()
+    await expect(pinDialog).not.toBeVisible()
+}
+
+test.describe('Accessories — VPin conflicts with consumers', () => {
+    test('a turnout using a HAL board\'s own channel does not trigger a false VPin overlap warning', async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        const deviceRow = await addPca9685(page)
+        await expect(deviceRow.locator('[data-field="vpinStart"]')).toHaveValue('100')
+
+        // Channel 1 of a board starting at VPin 100 is VPin 100 itself.
+        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+
+        // Back on Accessories, the board's own row must show no conflict warning —
+        // the new turnout is legitimately consuming one of its own channels.
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        await expect(
+            page.locator('hal-devices-form [data-board-id="pca9685_sh"]', { hasText: 'VPin range overlaps' }),
+        ).toHaveCount(0)
+    })
+
+    test('a turnout on a HAL board channel shows the board (not Direct MCU pin) as soon as it is added', async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        await addPca9685(page)
+
+        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+
+        // The newly-added turnout is auto-selected right after Save — this is
+        // its very first render, which is exactly where the picker previously
+        // fell back to showing "Direct MCU pin" instead of the board.
+        const pinSourceSelect = page.locator('#turnout-splitter [data-field="pin-source"]')
+        await expect(pinSourceSelect).not.toHaveValue('Direct MCU pin')
+    })
+
+    test('switching to another turnout and back still shows the board on the pin picker', async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        await addPca9685(page)
+
+        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+
+        const pinSourceSelect = page.locator('#turnout-splitter [data-field="pin-source"]')
+
+        // Select a different (seeded, Direct-pin) turnout, then switch back —
+        // this reuses the same picker instance (both are SERVO turnouts) and
+        // re-derives its source/channel from the newly-bound value.
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await expect(pinSourceSelect).toHaveValue('Direct MCU pin')
+
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'New Turnout' }).click()
+        await expect(pinSourceSelect).not.toHaveValue('Direct MCU pin')
+    })
+})

@@ -115,9 +115,12 @@ test.describe('Turnout Editor', () => {
     test('adding entry via visual appears in raw tab', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        // Click + to add a new turnout — new entries are always SERVO, so the
-        // calibration modal opens immediately; dismiss it to get to the form.
+        // Click + to add a new turnout — a small pin-select popup opens first,
+        // then (since new entries are always SERVO) the calibration modal;
+        // accept the default pin and dismiss calibration to get to the form.
         await page.getByTitle('Add new turnout').click()
+        await expect(page.getByRole('dialog').getByText('Select Pin', { exact: true })).toBeVisible()
+        await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click()
         await expect(page.getByRole('dialog').getByText('Calibrate Servo', { exact: true })).toBeVisible()
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 

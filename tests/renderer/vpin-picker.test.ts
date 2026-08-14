@@ -9,7 +9,7 @@ import {
 import type { HalDeviceInstance } from '../../src/renderer/src/config/hal-devices'
 
 const boardA: HalDeviceInstance = { instanceId: 'hal-a', boardId: 'rt_dcd_16', label: 'Yard sensor', address: 0x20, vpinStart: 164 }
-const boardB: HalDeviceInstance = { instanceId: 'hal-b', boardId: 'rt_pca9685_sh', label: 'Servo driver', address: 0x40, vpinStart: 200 }
+const boardB: HalDeviceInstance = { instanceId: 'hal-b', boardId: 'pca9685_sh', label: 'Servo driver', address: 0x40, vpinStart: 200 }
 const muxDevice: HalDeviceInstance = { instanceId: 'hal-mux', boardId: 'rt_i2c_iso_mux', label: 'Mux', address: 0x71, vpinStart: null }
 
 describe('getBoardSources', () => {
@@ -24,6 +24,16 @@ describe('getBoardSources', () => {
 
     it('returns an empty array for an empty device list', () => {
         expect(getBoardSources([])).toEqual([])
+    })
+
+    it('with a role filter, excludes boards whose pinRole does not match', () => {
+        // boardA is rt_dcd_16 (pinRole 'sensor'), boardB is pca9685_sh (pinRole 'servo').
+        expect(getBoardSources([boardA, boardB], 'servo')).toEqual([boardB])
+        expect(getBoardSources([boardA, boardB], 'sensor')).toEqual([boardA])
+    })
+
+    it('with no role filter, includes boards of every pinRole', () => {
+        expect(getBoardSources([boardA, boardB])).toEqual([boardA, boardB])
     })
 })
 

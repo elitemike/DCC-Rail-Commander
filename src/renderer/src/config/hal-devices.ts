@@ -30,8 +30,18 @@ export interface HalDeviceInstance {
     muxChannel?: number
 }
 
-function nextInstanceId(): string {
-    return `hal-${Math.random().toString(36).slice(2, 10)}`
+/**
+ * Deterministic id for a device parsed back out of myAutomation.h — the same text must always
+ * parse to the same ids. `ConfigEditorState.halDevices` is a getter that re-parses the raw text
+ * fresh on every access (see hal-devices-form.ts's doc comment), so a random id here would change
+ * between one access and the next; a consumer that reads it twice in quick succession — e.g.
+ * vpin-picker deriving `source` from one read, then rendering its `<option>` list from a second —
+ * would then never find a match, and silently fall back to "Direct MCU pin" even when the value
+ * is really a board+channel. `index` is the device's position in parse order, which is stable for
+ * identical input text.
+ */
+function parsedInstanceId(boardId: string, address: number, index: number): string {
+    return `hal-${boardId}-${formatHex(address)}-${index}`
 }
 
 function formatHex(n: number): string {
@@ -93,11 +103,12 @@ export function parseHalDevicesFromAutomation(content: string): HalDeviceInstanc
     for (const line of lines) {
         const m = HAL_MUX_COMMENT_RE.exec(line)
         if (!m) continue
+        const address = parseInt(m[2], 16)
         devices.push({
-            instanceId: nextInstanceId(),
+            instanceId: parsedInstanceId(m[1], address, devices.length),
             boardId: m[1],
             label: unescapeLabel(m[3]),
-            address: parseInt(m[2], 16),
+            address,
             vpinStart: null,
         })
     }
@@ -127,7 +138,7 @@ export function parseHalDevicesFromAutomation(content: string): HalDeviceInstanc
         }
 
         devices.push({
-            instanceId: nextInstanceId(),
+            instanceId: parsedInstanceId(m[1], address, devices.length),
             boardId: m[1],
             label: unescapeLabel(m[2]),
             address,
@@ -147,6 +158,14 @@ export interface VpinAllocation {
     count: number
     /** Human-readable owner, shown in conflict warnings. */
     source: string
+    /**
+     * 'device' = the whole VPin range a HAL board makes available; 'consumer' = a single VPin
+     * actually claimed by a turnout/sensor/signal. A consumer sitting inside a device's range is
+     * the normal, expected way of using that board's channels — not a conflict — so callers that
+     * want genuine double-use detection for a device's own range (see `onlyKind` below) must
+     * compare it only against other devices, never against consumers.
+     */
+    kind: 'device' | 'consumer'
 }
 
 /** Aggregates every VPin-consuming thing in the config into one flat list. */
@@ -160,19 +179,19 @@ export function computeVpinAllocations(
 
     for (const t of turnouts) {
         if ('pin' in t && t.pin > 0) {
-            allocations.push({ start: t.pin, count: 1, source: `Turnout: ${t.description}` })
+            allocations.push({ start: t.pin, count: 1, source: `Turnout: ${t.description}`, kind: 'consumer' })
         }
     }
 
     for (const s of sensors) {
-        allocations.push({ start: s.pin, count: 1, source: `Sensor: ${s.description}` })
+        allocations.push({ start: s.pin, count: 1, source: `Sensor: ${s.description}`, kind: 'consumer' })
     }
 
     for (const sig of signals) {
         const aspects: Array<[string, number]> = [['red', sig.red], ['amber', sig.amber], ['green', sig.green]]
         for (const [role, pin] of aspects) {
             if (pin > 0) {
-                allocations.push({ start: pin, count: 1, source: `Signal (${role}): ${sig.description ?? ''}` })
+                allocations.push({ start: pin, count: 1, source: `Signal (${role}): ${sig.description ?? ''}`, kind: 'consumer' })
             }
         }
     }
@@ -180,7 +199,7 @@ export function computeVpinAllocations(
     for (const d of halDevices) {
         const board: HalBoardDefinition | undefined = getHalBoard(d.boardId)
         if (!board || board.pinCount === 0 || d.vpinStart == null) continue
-        allocations.push({ start: d.vpinStart, count: board.pinCount, source: `${board.label}: ${d.label}` })
+        allocations.push({ start: d.vpinStart, count: board.pinCount, source: `${board.label}: ${d.label}`, kind: 'device' })
     }
 
     return allocations
@@ -190,15 +209,26 @@ function rangesOverlap(aStart: number, aCount: number, bStart: number, bCount: n
     return aStart < bStart + bCount && bStart < aStart + aCount
 }
 
-/** Returns every allocation that overlaps the candidate range, excluding one by source (e.g. the row being edited). */
+/**
+ * Returns every allocation that overlaps the candidate range, excluding one by source (e.g. the
+ * row being edited). Pass `onlyKind` to restrict the comparison to allocations of that kind —
+ * e.g. a HAL device checking its own range for conflicts should pass `onlyKind: 'device'` so it's
+ * only flagged against other boards' overlapping ranges, not against every consumer legitimately
+ * using one of its own channels (see `VpinAllocation.kind`). Omit it for the "is this candidate
+ * VPin free" case (auto-picking a new pin), which should still avoid both.
+ */
 export function findVpinConflicts(
     allocations: VpinAllocation[],
     candidateStart: number,
     candidateCount: number,
     excludeSource?: string,
+    onlyKind?: VpinAllocation['kind'],
 ): VpinAllocation[] {
     return allocations.filter(
-        a => a.source !== excludeSource && rangesOverlap(a.start, a.count, candidateStart, candidateCount),
+        a =>
+            a.source !== excludeSource &&
+            (!onlyKind || a.kind === onlyKind) &&
+            rangesOverlap(a.start, a.count, candidateStart, candidateCount),
     )
 }
 
