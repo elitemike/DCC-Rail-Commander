@@ -357,6 +357,50 @@ test.describe('Turnout Editor', () => {
         await expect(refreshedAliasInput).toHaveValue('')
     })
 
+    test('an existing alias is selectable from the alias dropdown, not just typeable', async ({ workspacePage: page }) => {
+        // Give turnout 201 (Yard Entry) an alias so it shows up as an option
+        // while editing turnout 200 (Main Line Junction).
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, 'ALIAS(YARD_ENTRY_SW, 201) // type: Turnout')
+
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.click()
+        // Open the ComboBox popup (the dropdown icon Syncfusion renders next to the input)
+        // and pick the suggestion, rather than typing the alias name by hand.
+        await aliasInput.locator('xpath=following-sibling::span[contains(@class, "e-ddl-icon")]').click()
+        // Syncfusion's popup fades in — clicking an option before the open animation
+        // settles is swallowed as a click-outside (closes the popup without selecting).
+        await page.waitForTimeout(300)
+        await page.getByRole('option', { name: 'YARD_ENTRY_SW', exact: true }).click()
+
+        await expect(aliasInput).toHaveValue('YARD_ENTRY_SW')
+
+        // Since alias names must stay unique, syncAliasForId reassigns the
+        // existing ALIAS entry's value from 201 to 200 rather than duplicating it.
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(YARD_ENTRY_SW, 200) // type: Turnout')
+    })
+
+    test('rejects committing a turnout ID that collides with another turnout in the visual editor', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        const idInput = page
+            .locator('div:has(> label:has-text("ID")) input[type="number"]')
+            .first()
+        await idInput.fill('201')
+        await idInput.blur()
+
+        await expect(page.getByText('Turnout ID 201 is already used by "Yard Entry (201)"')).toBeVisible()
+        // The ID field is not persisted — the sidebar entry keeps its original ID.
+        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (200)' })).toBeVisible()
+    })
+
     // ── Invalid lines: commenting + toast ────────────────────────────────────
 
     test('invalid SERVO_TURNOUT line is commented out when switching to visual', async ({ workspacePage: page }) => {

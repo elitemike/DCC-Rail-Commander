@@ -132,6 +132,13 @@ function stripQuotes(value: string): string {
     return value
 }
 
+/** Every param kind that refers to another object by numeric ID *or* an ALIAS(name) identifier. */
+const REF_KINDS = new Set<BlockParamKind>(['turnoutRef', 'sensorRef', 'signalRef', 'rosterRef', 'routeOrSequenceRef'])
+
+function isPlainInt(s: string): boolean {
+    return /^-?\d+$/.test(s)
+}
+
 /**
  * Parses a route/sequence `body` string (the raw text between `ROUTE(...)`/`SEQUENCE(...)`
  * and the file's terminating `DONE`, as produced by `parseRoutesFromFile`/`parseSequencesFromFile`
@@ -199,7 +206,15 @@ export function parseBody(bodyText: string, kind: 'route' | 'sequence', registry
         const paramValues: Record<string, string | number> = {}
         def.params.forEach((p, i) => {
             const value = argValues[i]
-            paramValues[p.name] = p.kind === 'string' ? stripQuotes(value) : Number(value)
+            if (p.kind === 'string') {
+                paramValues[p.name] = stripQuotes(value)
+            } else if (REF_KINDS.has(p.kind)) {
+                // A ref arg is either a raw numeric ID or an ALIAS(name) identifier —
+                // e.g. THROW(mysidingpoint). Number()-coercing the latter produced NaN.
+                paramValues[p.name] = isPlainInt(value) ? Number(value) : value
+            } else {
+                paramValues[p.name] = Number(value)
+            }
         })
 
         const stmt: StmtNode = { blockTypeId: rawCommand, paramValues }

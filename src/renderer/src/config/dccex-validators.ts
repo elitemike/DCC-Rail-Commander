@@ -11,7 +11,7 @@
 
 import * as monaco from 'monaco-editor'
 import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
-import { inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, type AliasTargetType } from '../utils/myAutomationParser'
+import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, type AliasEntry, type AliasTargetType, type ObjectIdCollections } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
 
@@ -436,6 +436,35 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
     }
 }
 
+// ── Turnout ID uniqueness (myTurnouts.h) ──────────────────────────────────────
+
+/**
+ * SERVO_TURNOUT/TURNOUT/PIN_TURNOUT all share one ID namespace (see
+ * `collectObjectIdReferences` — a Turnout is matched purely on `id`, regardless
+ * of which of the three macros defined it). Flags the 2nd+ occurrence of any ID.
+ */
+function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerData[]): void {
+    const seen = new Set<number>()
+
+    for (const macroName of ['SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT']) {
+        for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, macroName)) {
+            if (macroName === 'TURNOUT' && m.index > 0 && /\w/.test(text[m.index - 1])) continue
+
+            const idArg = parseArgSpans(argsRaw, innerStart)[0]
+            if (!idArg || !isInt(idArg.value)) continue
+
+            const id = Number(idArg.value)
+            if (seen.has(id)) {
+                out.push(makeMarker(text, idArg.start, idArg.end,
+                    `Turnout ID ${id} is already used by another entry in this file.`,
+                ))
+            } else {
+                seen.add(id)
+            }
+        }
+    }
+}
+
 // ── ALIAS validator (myAliases.h) ─────────────────────────────────────────────
 
 /**
@@ -475,6 +504,35 @@ function validateAlias(text: string, out: monaco.editor.IMarkerData[]): void {
             if (!valueCheck.ok) {
                 out.push(makeMarker(text, value.start, value.end, valueCheck.reason))
             }
+        }
+    }
+}
+
+// ── ALIAS target-reference validator (myAliases.h) ────────────────────────────
+
+/** Data an ALIAS's numeric value is checked against — same shape as `ExrailCompletionData`. */
+interface AliasTargetData extends ObjectIdCollections {
+    aliases: AliasEntry[]
+}
+
+/**
+ * Flags an ALIAS whose numeric value doesn't match any currently configured
+ * Roster/Turnout/Sensor/Route/Sequence ID — the alias would resolve to nothing.
+ */
+function validateAliasTargets(text: string, out: monaco.editor.IMarkerData[], data: AliasTargetData): void {
+    for (const { argsRaw, innerStart } of eachMacroCall(text, 'ALIAS')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+        if (args.length < 2) continue // value omitted — EX-RAIL auto-assigns one, nothing to check
+
+        const value = args[1]
+        if (!isInt(value.value)) continue // malformed value already flagged by validateAliasValue
+
+        const n = Number(value.value)
+        if (collectObjectIdReferences(n, data).length === 0) {
+            out.push(makeMarker(text, value.start, value.end,
+                `Alias value ${n} does not match any configured Roster/Turnout/Sensor/Route/Sequence ID.`,
+                monaco.MarkerSeverity.Warning,
+            ))
         }
     }
 }
@@ -631,6 +689,7 @@ const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerD
         validateServoTurnout(text, out)
         validateTurnout(text, out)
         validatePinTurnout(text, out)
+        validateTurnoutIdUniqueness(text, out)
     },
 }
 
@@ -669,6 +728,20 @@ function validateModel(model: monaco.editor.ITextModel): void {
         }
     }
 
+    if (filename === 'myAliases.h') {
+        const state = getSharedConfigEditorState()
+        if (state) {
+            validateAliasTargets(text, markers, {
+                aliases: state.aliases,
+                roster: state.roster,
+                turnouts: state.turnouts,
+                sensors: state.sensors,
+                routes: state.routes,
+                sequences: state.sequences,
+            })
+        }
+    }
+
     monaco.editor.setModelMarkers(model, OWNER, markers)
 }
 
@@ -679,7 +752,8 @@ function validateModel(model: monaco.editor.ITextModel): void {
  * marker data.  Use only in unit tests — not part of the public runtime API.
  *
  * `exrailData`, when supplied, also runs the EXRAIL object-reference validator
- * for myAutomation.h / myRoutes.h / mySequences.h (THROW/CLOSE/AT/SETLOCO/etc.).
+ * for myAutomation.h / myRoutes.h / mySequences.h (THROW/CLOSE/AT/SETLOCO/etc.),
+ * or the ALIAS target-reference validator for myAliases.h.
  */
 export function _runValidatorsForTest(
     filename: string,
@@ -695,6 +769,10 @@ export function _runValidatorsForTest(
 
     if (isExrailCompletionFile(filename) && exrailData) {
         validateExrailReferences(text, markers, exrailData)
+    }
+
+    if (filename === 'myAliases.h' && exrailData) {
+        validateAliasTargets(text, markers, exrailData)
     }
 
     return markers.map((m) => ({ message: m.message, severity: m.severity }))

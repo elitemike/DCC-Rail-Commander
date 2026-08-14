@@ -268,4 +268,44 @@ describe('TurnoutEditorCustomElement alias integration', () => {
         // syncAliasForId must also see the coerced numeric ID, not the raw string.
         expect(syncAliasForId).toHaveBeenCalledWith(200, 3, '', 'Turnout', '')
     })
+
+    it('rejects committing an ID that collides with another turnout and does not persist', () => {
+        const other = {
+            type: 'SERVO' as const,
+            id: 201,
+            pin: 26,
+            activeAngle: 410,
+            inactiveAngle: 205,
+            profile: 'Fast' as const,
+            description: 'Yard Entry',
+            comment: '',
+            defaultState: 'CLOSED' as const,
+        }
+        const editing = {
+            type: 'SERVO' as const,
+            id: 200,
+            pin: 25,
+            activeAngle: 410,
+            inactiveAngle: 205,
+            profile: 'Slow' as const,
+            description: 'Main Line Junction',
+            comment: '',
+            defaultState: 'CLOSED' as const,
+        }
+        const updateTurnoutEntry = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [editing, other], updateTurnoutEntry },
+            editBufferIndex: 0,
+            editBuffer: { ...editing, id: 201 },
+            aliasInput: '',
+            errorMessage: '',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).not.toHaveBeenCalled()
+        expect(editor.errorMessage).toContain('201')
+        expect(editor.errorMessage).toContain('Yard Entry')
+    })
 })
