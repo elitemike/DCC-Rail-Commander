@@ -98,6 +98,36 @@ async function addTurnoutOnBoardChannel(page: import('@playwright/test').Page, b
     await expect(pinDialog).not.toBeVisible()
 }
 
+test.describe('Accessories — free-entry I2C address field', () => {
+    test('accepts a hex address, generates it in the HAL() line, and reverts an out-of-range entry', async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        const deviceRow = await addPca9685(page)
+
+        const addressField = deviceRow.locator('[data-field="address"]')
+        await expect(addressField).toHaveValue('0x40')
+
+        // Typing another in-range hex address commits on blur.
+        await addressField.fill('0x41')
+        await addressField.blur()
+        await expect(addressField).toHaveValue('0x41')
+
+        await openAutomationRaw(page)
+        await expect(page.locator('automation-editor div.monaco-editor')).toContainText('HAL(PCA9685, 100, 16, 0x41)')
+
+        // Out-of-range entry (PCA9685 range is 0x40-0x7f) is rejected and reverts to the last valid value.
+        await openDeviceSettings(page)
+        await openAccessoriesTab(page)
+        const deviceRowAgain = page.locator('hal-devices-form [data-board-id="pca9685_sh"]')
+        const addressFieldAgain = deviceRowAgain.locator('[data-field="address"]')
+        await addressFieldAgain.fill('0x99')
+        await addressFieldAgain.blur()
+        await expect(addressFieldAgain).toHaveValue('0x41')
+    })
+})
+
 test.describe('Accessories — VPin conflicts with consumers', () => {
     test('a turnout using a HAL board\'s own channel does not trigger a false VPin overlap warning', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
