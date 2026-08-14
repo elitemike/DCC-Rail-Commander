@@ -38,6 +38,7 @@ import { SignalsEditorCustomElement } from './components/visual-editors/signals-
 import { RoutesEditorCustomElement } from './components/visual-editors/routes-editor'
 import { SequencesEditorCustomElement } from './components/visual-editors/sequences-editor'
 import { AliasesEditorCustomElement } from './components/visual-editors/aliases-editor'
+import { ExrailBlockCanvasCustomElement } from './components/visual-editors/exrail-block-canvas'
 
 // Per-product visual config forms
 import { SerialMonitorCustomElement } from './components/serial-monitor'
@@ -98,6 +99,7 @@ new Aurelia()
         RoutesEditorCustomElement,
         SequencesEditorCustomElement,
         AliasesEditorCustomElement,
+        ExrailBlockCanvasCustomElement,
         ConfirmDialog,
         CompileProgressCustomElement,
         CompileOutputTerminalCustomElement,
