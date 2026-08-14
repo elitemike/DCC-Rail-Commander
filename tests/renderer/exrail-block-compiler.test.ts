@@ -56,6 +56,20 @@ describe('parseBody / compileBody round-trip', () => {
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe('')
     })
 
+    it('parses an alias identifier as a ref param value, not NaN', () => {
+        const body = 'THROW(mysidingpoint)\nCLOSE(201)'
+        const graph = parseOk(body)
+        const throwNode = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        expect(throwNode?.info.paramValues.turnoutId).toBe('mysidingpoint')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('parses a numeric ref param value as a number', () => {
+        const graph = parseOk('THROW(200)')
+        const throwNode = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        expect(throwNode?.info.paramValues.turnoutId).toBe(200)
+    })
+
     it('graph structure is preserved through parseBody(compileBody(graph))', () => {
         const body = 'IF(1)\n  THROW(200)\nELSE\n  CLOSE(200)\nENDIF\nDELAY(100)'
         const graph = parseOk(body)

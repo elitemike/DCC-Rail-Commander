@@ -14,7 +14,8 @@ import {
 } from '@syncfusion/ej2-diagrams'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { parseBody, compileBody } from './exrail-block-compiler'
-import type { BlockTypeDef, CanvasNodeInfo, DefinedObjects, GraphConnector, ParsedGraph } from './exrail-block-compiler'
+import type { BlockParamDef, BlockTypeDef, CanvasNodeInfo, DefinedObjects, GraphConnector, ParsedGraph } from './exrail-block-compiler'
+import { parseAliasNumericValue } from '../../utils/myAutomationParser'
 
 const NODE_W = 180
 const NODE_H = 54
@@ -162,10 +163,55 @@ export class ExrailBlockCanvasCustomElement {
     }
 
     definedChanged(): void {
+        this._normalizeExistingNodes()
         if (!this.palette) return
         this.palette.palettes = this._buildPaletteModels()
         this.palette.dataBind()
         queueTask(() => this._labelPaletteSymbols())
+    }
+
+    /**
+     * A `turnoutRef` param loaded (or dropped) as a raw numeric id gets hidden from
+     * `optionsFor()`'s dropdown the moment an alias covers that id (see optionsFor's dedupe) —
+     * left as-is, the `<select>` would have no matching option and show "N (not found)" even
+     * though the reference is perfectly valid, just no longer the canonical way to write it.
+     * Rewrites any such stored id to the alias name so the dropdown selects correctly, and
+     * recompiles so the file itself is kept in the same canonical form the dropdown now shows.
+     * Runs after every diagram (re)build and whenever `defined` changes (an alias can be added
+     * after the canvas already loaded a body referencing that turnout by id).
+     */
+    private _normalizeExistingNodes(): void {
+        if (!this.diagram) return
+        const d = this.defined
+        if (!d) return
+        const aliasByTurnoutId = new Map<number, string>()
+        for (const a of d.aliases) {
+            if (a.aliasType && a.aliasType !== 'Turnout') continue
+            const id = parseAliasNumericValue(a.value)
+            if (id !== null && !aliasByTurnoutId.has(id)) aliasByTurnoutId.set(id, a.name)
+        }
+        if (aliasByTurnoutId.size === 0) return
+
+        let changed = false
+        for (const node of this.diagram.nodes) {
+            const info = node.addInfo as CanvasNodeInfo | undefined
+            if (!info) continue
+            const def = this._registryById(info.blockTypeId)
+            if (!def) continue
+            for (const p of def.params) {
+                if (p.kind !== 'turnoutRef') continue
+                const v = info.paramValues[p.name]
+                const aliasName = typeof v === 'number' ? aliasByTurnoutId.get(v) : undefined
+                if (aliasName === undefined) continue
+                info.paramValues[p.name] = aliasName
+                changed = true
+                if (node.annotations?.[0]) node.annotations[0].content = this._nodeLabel(def, info.paramValues)
+            }
+        }
+        if (changed) {
+            this.diagram.dataBind()
+            this._commit()
+        }
     }
 
     // ── Palette ────────────────────────────────────────────────────────────
@@ -424,6 +470,7 @@ export class ExrailBlockCanvasCustomElement {
         })
         this.diagram.appendTo(`#${this._diagramElId}`)
         this._syncTerminalDoneNode()
+        this._normalizeExistingNodes()
     }
 
     // ── Drop / auto-snap ──────────────────────────────────────────────────
@@ -735,6 +782,63 @@ export class ExrailBlockCanvasCustomElement {
 
     // ── Param side panel ───────────────────────────────────────────────────
 
+    /**
+     * Known-value options for a `turnoutRef` param: one entry per configured turnout, plus one
+     * per alias that targets a turnout (or has no declared type, so it's still assignable) — the
+     * canvas must only ever emit a reference that resolves to something real, never free text.
+     * A turnout that already has an alias is listed ONLY by that alias, not also by id/description
+     * — EXRAIL scripts should read by name where a name exists, and showing both would just be
+     * two entries for the same target with no way to tell them apart at a glance.
+     * If `currentValue` doesn't match any of those (e.g. the turnout/alias was since deleted, or
+     * it's a raw id that a later-added alias has since superseded), it's kept as a leading
+     * "not found" option so the picker doesn't silently discard it.
+     */
+    optionsFor(param: BlockParamDef, currentValue: string | number): Array<{ value: string | number; label: string }> {
+        if (param.kind !== 'turnoutRef') return []
+        const d = this.defined
+        if (!d) return []
+        const turnoutAliases = d.aliases.filter((a) => !a.aliasType || a.aliasType === 'Turnout')
+        const aliasedIds = new Set(
+            turnoutAliases
+                .map((a) => parseAliasNumericValue(a.value))
+                .filter((id): id is number => id !== null),
+        )
+        const turnoutOptions = d.turnouts
+            .filter((t) => !aliasedIds.has(t.id))
+            .map((t) => ({
+                value: t.id,
+                label: t.description ? `${t.description} (${t.id})` : `Turnout ${t.id}`,
+            }))
+        const aliasOptions = turnoutAliases.map((a) => {
+            const targetId = parseAliasNumericValue(a.value)
+            return { value: a.name, label: targetId !== null ? `${a.name} (${targetId})` : `${a.name} (alias)` }
+        })
+        const options: Array<{ value: string | number; label: string }> = [...turnoutOptions, ...aliasOptions]
+        if (currentValue !== '' && currentValue !== undefined && !options.some((o) => o.value === currentValue)) {
+            options.unshift({ value: currentValue, label: `${currentValue} (not found)` })
+        }
+        return options
+    }
+
+    /** Refreshes the selected node's on-canvas label and recompiles — the tail shared by every param-commit path below. */
+    private _refreshNodeLabelAndCommit(): void {
+        const sel = this.selectedNode
+        if (!sel || !this.diagram || !this.selectedNodeId) return
+        const node = this.diagram.nodes.find((n) => n.id === this.selectedNodeId)
+        if (node?.annotations?.[0]) {
+            node.annotations[0].content = this._nodeLabel(sel.def, sel.info.paramValues)
+            this.diagram.dataBind()
+        }
+        this._commit()
+    }
+
+    /** `turnoutRef` params use a `<select>` (see exrail-block-canvas.html) whose `value.bind` already
+     *  writes the picked option (a turnout id or an alias name) straight into `paramValues` — this
+     *  just refreshes the label/compiles, mirroring updateParam()'s tail below. */
+    onRefParamPicked(): void {
+        this._refreshNodeLabelAndCommit()
+    }
+
     updateParam(name: string, rawValue: string): void {
         const sel = this.selectedNode
         if (!sel) return
@@ -753,12 +857,6 @@ export class ExrailBlockCanvasCustomElement {
             if (Number.isNaN(parsed)) return
             sel.info.paramValues[name] = parsed
         }
-        if (!this.diagram || !this.selectedNodeId) return
-        const node = this.diagram.nodes.find((n) => n.id === this.selectedNodeId)
-        if (node?.annotations?.[0]) {
-            node.annotations[0].content = this._nodeLabel(sel.def, sel.info.paramValues)
-            this.diagram.dataBind()
-        }
-        this._commit()
+        this._refreshNodeLabelAndCommit()
     }
 }

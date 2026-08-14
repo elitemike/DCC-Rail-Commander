@@ -1,6 +1,7 @@
 import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { Splitter } from '@syncfusion/ej2-layouts'
+import { ComboBox, type ChangeEventArgs } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
 import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
@@ -20,10 +21,22 @@ export class TurnoutEditorCustomElement {
     /** Guards the queueTask() below — the component (or its #turnout-splitter, gated behind activeTab === 'visual') can be torn down before the deferred Splitter creation runs, which would otherwise append a live widget into a detached/stale element and leave a broken splitterObj for detaching() to (potentially) throw on. */
     private _detached = false
 
+    /** Host `<input>` for the alias ComboBox — lives inside the `if.bind="editBuffer"` detail pane, so it only exists once a turnout is selected. Set via `ref` in the template. */
+    aliasComboEl: HTMLInputElement | null = null
+    private aliasCombo: ComboBox | null = null
+
     private readonly _aliasSubscriber = {
         handleChange: () => {
             if (this.editBuffer !== null) {
                 this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')
+                // Deferred: this subscriber can fire synchronously from inside the alias
+                // ComboBox's own `change` event (via commitBuffer -> syncAliasForId
+                // mutating state.aliases), and refreshing the widget's dataSource/value
+                // mid-event clobbers the selection it's still in the middle of applying.
+                queueTask(() => {
+                    if (this._detached) return
+                    this._ensureAliasCombo()
+                })
             }
         },
     }
@@ -70,7 +83,9 @@ export class TurnoutEditorCustomElement {
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
         queueTask(() => {
-            if (this._detached || !document.getElementById('turnout-splitter')) return
+            if (this._detached) return
+            this._ensureAliasCombo()
+            if (!document.getElementById('turnout-splitter')) return
             const savedWidth = this._loadSidebarWidth()
             this.splitterObj = new Splitter({
                 paneSettings: [
@@ -103,6 +118,8 @@ export class TurnoutEditorCustomElement {
         // stuck in place instead of being removed.
         try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.splitterObj = null
+        try { this.aliasCombo?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.aliasCombo = null
     }
 
     /**
@@ -174,6 +191,13 @@ export class TurnoutEditorCustomElement {
         this.editBuffer = { ...entry }
         this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id, 'Turnout')
         this.errorMessage = ''
+        // The detail pane (and its alias ComboBox host element) may not exist in
+        // the DOM yet — e.g. first selection after the editor mounts with nothing
+        // selected — so defer to the next task like the Splitter setup above.
+        queueTask(() => {
+            if (this._detached) return
+            this._ensureAliasCombo()
+        })
     }
 
     selectEntry(entry: Turnout): void {
@@ -187,6 +211,40 @@ export class TurnoutEditorCustomElement {
         this.editBufferIndex = null
         this.aliasInput = ''
         this.errorMessage = ''
+        try { this.aliasCombo?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.aliasCombo = null
+    }
+
+    /** Alias names already defined for turnouts (or untyped, so still assignable) — offered as ComboBox suggestions. */
+    private _aliasOptions(): string[] {
+        return this.state.aliases
+            .filter(a => !a.aliasType || a.aliasType === 'Turnout')
+            .map(a => a.name)
+    }
+
+    /** Creates the alias ComboBox on first mount of the detail pane, or refreshes its options/value on later calls. */
+    private _ensureAliasCombo(): void {
+        if (this._detached || !this.aliasComboEl) return
+        if (!this.aliasCombo) {
+            this.aliasCombo = new ComboBox({
+                dataSource: this._aliasOptions(),
+                value: this.aliasInput || null,
+                allowCustom: true,
+                placeholder: 'Optional alias from myAliases.h',
+                change: (args: ChangeEventArgs) => {
+                    this.aliasInput = (args.value as string | null) ?? ''
+                    this.commitBuffer()
+                },
+                blur: () => this.onAliasBlur(),
+            })
+            this.aliasCombo.appendTo(this.aliasComboEl)
+            return
+        }
+        this.aliasCombo.dataSource = this._aliasOptions()
+        this.aliasCombo.refresh()
+        if (this.aliasCombo.value !== (this.aliasInput || null)) {
+            this.aliasCombo.value = this.aliasInput || null
+        }
     }
 
     /**
@@ -210,6 +268,13 @@ export class TurnoutEditorCustomElement {
     commitBuffer(): void {
         if (this.editBuffer === null || this.editBufferIndex === null) return
         this.editBuffer = this._coerceNumericFields(this.editBuffer)
+        const conflict = this.state.turnouts?.find(
+            (t, i) => i !== this.editBufferIndex && t.id === this.editBuffer!.id,
+        )
+        if (conflict) {
+            this.errorMessage = `Turnout ID ${this.editBuffer.id} is already used by "${this.getDisplayName(conflict)}".`
+            return
+        }
         const existing = this.state.turnouts?.[this.editBufferIndex]
         const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id, 'Turnout') : ''
         const aliasChanged = !!existing && (existing.id !== this.editBuffer.id || existingAliasName !== this.aliasInput.trim())
