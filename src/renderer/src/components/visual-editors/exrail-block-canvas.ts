@@ -87,35 +87,9 @@ export class ExrailBlockCanvasCustomElement {
     attached(): void {
         this._detached = false
         queueTask(() => {
-            if (this._detached) return
-            const paletteEl = document.getElementById(this._paletteElId)
-            const row = paletteEl?.parentElement
-            if (!row) return
-            // Measure the row BEFORE constructing either EJ2 widget: both Diagram and
-            // SymbolPalette bake a fixed pixel width/height into their target element's
-            // inline style at construction time, ignoring the surrounding Tailwind flex
-            // classes — if unmeasured (or measured off ITS OWN container after the other
-            // widget already clobbered the shared row's layout), one of them ends up
-            // sized from a stale/zero reading. Pass explicit pixel dimensions to both,
-            // derived from this single trustworthy pre-construction measurement.
-            const rowWidth = row.clientWidth || 600
-            const rowHeight = row.clientHeight || 360
-            this._buildPalette(PALETTE_W, rowHeight)
-            this._buildDiagram(Math.max(200, rowWidth - PALETTE_W), rowHeight)
-
-            this._resizeObserver = new ResizeObserver(() => {
-                if (!row.clientWidth || !row.clientHeight) return
-                if (this.diagram) {
-                    this.diagram.width = Math.max(200, row.clientWidth - PALETTE_W)
-                    this.diagram.height = row.clientHeight
-                    this.diagram.dataBind()
-                }
-                if (this.palette) {
-                    this.palette.height = row.clientHeight
-                    this.palette.dataBind()
-                }
-            })
-            this._resizeObserver.observe(row)
+            if (this._detached || !document.getElementById(this._paletteElId)) return
+            this._setupResizeObserver()
+            this._build()
         })
     }
 
@@ -127,6 +101,64 @@ export class ExrailBlockCanvasCustomElement {
         try { this.palette?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.diagram = null
         this.palette = null
+    }
+
+    /**
+     * Rebuilds the diagram from a new body without waiting for this element to be torn down and
+     * re-attached — sequences-editor/routes-editor's master-detail views reuse this same element
+     * across a row/sequence selection change (the `if.bind` gating Blocks-vs-Text doesn't flip),
+     * and `initialBody` is `oneTime` so it never re-reads on its own. Called via `component.ref`
+     * whenever the host's selection changes underneath an already-mounted canvas.
+     */
+    reload(body: string): void {
+        this.initialBody = body
+        this.selectedNodeId = null
+        this.parseError = null
+        this.canvasWarning = null
+        try { this.diagram?.destroy() } catch { /* already broken — nothing to clean up */ }
+        try { this.palette?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.diagram = null
+        this.palette = null
+        queueTask(() => {
+            if (this._detached) return
+            this._build()
+        })
+    }
+
+    private _setupResizeObserver(): void {
+        const paletteEl = document.getElementById(this._paletteElId)
+        const row = paletteEl?.parentElement
+        if (!row) return
+        this._resizeObserver = new ResizeObserver(() => {
+            if (!row.clientWidth || !row.clientHeight) return
+            if (this.diagram) {
+                this.diagram.width = Math.max(200, row.clientWidth - PALETTE_W)
+                this.diagram.height = row.clientHeight
+                this.diagram.dataBind()
+            }
+            if (this.palette) {
+                this.palette.height = row.clientHeight
+                this.palette.dataBind()
+            }
+        })
+        this._resizeObserver.observe(row)
+    }
+
+    private _build(): void {
+        const paletteEl = document.getElementById(this._paletteElId)
+        const row = paletteEl?.parentElement
+        if (!row) return
+        // Measure the row BEFORE constructing either EJ2 widget: both Diagram and
+        // SymbolPalette bake a fixed pixel width/height into their target element's
+        // inline style at construction time, ignoring the surrounding Tailwind flex
+        // classes — if unmeasured (or measured off ITS OWN container after the other
+        // widget already clobbered the shared row's layout), one of them ends up
+        // sized from a stale/zero reading. Pass explicit pixel dimensions to both,
+        // derived from this single trustworthy pre-construction measurement.
+        const rowWidth = row.clientWidth || 600
+        const rowHeight = row.clientHeight || 360
+        this._buildPalette(PALETTE_W, rowHeight)
+        this._buildDiagram(Math.max(200, rowWidth - PALETTE_W), rowHeight)
     }
 
     definedChanged(): void {
