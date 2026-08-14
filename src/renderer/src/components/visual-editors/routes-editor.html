@@ -49,7 +49,24 @@
                             <button click.trigger="removeRoute($index)" title="Remove route"
                                 class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
                         </div>
-                        <textarea value.two-way="r.body" rows="4" placeholder="Route body"
+                        <div class="flex items-center gap-1">
+                            <button click.trigger="setRowTab(r, 'blocks')" disabled.bind="!canUseBlocks(r)"
+                                title.bind="canUseBlocks(r) ? '' : 'This body can\'t be edited visually yet — switch to Text.'"
+                                class="px-2 py-1 rounded text-[11px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                class.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'blocks' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                                Blocks
+                            </button>
+                            <button click.trigger="setRowTab(r, 'text')"
+                                class="px-2 py-1 rounded text-[11px] font-medium"
+                                class.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                                Text
+                            </button>
+                        </div>
+                        <div if.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'blocks'" class="border border-gray-200 dark:border-white/15 rounded-md overflow-hidden" style="height: 360px;">
+                            <exrail-block-canvas kind="route" initial-body.bind="r.body" defined.bind="defined"
+                                on-body-change.bind="makeBodyChangeHandler(r.id)"></exrail-block-canvas>
+                        </div>
+                        <textarea else value.two-way="r.body" blur.trigger="updateRoute(state.routes.indexOf(r), r)" rows="4" placeholder="Route body"
                             class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-2 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors resize-y"></textarea>
                     </div>
                 </div>
