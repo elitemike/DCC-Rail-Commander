@@ -32,9 +32,13 @@ const TERM_PORT = (id: string) => `${id}-term`
 const TERMINAL_DONE_ID = 'doneTerminal'
 
 const SNAP_RADIUS = 45
-const PALETTE_W = 208
-const PALETTE_SYMBOL_W = 170
-const PALETTE_SYMBOL_H = 60
+// Keep PALETTE_W in sync with the w-56 class on the palette container in
+// exrail-block-canvas.html — both drive the same pixel width. Widened from
+// 208/170 (w-52) so long labels like "Follow route/sequence" have enough
+// room to clear a hexagon/diamond tile's pointed corners without overflowing.
+const PALETTE_W = 224
+const PALETTE_SYMBOL_W = 186
+const PALETTE_SYMBOL_H = 68
 
 /** Distinct EJ2 Basic shape per block category, so hat/action/condition/end read apart at a glance without relying on color alone. */
 const SHAPE_FOR: Record<BlockTypeDef['shape'], string> = {
@@ -42,6 +46,35 @@ const SHAPE_FOR: Record<BlockTypeDef['shape'], string> = {
     stack: 'Rectangle',
     branch: 'Diamond',
     cap: 'Hexagon',
+}
+
+/**
+ * Horizontal padding for each palette tile's DOM label overlay. Non-rectangular
+ * shapes narrow well before the tile's bounding-box edge (a diamond/hexagon's
+ * points don't reach full width the way a rectangle's corners do), so their
+ * labels need extra clearance or long text visibly pokes past the shape outline
+ * even though it's still inside the tile's own box.
+ */
+const LABEL_PADDING_FOR: Record<BlockTypeDef['shape'], string> = {
+    hat: '0 20px',
+    stack: '0 8px',
+    branch: '0 28px',
+    cap: '0 24px',
+}
+
+/**
+ * A hexagon tile pinches to a point at its extreme left/right edge, so a long
+ * one-line label ("Follow route/sequence") can technically fit inside the
+ * tile's box yet still visually crowd — or cross — the drawn outline right at
+ * that point. Splitting onto two lines at the first space keeps each line's
+ * width well clear of the pinch regardless of exact shape geometry, rather
+ * than relying on ever-larger single-line padding to chase the same problem.
+ */
+function _paletteLabelLines(def: BlockTypeDef): string[] {
+    if (def.shape !== 'cap') return [def.label]
+    const spaceIdx = def.label.indexOf(' ')
+    if (spaceIdx === -1) return [def.label]
+    return [def.label.slice(0, spaceIdx), def.label.slice(spaceIdx + 1)]
 }
 
 /**
@@ -228,6 +261,12 @@ export class ExrailBlockCanvasCustomElement {
             height: PALETTE_SYMBOL_H,
             shape: { type: 'Basic', shape: SHAPE_FOR[def.shape] as 'Rectangle' },
             style: { fill: def.color, strokeColor: '#ffffff', strokeWidth: 1 },
+            // Palette tiles are drag sources only, dragged out via SymbolPalette's own
+            // drag-and-drop (independent of node interaction constraints) — they're never
+            // selected/resized/rotated in place. NodeConstraints.Default leaves them
+            // selectable, and selecting one was found to trigger a widened selection
+            // decorator that pushes the palette group into unwanted horizontal scrolling.
+            constraints: NodeConstraints.None,
             addInfo: { blockTypeId: def.id, paramValues: this._defaultParamValues(def) } satisfies CanvasNodeInfo,
         }
     }
@@ -245,8 +284,16 @@ export class ExrailBlockCanvasCustomElement {
             container.style.position = 'relative'
             const label = document.createElement('div')
             label.className = 'exrail-palette-label'
-            label.textContent = def.label
-            label.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 8px;color:#ffffff;font-size:11px;font-weight:600;text-align:center;line-height:1.15;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.6);'
+            // min-width:0 overrides flexbox's default min-width:auto, which otherwise sizes
+            // this div's text-node flex item to its unwrapped intrinsic width and lets long
+            // labels (e.g. "Follow route/sequence") overflow the tile instead of wrapping.
+            const padding = LABEL_PADDING_FOR[def.shape]
+            label.style.cssText = `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:${padding};min-width:0;color:#ffffff;font-size:11px;font-weight:600;text-align:center;line-height:1.25;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.6);`
+            for (const line of _paletteLabelLines(def)) {
+                const lineEl = document.createElement('div')
+                lineEl.textContent = line
+                label.appendChild(lineEl)
+            }
             container.appendChild(label)
         }
     }
