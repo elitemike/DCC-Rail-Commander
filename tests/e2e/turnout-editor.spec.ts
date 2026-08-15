@@ -362,8 +362,8 @@ test.describe('Turnout Editor', () => {
         await expect(refreshedAliasInput).toHaveValue('')
     })
 
-    test('an existing alias is selectable from the alias dropdown, not just typeable', async ({ workspacePage: page }) => {
-        // Give turnout 201 (Yard Entry) an alias so it shows up as an option
+    test('typing an alias name already used by another turnout reassigns it, since the field is freeform not a dropdown', async ({ workspacePage: page }) => {
+        // Give turnout 201 (Yard Entry) an alias, then type that same name
         // while editing turnout 200 (Main Line Junction).
         await openAliasesEditor(page)
         await switchToRaw(page)
@@ -374,13 +374,8 @@ test.describe('Turnout Editor', () => {
 
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await aliasInput.click()
-        // Open the ComboBox popup (the dropdown icon Syncfusion renders next to the input)
-        // and pick the suggestion, rather than typing the alias name by hand.
-        await aliasInput.locator('xpath=following-sibling::span[contains(@class, "e-ddl-icon")]').click()
-        // Syncfusion's popup fades in — clicking an option before the open animation
-        // settles is swallowed as a click-outside (closes the popup without selecting).
-        await page.waitForTimeout(300)
-        await page.getByRole('option', { name: 'YARD_ENTRY_SW', exact: true }).click()
+        await aliasInput.fill('YARD_ENTRY_SW')
+        await aliasInput.blur()
 
         await expect(aliasInput).toHaveValue('YARD_ENTRY_SW')
 

@@ -122,8 +122,8 @@ function getObjectSuggestionsForType(type: AliasTargetType, data: ExrailCompleti
             return (data.sequences ?? []).map(entry => ({
                 label: String(entry.id),
                 insertText: String(entry.id),
-                detail: `Sequence ID - Sequence ${entry.id}`,
-                documentation: `Use sequence ID ${entry.id}.`,
+                detail: `Sequence ID - ${entry.description || `Sequence ${entry.id}`}`,
+                documentation: `Use sequence ID ${entry.id}${entry.description ? ` (${entry.description})` : ''}.`,
                 kind: 'id',
                 sortText: `1-${String(entry.id).padStart(6, '0')}`,
             }))

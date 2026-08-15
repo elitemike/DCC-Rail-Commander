@@ -1,6 +1,5 @@
 import { bindable, BindingMode, resolve } from 'aurelia'
 import { ConfigEditorState } from '../models/config-editor-state'
-import { getHalBoard } from '../config/hal-boards'
 import type { HalBoardDefinition } from '../config/hal-boards'
 import {
     DIRECT_PIN_SOURCE,
@@ -61,9 +60,7 @@ export class VpinPickerCustomElement {
 
     boardLabel(instanceId: string): string {
         const d = this.editorState.halDevices.find(x => x.instanceId === instanceId)
-        if (!d) return ''
-        const board = getHalBoard(d.boardId)
-        return board ? `${board.label}: ${d.label}` : d.label
+        return d?.label ?? ''
     }
 
     channelOptions(): number[] {

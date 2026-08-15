@@ -122,6 +122,8 @@ export interface RouteEntry {
 
 export interface SequenceEntry {
     id: number;
+    /** Friendly name/description, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
+    description?: string;
     body: string; // raw body between SEQUENCE(...) and DONE
 }
 
@@ -251,7 +253,7 @@ export function collectObjectIdReferences(id: number, data: ObjectIdCollections)
         if (entry.id === id) references.push({ type: 'Route', id, label: entry.description || `Route ${id}` });
     }
     for (const entry of data.sequences ?? []) {
-        if (entry.id === id) references.push({ type: 'Sequence', id, label: `Sequence ${id}` });
+        if (entry.id === id) references.push({ type: 'Sequence', id, label: entry.description || `Sequence ${id}` });
     }
 
     return references;
@@ -340,12 +342,13 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
 export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
     const lines = fileContent.split('\n');
     const out: SequenceEntry[] = [];
-    const seqStart = /^SEQUENCE\s*\(\s*(\d+)\s*\)\s*$/;
+    const seqStart = /^SEQUENCE\s*\(\s*(\d+)\s*\)\s*(?:\/\/\s*(.*))?$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(seqStart);
         if (m) {
             const id = parseInt(m[1], 10);
+            const description = m[2] ? m[2].trim() : '';
             const bodyLines: string[] = [];
             i++;
             while (i < lines.length && !/^DONE\s*$/.test(lines[i])) {
@@ -353,7 +356,7 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
                 i++;
             }
             i++; // skip DONE
-            out.push({ id, body: bodyLines.join('\n') });
+            out.push({ id, description, body: bodyLines.join('\n') });
             continue;
         }
         i++;
@@ -364,7 +367,8 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
 export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
     const lines: string[] = [];
     for (const s of seqs) {
-        lines.push(`SEQUENCE(${s.id})`);
+        const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : '';
+        lines.push(`SEQUENCE(${s.id})${desc}`);
         if (s.body && s.body.trim()) lines.push(s.body);
         lines.push('DONE');
         lines.push('');

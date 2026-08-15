@@ -60,7 +60,13 @@ describe('ConfigEditorState.loadFromInstallerState — does not falsely mark dir
 describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
     function makeEditor(state: ConfigEditorState) {
         const editor = Object.create(SensorsEditorCustomElement.prototype) as SensorsEditorCustomElement
-        Object.assign(editor, { state, activeTab: 'visual', rawEditor: null, rawSnapshot: '' })
+        Object.assign(editor, {
+            state,
+            activeTab: 'visual',
+            rawEditor: null,
+            rawSnapshot: '',
+            _idBeforeEdit: new Map<number, number>(),
+        })
         return editor
     }
 

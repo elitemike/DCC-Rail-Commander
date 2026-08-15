@@ -1,12 +1,24 @@
 import { resolve } from 'aurelia'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SensorEntry } from '../../utils/myAutomationParser'
+import { ToastService } from '../../services/toast.service'
 
 export class SensorsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly toastService = resolve(ToastService)
     activeTab: 'visual' | 'raw' = 'visual'
     // Reference set via `component.ref="rawEditor"` in the template
     rawEditor: any = null
+
+    /**
+     * Sensor rows bind straight to `state.sensors[i]` and mutate it live as
+     * the user types (two-way `value.two-way`), so by the time `updateSensor`
+     * fires on blur, `s.id` already holds the new value. Capture the old id
+     * on focus so a rename can carry its alias (state.aliases) forward —
+     * mirrors what the turnout/roster editors get for free from their
+     * edit-buffer pattern.
+     */
+    private readonly _idBeforeEdit = new Map<number, number>()
 
     attached(): void {
         try { console.debug('SensorsEditor attached') } catch { /* ignore */ }
@@ -40,12 +52,42 @@ export class SensorsEditorCustomElement {
     }
 
     updateSensor(idx: number, s: SensorEntry) {
-        this.state.sensors = this.state.sensors.map((v, i) => i === idx ? { ...s } : v)
+        // `value.two-way` on `<input type="number">` round-trips through the DOM's
+        // `.value`, which is always a string — coerce back so strict-equality
+        // lookups elsewhere (alias id matching, EXRAIL reference validation)
+        // don't silently fail to match a numeric target.
+        const entry: SensorEntry = { ...s, id: Number(s.id), pin: Number(s.pin) }
+        const previousId = this._idBeforeEdit.get(idx)
+        this._idBeforeEdit.delete(idx)
+        this.state.sensors = this.state.sensors.map((v, i) => i === idx ? entry : v)
+        if (previousId !== undefined && previousId !== entry.id) {
+            const aliasName = this.state.getPrimaryAliasNameForId(previousId, 'Sensor')
+            if (aliasName) this.state.syncAliasForId(previousId, entry.id, aliasName, 'Sensor', aliasName)
+        }
         this.state.syncAll()
     }
 
     /** Passed to <vpin-picker on-commit.bind>, which needs a zero-arg callback rather than an event to trigger. */
     makeSensorCommitHandler(idx: number): () => void {
         return () => this.updateSensor(idx, this.state.sensors[idx])
+    }
+
+    /** `focus.trigger` on the ID input — see `_idBeforeEdit`. */
+    captureIdBeforeEdit(idx: number): void {
+        const s = this.state.sensors[idx]
+        if (s) this._idBeforeEdit.set(idx, s.id)
+    }
+
+    /** Passed to <alias-picker on-change.bind>. */
+    makeAliasChangeHandler(idx: number): (name: string) => void {
+        return (name: string) => {
+            const s = this.state.sensors[idx]
+            if (!s) return
+            const existingAliasName = this.state.getPrimaryAliasNameForId(s.id, 'Sensor')
+            const result = this.state.syncAliasForId(s.id, s.id, name, 'Sensor', existingAliasName)
+            if (!result.ok) {
+                this.toastService.show({ title: 'Alias Error', content: result.reason, cssClass: 'e-toast-warning' })
+            }
+        }
     }
 }
