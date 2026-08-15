@@ -43,4 +43,9 @@ export class SensorsEditorCustomElement {
         this.state.sensors = this.state.sensors.map((v, i) => i === idx ? { ...s } : v)
         this.state.syncAll()
     }
+
+    /** Passed to <vpin-picker on-commit.bind>, which needs a zero-arg callback rather than an event to trigger. */
+    makeSensorCommitHandler(idx: number): () => void {
+        return () => this.updateSensor(idx, this.state.sensors[idx])
+    }
 }

@@ -980,6 +980,7 @@ export class ConfigEditorState {
      * external folder) get the generator header and latest serialized content.
      */
     syncAll(): void {
+        this.hasChanges = true
         this._syncToInstallerState()
     }
 
