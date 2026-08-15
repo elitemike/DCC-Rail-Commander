@@ -32,7 +32,7 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
         expect(state.sensors).toEqual([{ id: 1, pin: 30, description: 'Occupancy' }])
         expect(state.signals).toEqual([{ red: 22, amber: 23, green: 24, description: '' }])
         expect(state.routes).toEqual([{ id: 1, description: 'Main to Siding', body: '' }])
-        expect(state.sequences).toEqual([{ id: 1, body: '' }])
+        expect(state.sequences).toEqual([{ id: 1, description: '', body: '' }])
     })
 
     it('resets sensors, signals, routes and sequences when reloading a config that no longer has them', () => {

@@ -141,7 +141,7 @@ export class HalDevicesFormCustomElement {
             address: board.defaultAddress,
             vpinStart: board.pinCount > 0 ? this.editorState.nextFreeVpin : null,
         }
-        this.devices = [...this.devices, device]
+        this.devices = board.isMultiplexer ? [device, ...this.devices] : [...this.devices, device]
         this.onFieldChange()
     }
 

@@ -5,11 +5,13 @@ import type { SequenceEntry } from '../../utils/myAutomationParser'
 import { parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
+import { ToastService } from '../../services/toast.service'
 
 type RowTab = 'blocks' | 'text'
 
 export class SequencesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly toastService = resolve(ToastService)
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across sequence selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
@@ -49,6 +51,10 @@ export class SequencesEditorCustomElement {
 
     canUseBlocks(s: SequenceEntry): boolean {
         return parseBody(s.body, 'sequence', BLOCK_REGISTRY).ok
+    }
+
+    getDisplayName(s: SequenceEntry): string {
+        return s.description ? `${s.description} (${s.id})` : `Sequence ${s.id}`
     }
 
     /** Reassigns `rowTab` rather than mutating in place — routes-editor.ts's setRowTab has the same convention, for the same reason: this is a plain object on a class instance, not observed through Aurelia's dirty-checking of individual keys. */
@@ -123,7 +129,7 @@ export class SequencesEditorCustomElement {
 
     addSequence() {
         const nextId = (this.state.sequences[this.state.sequences.length - 1]?.id ?? 0) + 1
-        this.state.sequences = [...this.state.sequences, { id: nextId, body: '' }]
+        this.state.sequences = [...this.state.sequences, { id: nextId, description: 'New Sequence', body: '' }]
         this.state.syncAll()
         this.selectedId = nextId
         this.blockCanvas?.reload('')
@@ -143,5 +149,16 @@ export class SequencesEditorCustomElement {
     updateSequence(idx: number, s: SequenceEntry) {
         this.state.sequences = this.state.sequences.map((v, i) => i === idx ? { ...s } : v)
         this.state.syncAll()
+    }
+
+    /** Passed to <alias-picker on-change.bind>. Sequence ids aren't user-editable (unlike sensors' inline id field), so there's no rename to carry forward — just persist the chosen name against the current id. */
+    makeAliasChangeHandler(sequenceId: number): (name: string) => void {
+        return (name: string) => {
+            const existingAliasName = this.state.getPrimaryAliasNameForId(sequenceId, 'Sequence')
+            const result = this.state.syncAliasForId(sequenceId, sequenceId, name, 'Sequence', existingAliasName)
+            if (!result.ok) {
+                this.toastService.show({ title: 'Alias Error', content: result.reason, cssClass: 'e-toast-warning' })
+            }
+        }
     }
 }
