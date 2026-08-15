@@ -373,3 +373,16 @@ body {
         left: 100%;
     }
 }
+/*
+ * EXRAIL block palette (exrail-block-canvas.ts): Syncfusion's SymbolPalette
+ * sets `style="overflow: auto"` on each group's `.e-remove-palette` wrapper
+ * itself (an inline style we can't out-specificity without !important), and
+ * re-applies it when a tile is selected/hovered. Tiles are only ever one
+ * column wide inside the 208px-wide palette, so any horizontal scrollbar here
+ * is spurious (usually triggered by a selection decorator sized off a
+ * palette tile's unscaled preview canvas, not by real overflow) — force it
+ * off rather than let it flash in.
+ */
+.e-symbolpalette .e-remove-palette {
+    overflow-x: hidden !important;
+}
