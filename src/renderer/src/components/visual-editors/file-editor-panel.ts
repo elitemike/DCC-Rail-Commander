@@ -73,6 +73,7 @@ export class FileEditorPanelCustomElement {
     set genericContent(val: string) {
         if (this.activeFile) {
             this.activeFile.content = val
+            this.state.hasChanges = true
         }
     }
 }

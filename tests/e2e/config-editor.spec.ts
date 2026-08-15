@@ -815,3 +815,49 @@ test.describe('Roster Editor — TreeView grouping (pre-grouped roster)', () => 
         await expect(addressInput).toHaveValue('3')
     })
 })
+
+// ── Save button — dirty state indicator ───────────────────────────────────────
+//
+// Regression: the toolbar Save button never reflected unsaved changes — it had
+// no binding to ConfigEditorState.hasChanges at all, and several visual
+// editors (sensors/signals/routes/sequences/aliases add/update/remove, plus
+// the raw generic-file and myAutomation.h Monaco editors) mutated state
+// without ever setting hasChanges, so even wiring the button up wouldn't have
+// helped for those paths. See config-editor-state.ts's syncAll()/hasChanges.
+
+async function openRoutesEditor(page: import('@playwright/test').Page) {
+    await page.getByText('Routes', { exact: true }).first().click()
+    await expect(page.locator('routes-editor')).toBeVisible()
+}
+
+test.describe('Save button — dirty state indicator', () => {
+    test('shows no dirty indicator on a freshly loaded workspace', async ({ workspacePage }) => {
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
+    })
+
+    test('adding a route via the visual editor shows the dirty indicator', async ({ workspacePage }) => {
+        await openRoutesEditor(workspacePage)
+        await workspacePage.locator('routes-editor').getByRole('button', { name: 'Add Route' }).click()
+
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
+    })
+
+    test('editing a route description field shows the dirty indicator', async ({ workspacePage }) => {
+        await openRoutesEditor(workspacePage)
+        const descriptionInput = workspacePage.locator('routes-editor input[placeholder="Description"]').first()
+        await descriptionInput.fill('Renamed Route')
+        await descriptionInput.blur()
+
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
+    })
+
+    test('clicking Save clears the dirty indicator', async ({ workspacePage }) => {
+        await openRoutesEditor(workspacePage)
+        await workspacePage.locator('routes-editor').getByRole('button', { name: 'Add Route' }).click()
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
+
+        await workspacePage.locator('[data-testid="save-button"]').click()
+
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
+    })
+})

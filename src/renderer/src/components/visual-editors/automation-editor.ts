@@ -44,6 +44,7 @@ export class AutomationEditorCustomElement {
     set content(val: string) {
         if (this.automationFile) {
             this.automationFile.content = val
+            this.state.hasChanges = true
         }
     }
 

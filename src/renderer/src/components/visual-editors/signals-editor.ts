@@ -38,4 +38,9 @@ export class SignalsEditorCustomElement {
         this.state.signals = this.state.signals.map((v, i) => i === idx ? { ...s } : v)
         this.state.syncAll()
     }
+
+    /** Passed to <vpin-picker on-commit.bind>, which needs a zero-arg callback rather than an event to trigger. */
+    makeSignalCommitHandler(idx: number): () => void {
+        return () => this.updateSignal(idx, this.state.signals[idx])
+    }
 }
