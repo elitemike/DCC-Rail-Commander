@@ -837,14 +837,14 @@ test.describe('Save button — dirty state indicator', () => {
 
     test('adding a route via the visual editor shows the dirty indicator', async ({ workspacePage }) => {
         await openRoutesEditor(workspacePage)
-        await workspacePage.locator('routes-editor').getByRole('button', { name: 'Add Route' }).click()
+        await workspacePage.locator('routes-editor button[title="Add new route"]').click()
 
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
     })
 
     test('editing a route description field shows the dirty indicator', async ({ workspacePage }) => {
         await openRoutesEditor(workspacePage)
-        const descriptionInput = workspacePage.locator('routes-editor input[placeholder="Description"]').first()
+        const descriptionInput = workspacePage.locator('routes-editor input[aria-label="Route description"]').first()
         await descriptionInput.fill('Renamed Route')
         await descriptionInput.blur()
 
@@ -853,7 +853,7 @@ test.describe('Save button — dirty state indicator', () => {
 
     test('clicking Save clears the dirty indicator', async ({ workspacePage }) => {
         await openRoutesEditor(workspacePage)
-        await workspacePage.locator('routes-editor').getByRole('button', { name: 'Add Route' }).click()
+        await workspacePage.locator('routes-editor button[title="Add new route"]').click()
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
 
         await workspacePage.locator('[data-testid="save-button"]').click()

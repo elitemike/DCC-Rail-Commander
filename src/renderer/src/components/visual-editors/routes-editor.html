@@ -18,62 +18,87 @@
             </span>
         </div>
 
-        <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
-            style="flex:1;min-height:0;overflow:hidden;">
-            <div class="flex-1 overflow-y-auto p-4">
-                <div class="flex items-center justify-between gap-3 mb-4">
-                    <p class="text-xs text-gray-500">Routes runnable from a throttle or JMRI, each made up of a
-                        sequence of EX-RAIL commands.</p>
-                    <button click.trigger="addRoute()"
-                        class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
-                        Add Route
-                    </button>
+        <!-- ── Visual tab ─────────────────────────────────────────────────── -->
+        <!-- Class-toggled (not if.bind) — #routes-splitter hosts a Syncfusion Splitter
+             instance created once in attached(); if.bind would destroy/recreate this
+             element on every Visual/Raw toggle, orphaning that widget instance — see
+             sequences-editor.html, which uses this same class-toggle convention for the
+             same reason. -->
+        <div class="${activeTab === 'visual' ? '' : 'hidden'}" style="flex:1;min-height:0;overflow:hidden;">
+            <div id="routes-splitter" style="height:100%;width:100%;">
+
+                <!-- Sidebar -->
+                <div class="flex flex-col overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+                    <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
+                        <span
+                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Routes</span>
+                        <button click.trigger="addRoute()"
+                            class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
+                            title="Add new route">+</button>
+                    </div>
+
+                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Routes">
+                        <a repeat.for="r of state.routes" click.trigger="selectEntry(r)"
+                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
+                            class.bind="selectedId === r.id
+                            ? 'bg-blue-900/60 text-white font-medium'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
+                            <span class="flex-1 min-w-0 truncate" title.bind="getDisplayName(r)">${getDisplayName(r)}</span>
+                            <button
+                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                click.trigger="removeRoute($index, $event)" title="Remove">×</button>
+                        </a>
+                    </nav>
+
+                    <div if.bind="state.routes.length === 0" class="flex-1 flex items-center justify-center p-4">
+                        <p class="text-gray-600 text-xs text-center">No routes.<br>Click + to add one.</p>
+                    </div>
                 </div>
 
-                <div if.bind="state.routes.length === 0"
-                    class="flex flex-col items-center justify-center gap-3 text-gray-600 py-16">
-                    <svg class="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-                    </svg>
-                    <p class="text-sm">No routes yet. Click "Add Route" to create one.</p>
-                </div>
-
-                <div if.bind="state.routes.length > 0" class="flex flex-col gap-2">
-                    <div repeat.for="r of state.routes"
-                        class="flex flex-col gap-2 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <span class="text-xs font-mono text-gray-500 dark:text-gray-400 shrink-0">Route #${r.id}</span>
-                            <input type="text" value.two-way="r.description" blur.trigger="updateRoute(state.routes.indexOf(r), r)" placeholder="Description"
-                                class="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                            <button click.trigger="removeRoute($index)" title="Remove route"
-                                class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
+                <!-- Detail panel -->
+                <div class="flex flex-col overflow-hidden">
+                    <div if.bind="selectedRoute" class="flex flex-col flex-1 min-h-0">
+                        <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
+                            <span class="text-xs font-mono text-gray-500 dark:text-gray-400 shrink-0">Route #${selectedRoute.id}</span>
+                            <input type="text" value.two-way="selectedRoute.description"
+                                blur.trigger="updateRoute(state.routes.indexOf(selectedRoute), selectedRoute)"
+                                placeholder="Description" aria-label="Route description"
+                                class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                         </div>
-                        <div class="flex items-center gap-1">
-                            <button click.trigger="setRowTab(r, 'blocks')" disabled.bind="!canUseBlocks(r)"
-                                title.bind="canUseBlocks(r) ? '' : 'This body can\'t be edited visually yet — switch to Text.'"
-                                class="px-2 py-1 rounded text-[11px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-                                class.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'blocks' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                        <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
+                            <button click.trigger="setRowTab(selectedRoute, 'blocks')" disabled.bind="!canUseBlocks(selectedRoute)"
+                                title.bind="canUseBlocks(selectedRoute) ? '' : 'This body can\'t be edited visually yet — switch to Text.'"
+                                class="px-2.5 py-1 rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                class.bind="selectedTab === 'blocks' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
                                 Blocks
                             </button>
-                            <button click.trigger="setRowTab(r, 'text')"
-                                class="px-2 py-1 rounded text-[11px] font-medium"
-                                class.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                            <button click.trigger="setRowTab(selectedRoute, 'text')"
+                                class="px-2.5 py-1 rounded text-xs font-medium"
+                                class.bind="selectedTab === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
                                 Text
                             </button>
                         </div>
-                        <div if.bind="(rowTab[r.id] || (canUseBlocks(r) ? 'blocks' : 'text')) === 'blocks'" class="border border-gray-200 dark:border-white/15 rounded-md overflow-hidden" style="height: 360px;">
-                            <exrail-block-canvas kind="route" initial-body.bind="r.body" defined.bind="defined"
-                                on-body-change.bind="makeBodyChangeHandler(r.id)"></exrail-block-canvas>
+
+                        <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            <exrail-block-canvas component.ref="blockCanvas" kind="route" initial-body.bind="selectedRoute.body" defined.bind="defined"
+                                on-body-change.bind="makeBodyChangeHandler(selectedRoute.id)"></exrail-block-canvas>
                         </div>
-                        <textarea else value.two-way="r.body" blur.trigger="updateRoute(state.routes.indexOf(r), r)" rows="4" placeholder="Route body"
-                            class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-2 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors resize-y"></textarea>
+                        <textarea else value.two-way="selectedRoute.body"
+                            blur.trigger="updateRoute(state.routes.indexOf(selectedRoute), selectedRoute)"
+                            placeholder="Route body"
+                            class="flex-1 min-h-0 w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none resize-none"></textarea>
+                    </div>
+
+                    <div if.bind="!selectedRoute" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                        <p if.bind="state.routes.length > 0">Select a route to edit its body.</p>
+                        <p if.bind="state.routes.length === 0">No routes. Click + to add one.</p>
                     </div>
                 </div>
-            </div>
-        </div>
+            </div><!-- end #routes-splitter -->
+        </div><!-- end visual tab -->
 
-        <div class.bind="activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'">
+        <!-- ── Raw tab ────────────────────────────────────────────────────── -->
+        <div class="${activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'}">
             <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myRoutes.h"
                 on-text-change.bind="onRawChange"></monaco-editor>
         </div>
