@@ -97,6 +97,17 @@ export class ExrailBlockCanvasCustomElement {
     private _resizeObserver: ResizeObserver | null = null
     private _detached = false
     private _idCounter = 0
+    /**
+     * EJ2 fires the SymbolPalette→Diagram `drop` event TWICE for a single physical drag
+     * gesture (confirmed by logging — same `args.element.id` both times). Without this guard,
+     * `_onDrop()` ran its full add-node-and-connect logic twice per drop, leaving two
+     * independently-placed nodes (and two connectors, one often snapping onto a now-stale
+     * port) on the canvas from what the user experienced as one drag — the "ghost" duplicate
+     * node and crossed connector lines reported when dragging any palette block. Each raw
+     * dropped element's id is unique per gesture (random suffix), so remembering ids already
+     * handled safely collapses the duplicate without affecting later, genuinely separate drops.
+     */
+    private _handledDropIds = new Set<string>()
     private _diagramElId = `exrail-block-diagram-${Math.random().toString(36).slice(2)}`
     private _paletteElId = `exrail-block-palette-${Math.random().toString(36).slice(2)}`
 
@@ -585,6 +596,22 @@ export class ExrailBlockCanvasCustomElement {
         return !this._isTopLevelNode(sourceNodeId)
     }
 
+    /**
+     * Diagram.remove() internally no-ops on any node lacking NodeConstraints.Delete (it guards
+     * on canDelete(obj) — see @syncfusion/ej2-diagrams' constraints-util.js). Two kinds of node
+     * this file removes are deliberately built without that flag for unrelated reasons and would
+     * otherwise silently fail to remove at all: the raw clone EJ2 auto-inserts on a palette drop
+     * (which inherits NodeConstraints.None from the palette tile itself — see
+     * _paletteSymbolNode()'s comment on why palette tiles can't be deleted), and the synthetic
+     * terminal-Done marker (Delete stripped in _buildNodeModel() so a user can't delete it via
+     * the UI). Both still need to be programmatically removable by this file's own logic, hence
+     * this override immediately before removal.
+     */
+    private _forceRemoveNode(node: NodeModel): void {
+        node.constraints = NodeConstraints.Delete
+        this.diagram?.remove(node)
+    }
+
     private _warnDoneMustBeInBranch(): void {
         const message = 'DONE can only end an IF/IFNOT/IFCLOSED/IFTHROWN branch — the file already adds a terminating DONE automatically.'
         this.canvasWarning = message
@@ -594,6 +621,10 @@ export class ExrailBlockCanvasCustomElement {
     private _onDrop(args: IDropEventArgs): void {
         const element = args.element as NodeModel
         if (!element.addInfo) return
+        if (element.id) {
+            if (this._handledDropIds.has(element.id)) return
+            this._handledDropIds.add(element.id)
+        }
 
         // The dropped element EJ2 hands us here is already a live Node instance (its own
         // internal ShapeAnnotation objects, wrapper, etc.) that EJ2 itself inserted using the
@@ -613,7 +644,7 @@ export class ExrailBlockCanvasCustomElement {
         queueTask(() => {
             if (!this.diagram) return
             const rawNode = this.diagram.nodes.find((n) => n.id === rawId)
-            if (rawNode) this.diagram.remove(rawNode)
+            if (rawNode) this._forceRemoveNode(rawNode)
 
             const candidates = this._openForwardPorts()
             let best: { nodeId: string; portId: string; x: number; y: number; dist: number } | null = null
@@ -631,6 +662,16 @@ export class ExrailBlockCanvasCustomElement {
             const id = `n${this._idCounter}`
             const x = best ? best.x : px
             const y = best ? best.y + NODE_H / 2 + 20 : py
+
+            // Each diagram.add() below fires collectionChange -> _commit() reentrantly (see
+            // _onCollectionChange), including a _syncTerminalDoneNode() call, on its own. Right
+            // after the node-add but before the connector-add, the graph is briefly still in its
+            // OLD shape (new node present but unconnected), so that reentrant sync sees the OLD
+            // tail, no-ops, and never runs again once the connector completes the new tail —
+            // leaving the terminal marker stuck in its stale spot with the new connector drawn
+            // straight through it. Suppress every reentrant sync during this block and run the
+            // real one explicitly afterwards, once both the node and its connector exist.
+            this._syncingTerminalDone = true
             this.diagram.add(this._buildNodeModel(id, info, x, y))
 
             if (best) {
@@ -652,6 +693,7 @@ export class ExrailBlockCanvasCustomElement {
                     }
                 }
             }
+            this._syncingTerminalDone = false
             this._commit()
         })
     }
@@ -796,7 +838,7 @@ export class ExrailBlockCanvasCustomElement {
 
             if (!eligible) {
                 if (existingConnector) this.diagram.remove(existingConnector)
-                if (existingMarker) this.diagram.remove(existingMarker)
+                if (existingMarker) this._forceRemoveNode(existingMarker)
                 return
             }
 
@@ -807,12 +849,13 @@ export class ExrailBlockCanvasCustomElement {
             const x = tailNode!.offsetX ?? 220
             const y = (tailNode!.offsetY ?? 40) + ROW_GAP
 
-            if (!existingMarker) {
-                this.diagram.add(this._buildNodeModel(TERMINAL_DONE_ID, { blockTypeId: 'DONE', paramValues: {}, isTerminalMarker: true }, x, y))
-            } else {
-                existingMarker.offsetX = x
-                existingMarker.offsetY = y
-            }
+            // Mutating an already-rendered node's offsetX/offsetY in place (even followed by
+            // dataBind()) does not move its on-screen SVG element — confirmed by testing: the
+            // marker stayed put while a new connector was drawn straight through it and whatever
+            // sat between it and its new source. Removing and re-adding (as every other node
+            // mutation in this file already does) redraws it at the new position reliably.
+            if (existingMarker) this._forceRemoveNode(existingMarker)
+            this.diagram.add(this._buildNodeModel(TERMINAL_DONE_ID, { blockTypeId: 'DONE', paramValues: {}, isTerminalMarker: true }, x, y))
 
             this.diagram.add({
                 id: `c_${tailId}_${TERMINAL_DONE_ID}`,
