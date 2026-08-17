@@ -375,16 +375,16 @@ body {
         left: 100%;
     }
 }
+
 /*
- * EXRAIL block palette (exrail-block-canvas.ts): Syncfusion's SymbolPalette
- * sets `style="overflow: auto"` on each group's `.e-remove-palette` wrapper
- * itself (an inline style we can't out-specificity without !important), and
- * re-applies it when a tile is selected/hovered. Tiles are only ever one
- * column wide inside the 208px-wide palette, so any horizontal scrollbar here
- * is spurious (usually triggered by a selection decorator sized off a
- * palette tile's unscaled preview canvas, not by real overflow) — force it
- * off rather than let it flash in.
+ * EXRAIL block canvas (exrail-block-canvas.ts): Blockly's toolbox-category
+ * flyout overlays the workspace when a category (Actions/Conditions/Ends) is
+ * open — its own theme background (see EXRAIL_LIGHT_THEME/EXRAIL_DARK_THEME)
+ * already makes it opaque, but with no depth cue it can read as visually
+ * merged with the workspace behind it rather than a distinct overlay panel.
+ * A drop-shadow gives it the same "floating above" affordance a native
+ * dropdown/popover would have.
  */
-.e-symbolpalette .e-remove-palette {
-    overflow-x: hidden !important;
+.blocklyFlyout {
+    filter: drop-shadow(3px 0 10px rgba(0, 0, 0, 0.35));
 }

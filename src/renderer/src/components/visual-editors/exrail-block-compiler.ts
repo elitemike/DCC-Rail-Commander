@@ -10,7 +10,8 @@
  */
 
 import type { ExrailCompletionData } from '../../utils/exrail-completions'
-import type { SignalEntry } from '../../utils/myAutomationParser'
+import type { AliasTargetType, SignalEntry } from '../../utils/myAutomationParser'
+import { parseAliasNumericValue } from '../../utils/myAutomationParser'
 
 // ── Block type registry shapes ────────────────────────────────────────────
 
@@ -51,6 +52,102 @@ export interface BlockTypeDef {
     emit(paramValues: Record<string, string | number>): string
 }
 
+// ── Ref-kind param options ────────────────────────────────────────────────
+
+export interface RefOption {
+    value: string | number
+    label: string
+}
+
+/** Which AliasEntry.aliasType(s) an object reference kind is addressable by — signalRef has none (not a valid AliasTargetType). */
+const ALIAS_TARGETS_FOR_KIND: Partial<Record<BlockParamKind, AliasTargetType[]>> = {
+    turnoutRef: ['Turnout'],
+    sensorRef: ['Sensor'],
+    rosterRef: ['Roster'],
+    routeOrSequenceRef: ['Route', 'Sequence'],
+}
+
+/**
+ * Known-value options for a ref-kind param: one entry per configured object of the matching
+ * kind, plus one per alias that targets it — a block must only ever emit a reference that
+ * resolves to something real, never free text. An object that already has an alias is listed
+ * ONLY by that alias, not also by id/description — EXRAIL scripts should read by name where a
+ * name exists, and showing both would just be two entries for the same target with no way to
+ * tell them apart at a glance.
+ *
+ * If `currentValue` doesn't match any of those (e.g. the object/alias was since deleted, or
+ * it's a raw id that a later-added alias has since superseded), it's kept as a leading
+ * "not found" option so a picker built on this never silently discards it.
+ */
+export function optionsForRefKind(
+    kind: BlockParamKind,
+    defined: DefinedObjects,
+    currentValue: string | number | undefined,
+): RefOption[] {
+    let options: RefOption[]
+    switch (kind) {
+        case 'turnoutRef':
+            options = defined.turnouts.map((t) => ({ value: t.id, label: t.description ? `${t.description} (${t.id})` : `Turnout ${t.id}` }))
+            break
+        case 'sensorRef':
+            options = (defined.sensors ?? []).map((s) => ({ value: s.id, label: s.description ? `${s.description} (${s.id})` : `Sensor ${s.id}` }))
+            break
+        case 'rosterRef':
+            options = defined.roster.map((r) => ({ value: r.dccAddress, label: r.name ? `${r.name} (${r.dccAddress})` : `Loco ${r.dccAddress}` }))
+            break
+        case 'routeOrSequenceRef':
+            options = [
+                ...(defined.routes ?? []).map((r) => ({ value: r.id, label: r.description ? `${r.description} (${r.id})` : `Route ${r.id}` })),
+                ...(defined.sequences ?? []).map((s) => ({ value: s.id, label: s.description ? `${s.description} (${s.id})` : `Sequence ${s.id}` })),
+            ]
+            break
+        case 'signalRef':
+            options = defined.signals.map((s) => ({ value: s.red, label: s.description ? `${s.description} (${s.red})` : `Signal ${s.red}` }))
+            break
+        default:
+            return []
+    }
+
+    const aliasTargets = ALIAS_TARGETS_FOR_KIND[kind]
+    if (aliasTargets) {
+        const relevantAliases = defined.aliases.filter((a) => !a.aliasType || aliasTargets.includes(a.aliasType))
+        const aliasedIds = new Set(
+            relevantAliases.map((a) => parseAliasNumericValue(a.value)).filter((id): id is number => id !== null),
+        )
+        options = options.filter((o) => typeof o.value !== 'number' || !aliasedIds.has(o.value))
+        options = [
+            ...options,
+            ...relevantAliases.map((a) => {
+                const targetId = parseAliasNumericValue(a.value)
+                return { value: a.name, label: targetId !== null ? `${a.name} (${targetId})` : `${a.name} (alias)` }
+            }),
+        ]
+    }
+
+    if (currentValue !== '' && currentValue !== undefined && !options.some((o) => String(o.value) === String(currentValue))) {
+        options = [{ value: currentValue, label: `${currentValue} (not found)` }, ...options]
+    }
+
+    return options
+}
+
+/**
+ * Rewrites a ref-kind param value stored as a raw numeric ID to its alias name, if one now
+ * covers that id — e.g. a THROW(201) written before `ALIAS(mysidingpoint, 201)` existed should
+ * migrate to THROW(mysidingpoint), the same canonical form optionsForRefKind() would already
+ * show for a freshly-picked value (see its own alias-preferred dedup). Returns `value` unchanged
+ * if it isn't a plain numeric id, or no alias covers it. Called whenever `defined` changes (an
+ * alias can be added after a body already referencing that object by id was loaded).
+ */
+export function canonicalRefValue(kind: BlockParamKind, defined: DefinedObjects, value: string | number): string | number {
+    const aliasTargets = ALIAS_TARGETS_FOR_KIND[kind]
+    if (!aliasTargets) return value
+    const numericId = typeof value === 'number' ? value : (isPlainInt(value) ? Number(value) : null)
+    if (numericId === null) return value
+    const match = defined.aliases.find((a) => (!a.aliasType || aliasTargets.includes(a.aliasType)) && parseAliasNumericValue(a.value) === numericId)
+    return match ? match.name : value
+}
+
 // ── Canvas graph shapes ───────────────────────────────────────────────────
 
 export interface CanvasNodeInfo {
@@ -60,13 +157,6 @@ export interface CanvasNodeInfo {
     thenChildFirstId?: string
     /** Branch nodes only — id of the first node in the optional "else" chain. */
     elseChildFirstId?: string
-    /**
-     * Canvas-only, never produced by parseBody/consumed by compileBody: marks the synthetic
-     * trailing DONE node exrail-block-canvas.ts draws to represent the file's own
-     * auto-appended terminating DONE (see serializeRoutesToFile/serializeSequencesToFile).
-     * Always excluded from the graph compileBody walks, so it can never duplicate that DONE.
-     */
-    isTerminalMarker?: boolean
 }
 
 export interface GraphConnector {
@@ -133,16 +223,19 @@ function stripQuotes(value: string): string {
 }
 
 /** Every param kind that refers to another object by numeric ID *or* an ALIAS(name) identifier. */
-const REF_KINDS = new Set<BlockParamKind>(['turnoutRef', 'sensorRef', 'signalRef', 'rosterRef', 'routeOrSequenceRef'])
+export const REF_KINDS = new Set<BlockParamKind>(['turnoutRef', 'sensorRef', 'signalRef', 'rosterRef', 'routeOrSequenceRef'])
 
-function isPlainInt(s: string): boolean {
+/** A ref arg is either a raw numeric ID or an ALIAS(name) identifier — e.g. THROW(mysidingpoint). Number()-coercing the latter produces NaN. */
+export function isPlainInt(s: string): boolean {
     return /^-?\d+$/.test(s)
 }
 
 /**
- * Parses a route/sequence `body` string (the raw text between `ROUTE(...)`/`SEQUENCE(...)`
- * and the file's terminating `DONE`, as produced by `parseRoutesFromFile`/`parseSequencesFromFile`
- * in myAutomationParser.ts) into a block graph.
+ * Parses a route/sequence `body` string (the raw text between `ROUTE(...)`/`SEQUENCE(...)` and
+ * the next block/EOF, as produced by `parseRoutesFromFile`/`parseSequencesFromFile` in
+ * myAutomationParser.ts — including a trailing top-level `DONE` line when the file has one) into
+ * a block graph. A top-level `DONE` parses like any other cap-shaped command: it becomes an
+ * ordinary node at the end of the chain, same as one nested inside a branch.
  *
  * Never partially compiles: any unrecognized line, casing mismatch, unbalanced IF/ENDIF, or
  * comment returns `{ ok: false, reason }` instead of a best-effort graph, so a hand-edited body
@@ -271,15 +364,10 @@ function nextIdOf(nodeId: string, connectors: GraphConnector[]): string | undefi
 
 /**
  * Compiles a block graph back into EXRAIL text (the `body` string for a
- * RouteEntry/SequenceEntry — the caller supplies the `ROUTE(...)`/`SEQUENCE(...)`
- * header and the file's terminating `DONE` separately).
- *
- * A `DONE` cap block must only ever appear nested inside a branch (depth >= 1):
- * at depth 0 it would collide with the always-appended terminating `DONE` that
- * serializeRoutesToFile/serializeSequencesToFile add after this text, corrupting
- * the next parse. Canvas-level validation (exrail-block-canvas.ts) is responsible
- * for never letting the user connect a DONE block at the top level — this
- * function trusts its input and does not re-check it.
+ * RouteEntry/SequenceEntry — the caller supplies the `ROUTE(...)`/`SEQUENCE(...)` header
+ * separately). A top-level `DONE`/`FOLLOW` cap node, if present, is emitted like any other node
+ * and becomes the last line of `body` — serializeRoutesToFile/serializeSequencesToFile only add
+ * their own `DONE` when `body` has no content at all, so this never produces a duplicate.
  */
 export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): string {
     const registryById = new Map(registry.map((b) => [b.id, b]))
