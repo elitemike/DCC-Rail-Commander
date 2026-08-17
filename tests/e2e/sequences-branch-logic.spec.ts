@@ -5,15 +5,21 @@
  * Sequences and Routes share the same exrail-block-compiler.ts / exrail-block-canvas.ts
  * machinery (see exrail-block-canvas.spec.ts, which only exercises it through the Routes
  * editor) — these tests drive it through the Sequences editor instead, and specifically
- * target the branch (Diamond-shaped IF/IFNOT/IFCLOSED/IFTHROWN) constructs that no
- * existing spec touches: parsing a branch's then/else legs, nested branches, a DONE cap
- * block nested inside a leg, editing a branch's condition, and the parser's rejection of
- * a dangling ELSE / unclosed IF (falls back to Text mode rather than corrupting the body).
+ * target the branch constructs that no other spec touches: parsing a branch's then/else
+ * legs, nested branches, a DONE cap block nested inside a leg, editing a branch's
+ * condition, and the parser's rejection of a dangling ELSE / unclosed IF (falls back to
+ * Text mode rather than corrupting the body).
+ *
+ * The canvas is Google Blockly (see exrail-block-canvas.ts). Blocks loaded from a parsed
+ * body get deterministic ids matching their ParsedGraph node ids, assigned depth-first —
+ * a branch block gets the next id, then its whole THEN chain, then its whole ELSE chain
+ * (see exrail-block-compiler.ts's emitChain()) — so each test's seeded body has a fixed,
+ * predictable id per block, called out at each test.
  *
  * Bodies are seeded via the Raw (Monaco) tab rather than palette drag-and-drop — dragging
- * onto the Syncfusion Diagram's SVG canvas isn't exercised anywhere else in this test
- * suite, so seeding raw EXRAIL text and letting it parse into Blocks mode is the
- * established, reliable pattern (see exrail-block-canvas.spec.ts).
+ * from Blockly's toolbox flyout isn't exercised anywhere else in this test suite, so
+ * seeding raw EXRAIL text and letting it parse into Blocks mode is the established,
+ * reliable pattern (see exrail-block-canvas.spec.ts).
  *
  * Prerequisites: build the app with `pnpm build` before running.
  * Run: pnpm test:e2e --grep "Sequences branch logic"
@@ -58,7 +64,7 @@ async function getMonacoContent(page: import('@playwright/test').Page): Promise<
     return page.evaluate(() => {
         const editorEl = document.querySelector('div.monaco-editor')
         const lines = Array.from(editorEl?.querySelectorAll('.view-line') ?? [])
-        return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
+        return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
     })
 }
 
@@ -75,9 +81,60 @@ async function seedAndSelectSequence(page: import('@playwright/test').Page, file
     await sequenceListItems(page).first().click()
 }
 
+/**
+ * Opens a ref-kind dropdown field currently showing `currentLabel` and picks the option with
+ * `newLabel`. Blockly nests a connected next-block's SVG group inside its predecessor's group
+ * (mirroring the logical stack), so a `[data-id="..."] .blocklyDropdownText` selector also
+ * matches any block connected below — targeting via Blockly's own accessible role/label
+ * (`dropdown: <current value>`) avoids that ambiguity entirely.
+ */
+async function pickDropdownOption(page: import('@playwright/test').Page, currentLabel: string, newLabel: string) {
+    await page.getByRole('button', { name: `dropdown: ${currentLabel}`, exact: false }).click()
+    const menuItem = page.locator('.blocklyMenu .blocklyMenuItem', { hasText: newLabel })
+    await expect(menuItem).toBeVisible()
+    await menuItem.click()
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test.describe('Sequences branch logic', () => {
+    test('a plain sequence\'s trailing DONE renders as a real block and disappears when deleted', async ({ workspacePage: page }) => {
+        await seedAndSelectSequence(page, [
+            'SEQUENCE(1)',
+            'THROW(200)',
+            'DELAY(60000)',
+            'CLOSE(201)',
+            'DONE',
+        ].join('\n'))
+
+        const blocksButton = page.getByRole('button', { name: 'Blocks' })
+        await expect(blocksButton).toBeEnabled()
+        await blocksButton.click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // DONE is real body content now (parseRoutesFromFile/parseSequencesFromFile keep it
+        // instead of stripping it) — it gets an ordinary node id (n4) in the same depth-first
+        // numbering as every other block, not a synthetic/fixed marker.
+        await expect(page.locator('[data-id="n1"]')).toContainText('Throw turnout')
+        await expect(page.locator('[data-id="n2"]')).toContainText('Delay')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Close turnout')
+        await expect(page.locator('[data-id="n4"]')).toContainText('Done')
+
+        // A real, ordinary block: deleting it removes it from the compiled body, same as
+        // deleting THROW/DELAY/CLOSE would — no special-casing keeps it around.
+        await page.locator('[data-id="n4"]').click()
+        await page.keyboard.press('Delete')
+        await expect(page.locator('[data-id="n4"]')).toHaveCount(0)
+        await expect(page.locator('[data-id="n1"]')).toContainText('Throw turnout')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Close turnout')
+
+        await switchToRaw(page)
+        const raw = await getMonacoContent(page)
+        expect(raw).toContain('THROW(200)')
+        expect(raw).toContain('CLOSE(201)')
+        expect(raw.split('\n').filter((l) => l.trim() === 'DONE')).toHaveLength(0)
+    })
+
     test('an IF/ELSE/ENDIF body loads into Blocks mode with a branch node and both legs', async ({ workspacePage: page }) => {
         await seedAndSelectSequence(page, [
             'SEQUENCE(1) // Branch Test',
@@ -93,14 +150,15 @@ test.describe('Sequences branch logic', () => {
         await expect(blocksButton).toBeEnabled()
         await blocksButton.click()
 
-        await expect(page.locator('.e-diagram').first()).toBeVisible({ timeout: 10_000 })
-        await expect(page.getByText('If turnout closed (200)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Throw turnout (201)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Close turnout (201)', { exact: true })).toBeVisible()
-
-        // The file's own auto-appended trailing DONE is represented by the synthetic
-        // terminal marker trailing the branch node (a branch is never itself a cap block).
-        await expect(page.locator('.e-diagram').getByText('Done', { exact: true })).toBeVisible()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        // n1 = IFCLOSED(200), n2 = THROW(201) [THEN leg], n3 = CLOSE(201) [ELSE leg] —
+        // ids assigned depth-first: the branch itself, then its whole THEN chain, then ELSE.
+        await expect(page.locator('[data-id="n1"]')).toContainText('If turnout closed')
+        await expect(page.locator('[data-id="n1"]')).toContainText('Main Line Junction (200)')
+        await expect(page.locator('[data-id="n2"]')).toContainText('Throw turnout')
+        await expect(page.locator('[data-id="n2"]')).toContainText('Yard Entry (201)')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Close turnout')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Yard Entry (201)')
     })
 
     test('editing the branch condition\'s turnout recompiles IF(...) while leaving both legs intact', async ({ workspacePage: page }) => {
@@ -115,12 +173,10 @@ test.describe('Sequences branch logic', () => {
         ].join('\n'))
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
-        await expect(page.locator('.e-diagram').first()).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
 
-        await page.getByText('If turnout closed (200)', { exact: true }).click({ force: true })
-        const select = page.locator('exrail-block-canvas select')
-        await expect(select).toBeVisible()
-        await select.selectOption({ label: 'Yard Entry (201)' })
+        // n1 = IFCLOSED(200), the branch's own condition field.
+        await pickDropdownOption(page, 'Main Line Junction (200)', 'Yard Entry (201)')
 
         await switchToRaw(page)
         const raw = await getMonacoContent(page)
@@ -132,7 +188,7 @@ test.describe('Sequences branch logic', () => {
         expect(raw).toContain('ENDIF')
     })
 
-    test('a DONE cap block nested inside a branch leg parses and renders alongside the synthetic trailing Done', async ({ workspacePage: page }) => {
+    test('a DONE cap block nested inside a branch leg parses and renders alongside the branch', async ({ workspacePage: page }) => {
         await seedAndSelectSequence(page, [
             'SEQUENCE(1) // Nested Done',
             'IFTHROWN(200)',
@@ -149,14 +205,14 @@ test.describe('Sequences branch logic', () => {
         ].join('\n'))
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
-        await expect(page.locator('.e-diagram').first()).toBeVisible({ timeout: 10_000 })
-        await expect(page.getByText('If turnout thrown (200)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Throw turnout (200)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Close turnout (200)', { exact: true })).toBeVisible()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
 
-        // Two "Done" nodes: the real cap block ending the then-leg, plus the synthetic
-        // marker trailing the branch itself (top-level tail — a branch is never a cap block).
-        await expect(page.locator('.e-diagram').getByText('Done', { exact: true })).toHaveCount(2)
+        // n1 = IFTHROWN(200), n2 = THROW(200) [THEN], n3 = DONE (chained after n2, still
+        // inside THEN), n4 = CLOSE(200) [ELSE].
+        await expect(page.locator('[data-id="n1"]')).toContainText('If turnout thrown')
+        await expect(page.locator('[data-id="n2"]')).toContainText('Throw turnout')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Done')
+        await expect(page.locator('[data-id="n4"]')).toContainText('Close turnout')
 
         await switchToRaw(page)
         const raw = await getMonacoContent(page)
@@ -181,11 +237,14 @@ test.describe('Sequences branch logic', () => {
         ].join('\n'))
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
-        await expect(page.locator('.e-diagram').first()).toBeVisible({ timeout: 10_000 })
-        await expect(page.getByText('If turnout closed (200)', { exact: true })).toBeVisible()
-        await expect(page.getByText('If turnout thrown (201)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Throw turnout (200)', { exact: true })).toBeVisible()
-        await expect(page.getByText('Close turnout (200)', { exact: true })).toBeVisible()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // n1 = IFCLOSED(200), n2 = IFTHROWN(201) [THEN of n1], n3 = THROW(200) [THEN of n2],
+        // n4 = CLOSE(200) [ELSE of n1].
+        await expect(page.locator('[data-id="n1"]')).toContainText('If turnout closed')
+        await expect(page.locator('[data-id="n2"]')).toContainText('If turnout thrown')
+        await expect(page.locator('[data-id="n3"]')).toContainText('Throw turnout')
+        await expect(page.locator('[data-id="n4"]')).toContainText('Close turnout')
 
         await switchToRaw(page)
         const raw = await getMonacoContent(page)

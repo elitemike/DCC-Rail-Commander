@@ -117,14 +117,21 @@ export interface SignalEntry {
 export interface RouteEntry {
     id: number;
     description: string;
-    body: string; // raw body between ROUTE(...) and DONE
+    /**
+     * Raw text between ROUTE(...) and the next ROUTE(...)/EOF. Includes the terminating DONE
+     * line when the file has one — DONE is real, user-editable body content (rendered as an
+     * ordinary block by the block canvas), not something this parser hides or re-adds on its
+     * own. See serializeRoutesToFile()'s matching behavior.
+     */
+    body: string;
 }
 
 export interface SequenceEntry {
     id: number;
     /** Friendly name/description, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
     description?: string;
-    body: string; // raw body between SEQUENCE(...) and DONE
+    /** Raw text between SEQUENCE(...) and the next SEQUENCE(...)/EOF — see RouteEntry.body. */
+    body: string;
 }
 
 export interface AliasEntry {
@@ -302,6 +309,29 @@ export function serializeSignalsToFile(signals: SignalEntry[]): string {
     return signals.map(s => `SIGNAL(${s.red}, ${s.amber}, ${s.green})`).join('\n');
 }
 
+/**
+ * Scans forward from `start` collecting a ROUTE/SEQUENCE block's body lines, stopping at
+ * whichever comes first: a bare (unindented) DONE line, the start of the next block, or EOF.
+ * A DONE line found this way is kept as the last body line rather than discarded — DONE is
+ * real, user-editable body content (the block canvas renders it as an ordinary block), not a
+ * sentinel this parser hides and silently re-adds. Stopping at the next block's own header (not
+ * just at DONE) means a body legitimately WITHOUT a DONE — because the user removed it — never
+ * swallows the following block's content while scanning for a terminator that isn't there.
+ */
+function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { body: string; next: number } {
+    const bodyLines: string[] = [];
+    let i = start;
+    while (i < lines.length && !/^DONE\s*$/.test(lines[i]) && !blockStart.test(lines[i])) {
+        bodyLines.push(lines[i]);
+        i++;
+    }
+    if (i < lines.length && /^DONE\s*$/.test(lines[i])) {
+        bodyLines.push(lines[i]);
+        i++;
+    }
+    return { body: bodyLines.join('\n').trim(), next: i };
+}
+
 export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
     const lines = fileContent.split('\n');
     const out: RouteEntry[] = [];
@@ -312,15 +342,9 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
-            const bodyLines: string[] = [];
-            i++;
-            while (i < lines.length && !/^DONE\s*$/.test(lines[i])) {
-                bodyLines.push(lines[i]);
-                i++;
-            }
-            // skip DONE
-            i++;
-            out.push({ id, description: desc, body: bodyLines.join('\n') });
+            const { body, next } = scanBlockBody(lines, i + 1, routeStart);
+            i = next;
+            out.push({ id, description: desc, body });
             continue;
         }
         i++;
@@ -332,8 +356,12 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {
         lines.push(`ROUTE(${r.id}, "${r.description}")`);
-        if (r.body && r.body.trim()) lines.push(r.body);
-        lines.push('DONE');
+        const trimmedBody = (r.body ?? '').trim();
+        // A brand-new route's body starts empty — DONE is still the sensible on-disk default
+        // for that case. Once the body has any real content, write it verbatim: whether it
+        // ends in DONE (retained from a previous load, or added via the block canvas) or not
+        // (the user removed it) is entirely up to what's actually there, never forced.
+        lines.push(trimmedBody || 'DONE');
         lines.push('');
     }
     return lines.join('\n').trim();
@@ -349,14 +377,9 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
         if (m) {
             const id = parseInt(m[1], 10);
             const description = m[2] ? m[2].trim() : '';
-            const bodyLines: string[] = [];
-            i++;
-            while (i < lines.length && !/^DONE\s*$/.test(lines[i])) {
-                bodyLines.push(lines[i]);
-                i++;
-            }
-            i++; // skip DONE
-            out.push({ id, description, body: bodyLines.join('\n') });
+            const { body, next } = scanBlockBody(lines, i + 1, seqStart);
+            i = next;
+            out.push({ id, description, body });
             continue;
         }
         i++;
@@ -369,8 +392,8 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
     for (const s of seqs) {
         const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : '';
         lines.push(`SEQUENCE(${s.id})${desc}`);
-        if (s.body && s.body.trim()) lines.push(s.body);
-        lines.push('DONE');
+        const trimmedBody = (s.body ?? '').trim();
+        lines.push(trimmedBody || 'DONE');
         lines.push('');
     }
     return lines.join('\n').trim();
