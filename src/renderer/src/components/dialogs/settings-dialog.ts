@@ -2,6 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
 import { CheckBox } from '@syncfusion/ej2-buttons'
 import { ThemeService, type ThemeMode } from '../../services/theme.service'
+import { BlocklySoundsService } from '../../services/blockly-sounds.service'
 
 export interface SettingsDialogModel {
     autoConnect: boolean
@@ -23,6 +24,7 @@ export interface SettingsDialogModel {
 export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly $dialog = resolve(IDialogController)
     readonly theme = resolve(ThemeService)
+    readonly blocklySounds = resolve(BlocklySoundsService)
 
     private model!: SettingsDialogModel
 
@@ -35,11 +37,13 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     showMonitorOnConnectEl!: HTMLInputElement
     verboseCompileEl!: HTMLInputElement
     useLatestProdVersionEl!: HTMLInputElement
+    blocklySoundsEl!: HTMLInputElement
 
     private sfAutoConnect?: CheckBox
     private sfShowMonitorOnConnect?: CheckBox
     private sfVerboseCompile?: CheckBox
     private sfUseLatestProdVersion?: CheckBox
+    private sfBlocklySounds?: CheckBox
 
     activate(model: SettingsDialogModel): void {
         this.model = model
@@ -73,6 +77,12 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
             change: (args) => this.model.onUseLatestProdVersionChange(args.checked),
         })
         this.sfUseLatestProdVersion.appendTo(this.useLatestProdVersionEl)
+
+        this.sfBlocklySounds = new CheckBox({
+            checked: this.blocklySounds.enabled,
+            change: (args) => void this.blocklySounds.setEnabled(args.checked),
+        })
+        this.sfBlocklySounds.appendTo(this.blocklySoundsEl)
     }
 
     detaching(): void {
@@ -84,6 +94,8 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.sfVerboseCompile = undefined
         this.sfUseLatestProdVersion?.destroy()
         this.sfUseLatestProdVersion = undefined
+        this.sfBlocklySounds?.destroy()
+        this.sfBlocklySounds = undefined
     }
 
     /** Applies (and persists) the theme immediately — ThemeService is the source of truth, so there's no local mirrored field to keep in sync. */

@@ -7,6 +7,7 @@ import { registerExrailBlocks, setWorkspaceDefined } from './exrail-blockly-bloc
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
 import { flatToolboxFor } from './exrail-blockly-toolbox'
 import { ThemeService } from '../../services/theme.service'
+import { BlocklySoundsService } from '../../services/blockly-sounds.service'
 
 /** Palette tabs shown above the canvas — matches the old EJ2 SymbolPalette's groupings. */
 export const PALETTE_TABS: Array<{ shape: BlockTypeDef['shape']; label: string }> = [
@@ -81,6 +82,7 @@ const STRUCTURAL_EVENT_TYPES = new Set<string>([
  */
 export class ExrailBlockCanvasCustomElement {
     private readonly themeService = resolve(ThemeService)
+    private readonly blocklySounds = resolve(BlocklySoundsService)
 
     @bindable kind: 'route' | 'sequence' = 'route'
     @bindable({ mode: BindingMode.oneTime }) initialBody = ''
@@ -91,6 +93,7 @@ export class ExrailBlockCanvasCustomElement {
     private workspace: Blockly.WorkspaceSvg | null = null
     private _resizeObserver: ResizeObserver | null = null
     private _unsubTheme: (() => void) | null = null
+    private _unsubBlocklySounds: (() => void) | null = null
     private _changeListener: ((e: Blockly.Events.Abstract) => void) | null = null
     private _suppressChange = false
     private _detached = false
@@ -118,6 +121,8 @@ export class ExrailBlockCanvasCustomElement {
         this._resizeObserver = null
         this._unsubTheme?.()
         this._unsubTheme = null
+        this._unsubBlocklySounds?.()
+        this._unsubBlocklySounds = null
         if (this.workspace && this._changeListener) this.workspace.removeChangeListener(this._changeListener)
         this._changeListener = null
         try { this.workspace?.dispose() } catch { /* already broken — nothing to clean up */ }
@@ -169,6 +174,7 @@ export class ExrailBlockCanvasCustomElement {
             zoom: { controls: true, wheel: true, startScale: 1 },
             move: { scrollbars: true, drag: true, wheel: false },
             theme: themeFor(this.themeService.effective),
+            sounds: this.blocklySounds.enabled,
         })
         setWorkspaceDefined(this.workspace, this.defined)
         this._loadInto(this.workspace)
@@ -183,6 +189,10 @@ export class ExrailBlockCanvasCustomElement {
 
         this._unsubTheme = this.themeService.onChange((effective) => {
             this.workspace?.setTheme(themeFor(effective))
+        })
+
+        this._unsubBlocklySounds = this.blocklySounds.onChange((enabled) => {
+            this.workspace?.getAudioManager().setMuted(!enabled)
         })
     }
 

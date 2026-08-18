@@ -4,6 +4,7 @@ import { route } from '@aurelia/router'
 import { ConfigEditorState } from './models/config-editor-state'
 import { UsbService } from './services/usb.service'
 import { ThemeService } from './services/theme.service'
+import { BlocklySoundsService } from './services/blockly-sounds.service'
 
 @route({
     routes: [
@@ -18,6 +19,7 @@ export class App {
     private readonly dialogService = resolve(IDialogService)
     private readonly usb = resolve(UsbService)
     readonly themeService = resolve(ThemeService)
+    private readonly blocklySounds = resolve(BlocklySoundsService)
     private _unsubCloseRequested: (() => void) | null = null
 
     bound(): void {
@@ -37,6 +39,7 @@ export class App {
         // before first paint, so this just reconciles it against the
         // authoritative (async) preference and wires up live switching.
         void this.themeService.init()
+        void this.blocklySounds.init()
     }
 
     unbinding(): void {
