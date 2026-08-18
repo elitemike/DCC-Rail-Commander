@@ -88,6 +88,9 @@ export class ExrailBlockCanvasCustomElement {
     @bindable({ mode: BindingMode.oneTime }) initialBody = ''
     @bindable defined: DefinedObjects | null = null
     @bindable onBodyChange: ((body: string) => void) | null = null
+    /** Display-only id/alias text shown next to "Route"/"Sequence" on the hat block — see the
+     *  HEADER_LABEL field comment in exrail-blockly-blocks.ts. Not part of the compiled graph. */
+    @bindable headerLabel = ''
 
     private container!: HTMLElement
     private workspace: Blockly.WorkspaceSvg | null = null
@@ -201,9 +204,22 @@ export class ExrailBlockCanvasCustomElement {
         this._suppressChange = true
         try {
             buildWorkspaceFromGraph(workspace, graph, BLOCK_REGISTRY)
+            this._applyHeaderLabel()
         } finally {
             this._suppressChange = false
         }
+    }
+
+    /** Pushes `headerLabel` onto the hat block's display-only field — called after (re)building
+     *  the workspace and whenever the bindable changes on an already-mounted canvas. */
+    headerLabelChanged(): void {
+        this._applyHeaderLabel()
+    }
+
+    private _applyHeaderLabel(): void {
+        if (!this.workspace) return
+        const hat = this.workspace.getTopBlocks(true).find((b) => b.getField('HEADER_LABEL'))
+        hat?.setFieldValue(this.headerLabel, 'HEADER_LABEL')
     }
 
     private _loadGraph(): ParsedGraph {
