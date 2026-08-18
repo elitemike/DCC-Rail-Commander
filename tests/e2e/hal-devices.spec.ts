@@ -138,7 +138,7 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
         await expect(deviceRow.locator('[data-field="vpinStart"]')).toHaveValue('100')
 
         // Channel 1 of a board starting at VPin 100 is VPin 100 itself.
-        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+        await addTurnoutOnBoardChannel(page, 'PCA9685')
 
         // Back on Accessories, the board's own row must show no conflict warning —
         // the new turnout is legitimately consuming one of its own channels.
@@ -156,7 +156,7 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
         await openAccessoriesTab(page)
         await addPca9685(page)
 
-        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+        await addTurnoutOnBoardChannel(page, 'PCA9685')
 
         // The newly-added turnout is auto-selected right after Save — this is
         // its very first render, which is exactly where the picker previously
@@ -172,7 +172,7 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
         await openAccessoriesTab(page)
         await addPca9685(page)
 
-        await addTurnoutOnBoardChannel(page, 'PCA9685: PCA9685')
+        await addTurnoutOnBoardChannel(page, 'PCA9685')
 
         const pinSourceSelect = page.locator('#turnout-splitter [data-field="pin-source"]')
 
