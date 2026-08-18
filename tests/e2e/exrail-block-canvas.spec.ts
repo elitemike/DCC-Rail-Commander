@@ -52,7 +52,12 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
 
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
-        const editorEl = document.querySelector('div.monaco-editor')
+        // Scoped to the whole-file Raw tab specifically — the per-row Raw editor (when a row
+        // is in text mode) is a second, separate `<monaco-editor>` that can coexist in the DOM
+        // (class-toggled hidden, not if.bind — see routes-editor.html), so an unscoped
+        // `div.monaco-editor` query would be ambiguous whenever both are mounted.
+        const editorEl = document.querySelector('[data-testid="file-body-monaco"] div.monaco-editor')
+            ?? document.querySelector('div.monaco-editor')
         const lines = Array.from(editorEl?.querySelectorAll('.view-line') ?? [])
         return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
     })
@@ -124,10 +129,15 @@ test.describe('EXRAIL block canvas', () => {
 
         const rawButton = page.getByTestId('row-tab-raw')
         await rawButton.click()
-        const textarea = page.getByTestId('row-body-textarea')
-        await expect(textarea).toBeVisible()
-        await textarea.fill('THROW(200) // inline comment not supported yet')
-        await textarea.blur()
+        const rowEditor = page.getByTestId('row-body-monaco')
+        await expect(rowEditor).toBeVisible()
+        const editor = rowEditor.locator('div.monaco-editor')
+        await editor.click()
+        await page.keyboard.press('Control+A')
+        await page.keyboard.type('ROUTE(1, "Main Line")\nTHROW(200) // inline comment not supported yet')
+        // Row commits happen via the Monaco 300ms debounce (see rowRawEditor.onTextChange in
+        // routes-editor.ts), not blur — wait it out instead of blurring.
+        await page.waitForTimeout(500)
 
         // Comments aren't supported by the block parser yet — Blocks must be disabled,
         // not silently mangle the hand-edited text.

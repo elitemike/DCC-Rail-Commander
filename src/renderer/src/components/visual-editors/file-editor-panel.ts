@@ -19,6 +19,8 @@ export class FileEditorPanelCustomElement {
     /** Refs to the raw Monaco editors — only one is mounted at a time (if.bind) */
     automationEditorEl?: { flush(): void }
     genericEditor?: MonacoEditorCustomElement
+    routesEditorEl?: { flushPending(): void }
+    sequencesEditorEl?: { flushPending(): void }
 
     /**
      * Force any pending debounced Monaco edit into the bound file content.
@@ -29,6 +31,8 @@ export class FileEditorPanelCustomElement {
     flushPending(): void {
         this.automationEditorEl?.flush()
         this.genericEditor?.flush()
+        this.routesEditorEl?.flushPending()
+        this.sequencesEditorEl?.flushPending()
     }
 
     get activeFile(): { name: string; content: string } | null {

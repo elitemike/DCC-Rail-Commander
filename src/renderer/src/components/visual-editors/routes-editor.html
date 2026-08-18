@@ -85,11 +85,14 @@
                             <exrail-block-canvas component.ref="blockCanvas" kind="route" initial-body.bind="selectedRoute.body" defined.bind="defined"
                                 on-body-change.bind="makeBodyChangeHandler(selectedRoute.id)"></exrail-block-canvas>
                         </div>
-                        <textarea else value.two-way="selectedRouteText"
-                            blur.trigger="updateRoute(state.routes.indexOf(selectedRoute), selectedRoute)"
-                            placeholder="ROUTE(id, &quot;description&quot;)"
-                            data-testid="row-body-textarea"
-                            class="flex-1 min-h-0 w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none resize-none"></textarea>
+                        <!-- Content is seeded via a one-time binding, not a reactive one: switchModel()
+                             is the sole channel that pushes new content into an already-mounted instance
+                             when the selected row changes (see routes-editor.ts's selectEntry()) — a
+                             reactive value binding would fire valueChanged() with the *new* row's text
+                             while this.model still pointed at the *old* row's model, corrupting it. -->
+                        <monaco-editor else component.ref="rowRawEditor" value.one-time="rowRawSnapshot"
+                            language="cpp" filename.bind="rowRawFilename" data-testid="row-body-monaco"
+                            on-text-change.bind="onRowRawChange"></monaco-editor>
                     </div>
 
                     <div if.bind="!selectedRoute" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
@@ -103,7 +106,7 @@
         <!-- ── Raw tab ────────────────────────────────────────────────────── -->
         <div class="${activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'}">
             <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myRoutes.h"
-                on-text-change.bind="onRawChange"></monaco-editor>
+                data-testid="file-body-monaco" on-text-change.bind="onRawChange"></monaco-editor>
         </div>
 
     </div>

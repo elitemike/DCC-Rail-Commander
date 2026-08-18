@@ -33,12 +33,12 @@
 
         <!-- myRoutes.h → routes-editor -->
         <div if.bind="currentView === 'routes'" class="flex flex-col flex-1 overflow-hidden">
-            <routes-editor></routes-editor>
+            <routes-editor component.ref="routesEditorEl"></routes-editor>
         </div>
 
         <!-- mySequences.h → sequences-editor -->
         <div if.bind="currentView === 'sequences'" class="flex flex-col flex-1 overflow-hidden">
-            <sequences-editor></sequences-editor>
+            <sequences-editor component.ref="sequencesEditorEl"></sequences-editor>
         </div>
 
         <!-- myAliases.h → aliases-editor -->

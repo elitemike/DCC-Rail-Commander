@@ -35,6 +35,8 @@ function makeEditor(sequences: { id: number; description?: string; body?: string
         rawSnapshot: '',
         selectedId: null,
         rowTab: {},
+        rowRawEditor: null,
+        rowRawSnapshot: '',
     })
 
     return { editor, state, toastShow }
@@ -72,5 +74,60 @@ describe('SequencesEditorCustomElement.makeAliasChangeHandler', () => {
         const [payload] = toastShow.mock.calls[0]
         expect(payload).toMatchObject({ title: 'Alias Error', cssClass: 'e-toast-warning' })
         expect(payload.content).toContain('YARD_SHUNT')
+    })
+})
+
+// ── rowRawFilename / onRowRawChange (per-row Raw Monaco editor) ────────────────
+
+describe('SequencesEditorCustomElement.rowRawFilename', () => {
+    it('scopes the synthetic filename to the currently selected sequence id', () => {
+        const { editor } = makeEditor([{ id: 42, description: '', body: '' }])
+        editor.selectedId = 42
+
+        expect(editor.rowRawFilename).toBe('mySequences.h#42')
+    })
+
+    it('falls back to the plain filename when nothing is selected', () => {
+        const { editor } = makeEditor([])
+        editor.selectedId = null
+
+        expect(editor.rowRawFilename).toBe('mySequences.h')
+    })
+})
+
+describe('SequencesEditorCustomElement.applyRowRawChange', () => {
+    it('parses the header line back into the selected sequence and persists via updateSequence', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Old', body: 'THROW(200)' }])
+        editor.selectedId = 1
+
+        editor.applyRowRawChange('SEQUENCE(1) // New desc\nCLOSE(201)')
+
+        expect(state.sequences[0]).toMatchObject({ description: 'New desc', body: 'CLOSE(201)' })
+        expect(state.syncAll).toHaveBeenCalled()
+        expect(editor.rowRawSnapshot).toBe('SEQUENCE(1) // New desc\nCLOSE(201)')
+    })
+
+    it('does nothing when no sequence is selected', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: '', body: '' }])
+        editor.selectedId = null
+
+        editor.applyRowRawChange('SEQUENCE(1)\nTHROW(200)')
+
+        expect(state.syncAll).not.toHaveBeenCalled()
+    })
+})
+
+describe('SequencesEditorCustomElement.flushPending', () => {
+    it('flushes both the whole-file and per-row Raw Monaco editors', () => {
+        const { editor } = makeEditor([])
+        const rawFlush = vi.fn()
+        const rowRawFlush = vi.fn()
+        editor.rawEditor = { flush: rawFlush }
+        editor.rowRawEditor = { flush: rowRawFlush, switchModel: vi.fn() }
+
+        editor.flushPending()
+
+        expect(rawFlush).toHaveBeenCalledOnce()
+        expect(rowRawFlush).toHaveBeenCalledOnce()
     })
 })
