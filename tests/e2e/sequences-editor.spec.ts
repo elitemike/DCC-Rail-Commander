@@ -27,7 +27,7 @@ async function openAliasesEditor(page: import('@playwright/test').Page) {
 }
 
 async function switchToRaw(page: import('@playwright/test').Page) {
-    await page.getByRole('button', { name: 'Raw' }).click()
+    await page.getByTestId('editor-tab-raw').click()
     await expect(page.locator('div.monaco-editor')).toBeVisible()
     // Allow rawText binding to propagate to Monaco after visual processing
     await page.waitForTimeout(400)

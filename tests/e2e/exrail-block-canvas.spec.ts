@@ -1,5 +1,5 @@
 /**
- * E2E tests: EXRAIL block canvas — the Blocks/Text toggle inside the Routes editor.
+ * E2E tests: EXRAIL block canvas — the Blocks/Raw toggle inside the Routes editor.
  *
  * The workspacePage fixture seeds myRoutes.h with a route body that references
  * turnouts 200/201 (both present in myTurnouts.h), so it should parse into
@@ -119,12 +119,12 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('.blocklyFlyout').getByText('Done', { exact: true })).toBeVisible()
     })
 
-    test('falls back to Text mode for a body Blocks mode cannot parse', async ({ workspacePage: page }) => {
+    test('falls back to Raw mode for a body Blocks mode cannot parse', async ({ workspacePage: page }) => {
         await openRoutesEditor(page)
 
-        const textButton = page.getByRole('button', { name: 'Text', exact: true })
-        await textButton.click()
-        const textarea = page.locator('textarea[placeholder="Route body"]')
+        const rawButton = page.getByTestId('row-tab-raw')
+        await rawButton.click()
+        const textarea = page.getByTestId('row-body-textarea')
         await expect(textarea).toBeVisible()
         await textarea.fill('THROW(200) // inline comment not supported yet')
         await textarea.blur()
@@ -139,7 +139,7 @@ test.describe('EXRAIL block canvas', () => {
         await openRoutesEditor(page)
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
 
-        await page.getByRole('button', { name: 'Raw' }).click()
+        await page.getByTestId('editor-tab-raw').click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('THROW(200)')
@@ -155,7 +155,7 @@ test.describe('EXRAIL block canvas', () => {
         // restricted dropdown, not the free-text input a stray/unresolved value could corrupt.
         await pickDropdownOption(page, 'Main Line Junction (200)', 'Yard Entry (201)')
 
-        await page.getByRole('button', { name: 'Raw' }).click()
+        await page.getByTestId('editor-tab-raw').click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('THROW(201)')
@@ -180,7 +180,7 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('.blocklyMenu .blocklyMenuItem', { hasText: 'Yard Entry (201)' })).toHaveCount(0)
         await page.locator('.blocklyMenu .blocklyMenuItem', { hasText: 'mysidingpoint (201)' }).click()
 
-        await page.getByRole('button', { name: 'Raw' }).click()
+        await page.getByTestId('editor-tab-raw').click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('THROW(mysidingpoint)')
@@ -205,7 +205,7 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('[data-id="n2"]')).toContainText('mysidingpoint (201)')
         await expect(page.locator('[data-id="n2"]')).not.toContainText('not found')
 
-        await page.getByRole('button', { name: 'Raw' }).click()
+        await page.getByTestId('editor-tab-raw').click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('CLOSE(mysidingpoint)')
