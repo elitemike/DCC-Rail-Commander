@@ -356,3 +356,77 @@ describe('validateAliasTargets', () => {
         expect(warnings).toHaveLength(0)
     })
 })
+
+// ── ROUTE/AUTOMATION/SEQUENCE id rules (myRoutes.h / mySequences.h / myAutomation.h) ──────────
+
+describe('validateSequenceIdRules — wired through _runValidatorsForTest', () => {
+    it('flags a ROUTE id that collides with a SEQUENCE id defined elsewhere', () => {
+        const entries = [
+            { kind: 'Route' as const, id: 10 },
+            { kind: 'Sequence' as const, id: 10 },
+        ]
+
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(10, "Main")\nDONE', undefined, entries)
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain('unique across all three types')
+    })
+
+    it('flags the colliding SEQUENCE id too, when that file is opened', () => {
+        const entries = [
+            { kind: 'Route' as const, id: 10 },
+            { kind: 'Sequence' as const, id: 10 },
+        ]
+
+        const markers = _runValidatorsForTest('mySequences.h', 'SEQUENCE(10)\nDONE', undefined, entries)
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain('unique across all three types')
+    })
+
+    it('flags an AUTOMATION id that collides with a ROUTE id', () => {
+        const entries = [
+            { kind: 'Route' as const, id: 5 },
+            { kind: 'Automation' as const, id: 5 },
+        ]
+
+        const markers = _runValidatorsForTest('myAutomation.h', 'AUTOMATION(5, "Handoff")\nDONE', undefined, entries)
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain('unique across all three types')
+    })
+
+    it('flags id 0 on a ROUTE as reserved for the startup sequence', () => {
+        const entries = [{ kind: 'Route' as const, id: 0 }]
+
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(0, "Bad")\nDONE', undefined, entries)
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain('reserved for the startup sequence')
+    })
+
+    it('produces no markers when every id is unique and in range', () => {
+        const entries = [
+            { kind: 'Route' as const, id: 1 },
+            { kind: 'Automation' as const, id: 2 },
+            { kind: 'Sequence' as const, id: 3 },
+        ]
+
+        expect(_runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Main")\nDONE', undefined, entries)).toHaveLength(0)
+        expect(_runValidatorsForTest('mySequences.h', 'SEQUENCE(3)\nDONE', undefined, entries)).toHaveLength(0)
+        expect(_runValidatorsForTest('myAutomation.h', 'AUTOMATION(2, "Handoff")\nDONE', undefined, entries)).toHaveLength(0)
+    })
+
+    it('does not run without sequenceIdEntries supplied (backward compatible no-op)', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(0, "Bad")\nDONE')
+        expect(markers).toHaveLength(0)
+    })
+
+    it('only flags the occurrence in the currently open file, not unrelated files’ macros', () => {
+        const entries = [
+            { kind: 'Route' as const, id: 10 },
+            { kind: 'Sequence' as const, id: 10 },
+        ]
+
+        // myAutomation.h has no AUTOMATION(10, ...) in its text, so nothing to mark there
+        // even though id 10 collides elsewhere.
+        const markers = _runValidatorsForTest('myAutomation.h', '// no automations here', undefined, entries)
+        expect(markers).toHaveLength(0)
+    })
+})

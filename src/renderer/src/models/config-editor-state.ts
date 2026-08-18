@@ -24,6 +24,8 @@ import {
     parseAliasTypeComment,
     validateAliasName,
     validateAliasValue,
+    parseAutomationsFromFile,
+    validateSequenceIds,
     type Roster,
     type Turnout,
     type RosterFunction,
@@ -31,8 +33,11 @@ import {
     type SignalEntry,
     type RouteEntry,
     type SequenceEntry,
+    type AutomationEntry,
     type AliasEntry,
     type AliasTargetType,
+    type SequenceIdEntry,
+    type SequenceIdViolation,
 } from '../utils/myAutomationParser'
 import {
     parseHalDevicesFromAutomation,
@@ -603,6 +608,38 @@ export class ConfigEditorState {
 
     // ── Preserved content (non-ROSTER/TURNOUT lines from imported myAutomation.h)
     preservedAutomationContent = ''
+
+    /** AUTOMATION(id, "desc") blocks found in myAutomation.h's free-form content — see
+     *  AutomationEntry doc comment. There is no visual editor for these; this exists so
+     *  automation ids participate in getSequenceIdViolations() below. */
+    get automations(): AutomationEntry[] {
+        return parseAutomationsFromFile(this.preservedAutomationContent)
+    }
+
+    /** Combined ROUTE/AUTOMATION/SEQUENCE id list for validateSequenceIds() — see that
+     *  function's doc comment for the range/uniqueness rules being checked. */
+    get sequenceIdEntries(): SequenceIdEntry[] {
+        return [
+            ...this.routes.map((r): SequenceIdEntry => ({ kind: 'Route', id: r.id })),
+            ...this.automations.map((a): SequenceIdEntry => ({ kind: 'Automation', id: a.id })),
+            ...this.sequences.map((s): SequenceIdEntry => ({ kind: 'Sequence', id: s.id })),
+        ]
+    }
+
+    /** Every out-of-range id and every cross-type id collision currently present across
+     *  myRoutes.h, mySequences.h, and myAutomation.h's AUTOMATION blocks. */
+    getSequenceIdViolations(): SequenceIdViolation[] {
+        return validateSequenceIds(this.sequenceIdEntries)
+    }
+
+    /** Smallest id ≥ 1 not already used by any ROUTE/AUTOMATION/SEQUENCE — used when creating a
+     *  new route/sequence, since all three share one id pool (see validateSequenceIds). */
+    get nextSequenceId(): number {
+        const used = new Set(this.sequenceIdEntries.map((e) => e.id))
+        let id = 1
+        while (used.has(id)) id++
+        return id
+    }
 
     // ── Generated HAL Devices section (accessory boards — see hal-devices.ts) ─
     generatedHalDevicesContent = ''
