@@ -3,10 +3,16 @@
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": false,
     "cSpell.words": [
+        "blockly",
+        "Colour",
         "commandstation",
         "DBUS",
+        "EXRAIL",
         "fqbn",
         "ioexpander",
-        "maximizable"
+        "maximizable",
+        "recompiles",
+        "rescan",
+        "unsub"
     ]
 }
