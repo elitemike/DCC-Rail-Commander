@@ -43,6 +43,14 @@ export interface BlockTypeDef {
     shape: BlockShape
     label: string
     color: string
+    /**
+     * Palette sidebar placement, e.g. 'Turnouts' or 'Locomotives/Driving' (slash-separated for a
+     * nested subcategory) — see exrail-blockly-toolbox.ts's buildCategoryTree()/flatToolboxForPath(),
+     * which build the custom category sidebar and its flyout contents from this field alone, so the
+     * registry stays the one place a block's palette location is decided. Ignored for hat-shaped
+     * blocks (never placed from the toolbox).
+     */
+    category: string
     params: BlockParamDef[]
     isAvailable(defined: DefinedObjects): boolean
     /**

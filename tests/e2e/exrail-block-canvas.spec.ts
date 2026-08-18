@@ -87,13 +87,14 @@ test.describe('EXRAIL block canvas', () => {
         await expect(blocksButton).toBeVisible()
         await expect(blocksButton).toBeEnabled()
 
-        // The Blockly workspace mounts without throwing, and the Actions palette is visible
-        // by default (a flat, always-open flyout — not a category popup the user has to click
-        // open, see exrail-blockly-toolbox.ts) without needing to click anything first.
+        // The Blockly workspace mounts without throwing. The palette is our own nested-category
+        // sidebar (see exrail-blockly-toolbox.ts) driving Blockly's always-visible, non-overlapping
+        // flyout — Turnouts is selected by default with no click needed.
         await expect(page.locator('exrail-block-canvas')).toBeVisible()
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
         await expect(page.locator('.blocklyFlyout').first()).toBeVisible({ timeout: 10_000 })
-        await expect(page.getByRole('button', { name: 'Actions' })).toHaveClass(/bg-blue-600/)
+        const palette = page.locator('exrail-block-canvas nav')
+        await expect(palette.getByRole('button', { name: 'Turnouts', exact: false })).toHaveClass(/bg-blue-600/)
         await expect(page.locator('.blocklyFlyout').getByText('Throw turnout', { exact: false })).toBeVisible()
 
         // The seeded body's two blocks are present, each ending on its own field's value.
@@ -101,27 +102,44 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('[data-id="n2"]')).toContainText('Close turnout')
     })
 
-    test('the palette is always visible and switches groups via tabs, without popping over the workspace', async ({ workspacePage: page }) => {
+    test('the palette groups blocks into nested categories without ever overlaying the workspace', async ({ workspacePage: page }) => {
         await openRoutesEditor(page)
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
 
-        // Actions is the default tab — its flyout is already open with no click needed.
+        // The flyout is a permanent, non-overlapping panel — always open, never popping over the
+        // placed workspace blocks (see exrail-blockly-toolbox.ts's flyout-only-toolbox rationale).
+        await expect(page.locator('.blocklyFlyout').first()).toBeVisible()
+        await expect(page.locator('[data-id="n1"]')).toBeVisible()
+
+        // MOCK_ROUTES_H's fixture defines turnouts but no sensors, so the turnout category
+        // includes its conditions (IFCLOSED/IFTHROWN) alongside the actions — see
+        // BLOCK_REGISTRY's isAvailable().
         await expect(page.locator('.blocklyFlyout').getByText('Throw turnout', { exact: false })).toBeVisible()
-        // The placed workspace blocks (loaded from the seeded body) stay visible at the same time —
-        // the flyout is a permanent, non-overlapping panel, not a popup that hides them.
-        await expect(page.locator('[data-id="n1"]')).toBeVisible()
-
-        await page.getByRole('button', { name: 'Conditions' }).click()
-        await expect(page.getByRole('button', { name: 'Conditions' })).toHaveClass(/bg-blue-600/)
-        // MOCK_ROUTES_H's fixture defines turnouts but no sensors, so only the turnout-based
-        // conditions (IFCLOSED/IFTHROWN) are available — see BLOCK_REGISTRY's isAvailable().
         await expect(page.locator('.blocklyFlyout').getByText('If turnout closed', { exact: false })).toBeVisible()
-        await expect(page.locator('.blocklyFlyout').getByText('Throw turnout', { exact: false })).toHaveCount(0)
-        // Still visible — switching tabs never hides the placed blocks either.
+
+        // Locomotives is a parent category containing Driving/Functions subcategories, not blocks
+        // of its own — clicking it expands the tree without selecting a leaf or touching the flyout.
+        const palette = page.locator('exrail-block-canvas nav')
+        const locomotivesCategory = palette.getByRole('button', { name: 'Locomotives', exact: false })
+        await locomotivesCategory.click()
+        const drivingCategory = palette.getByRole('button', { name: 'Driving', exact: false })
+        const functionsCategory = palette.getByRole('button', { name: 'Functions', exact: false })
+        await expect(drivingCategory).toBeVisible()
+        await expect(functionsCategory).toBeVisible()
+        // Still visible — expanding a parent category never hides the placed blocks either.
         await expect(page.locator('[data-id="n1"]')).toBeVisible()
 
-        await page.getByRole('button', { name: 'Ends' }).click()
+        await drivingCategory.click()
+        await expect(page.locator('.blocklyFlyout').getByText('Drive forward', { exact: false })).toBeVisible()
+        await expect(page.locator('.blocklyFlyout').getByText('Set active loco', { exact: false })).toBeVisible()
+
+        await functionsCategory.click()
+        await expect(page.locator('.blocklyFlyout').getByText('Function on', { exact: true })).toBeVisible()
+
+        await palette.getByRole('button', { name: 'Control', exact: false }).click()
         await expect(page.locator('.blocklyFlyout').getByText('Done', { exact: true })).toBeVisible()
+        // The whole time, the workspace canvas (and its placed blocks) is never covered.
+        await expect(page.locator('[data-id="n1"]')).toBeVisible()
     })
 
     test('falls back to Raw mode for a body Blocks mode cannot parse', async ({ workspacePage: page }) => {
@@ -220,5 +238,96 @@ test.describe('EXRAIL block canvas', () => {
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('CLOSE(mysidingpoint)')
         expect(rawText).not.toContain('CLOSE(201)')
+    })
+
+    test('resizes correctly after the file-level Visual/Raw tabs are toggled away and back', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        const sizeBefore = await page.locator('.blocklySvg').first().boundingBox()
+        expect(sizeBefore?.width).toBeGreaterThan(100)
+
+        // Leaving the file-level Visual tab keeps this component mounted but `display:none`
+        // (see routes-editor.html) rather than tearing it down — a real trigger for Blockly's
+        // classic "sized while hidden" staleness bug. exrail-block-canvas.ts's IntersectionObserver
+        // exists specifically to correct this when the tab becomes visible again.
+        await page.getByTestId('editor-tab-raw').click()
+        await expect(page.locator('div.monaco-editor')).toBeVisible()
+        await page.getByRole('button', { name: 'Visual', exact: true }).click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible()
+        await page.waitForTimeout(300)
+
+        const sizeAfter = await page.locator('.blocklySvg').first().boundingBox()
+        expect(sizeAfter?.width).toBeGreaterThanOrEqual((sizeBefore?.width ?? 0) - 5)
+        expect(sizeAfter?.height).toBeGreaterThanOrEqual((sizeBefore?.height ?? 0) - 5)
+    })
+
+    test('resizes correctly after switching between sequence rows', async ({ workspacePage: page }) => {
+        await page.getByText('Sequences', { exact: true }).first().click()
+        await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+        await page.getByTestId('editor-tab-raw').click()
+        await expect(page.locator('div.monaco-editor')).toBeVisible()
+        await setMonacoContent(page, [
+            'SEQUENCE(1)',
+            'DELAY(500)',
+            'DONE',
+            '',
+            'SEQUENCE(2)',
+            'DELAY(1000)',
+            'DONE',
+        ].join('\n'))
+        await page.getByRole('button', { name: 'Visual', exact: true }).click()
+
+        const rows = page.locator('sequences-editor nav[aria-label="Sequences"] a')
+        await rows.nth(0).click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        const sizeBefore = await page.locator('.blocklySvg').first().boundingBox()
+        expect(sizeBefore?.width).toBeGreaterThan(100)
+
+        // Switching rows reuses the same Blockly instance rather than re-injecting it (see
+        // exrail-block-canvas.ts's reload()) — its own Blockly.svgResize() call guards against the
+        // same metrics staleness the IntersectionObserver guards against on the hidden-tab path.
+        await rows.nth(1).click()
+        await page.waitForTimeout(300)
+
+        const sizeAfter = await page.locator('.blocklySvg').first().boundingBox()
+        expect(sizeAfter?.width).toBeGreaterThanOrEqual((sizeBefore?.width ?? 0) - 5)
+        expect(sizeAfter?.height).toBeGreaterThanOrEqual((sizeBefore?.height ?? 0) - 5)
+    })
+
+    test('resizes correctly after navigating away to a different config file and back', async ({ workspacePage: page }) => {
+        // Unlike the file-level Visual/Raw tab (kept mounted, just `display:none` — see
+        // routes-editor.html/sequences-editor.html) and row switching (reload() reuses the same
+        // Blockly instance), the left CONFIGURATION nav's `if.bind="currentView === '...'"`
+        // (file-editor-panel.html) fully destroys <sequences-editor> — and its child
+        // exrail-block-canvas — when leaving, and mounts a fresh instance on return. On a fresh
+        // mount the detail column sits inside a Syncfusion Splitter pane, which overwrites that
+        // column's own class attribute with its own (display:block) e-pane classes — silently
+        // breaking any `flex-1` on its children, since flex-basis sizing only works against a
+        // `display:flex` parent (see the h-full comments in sequences-editor.html's Detail panel).
+        await page.getByText('Sequences', { exact: true }).first().click()
+        await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+        await page.getByTestId('editor-tab-raw').click()
+        await expect(page.locator('div.monaco-editor')).toBeVisible()
+        await setMonacoContent(page, ['SEQUENCE(1)', 'DELAY(500)', 'DONE'].join('\n'))
+        await page.getByRole('button', { name: 'Visual', exact: true }).click()
+        await page.locator('sequences-editor nav[aria-label="Sequences"] a').first().click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        await page.getByText('Signals', { exact: true }).first().click()
+        await expect(page.locator('signals-editor')).toBeVisible()
+        await page.getByText('Sequences', { exact: true }).first().click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await page.waitForTimeout(300)
+
+        // The injected SVG should fill its immediate viewport wrapper exactly, not just be
+        // "reasonably large" — this is the direct signal of the reported bug (a small, stale-sized
+        // SVG inside an otherwise correctly-sized wrapper).
+        const viewportBox = await page.getByTestId('canvas-viewport').boundingBox()
+        const svgBox = await page.locator('.blocklySvg').first().boundingBox()
+        expect(svgBox?.width).toBeGreaterThanOrEqual((viewportBox?.width ?? 0) - 2)
+        expect(svgBox?.height).toBeGreaterThanOrEqual((viewportBox?.height ?? 0) - 2)
+        // And the wrapper itself should be tall — a regression here would otherwise pass trivially
+        // by having both sides of the comparison collapse together.
+        expect(viewportBox?.height).toBeGreaterThan(300)
     })
 })
