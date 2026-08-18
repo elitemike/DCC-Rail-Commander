@@ -87,6 +87,17 @@ export class RoutesEditorCustomElement {
         return r.description ? `${r.description} (${r.id})` : `Route ${r.id}`
     }
 
+    /** Text pushed into the Blocks tab's hat block via <exrail-block-canvas header-label.bind> —
+     *  alias takes priority over description, same precedence optionsForRefKind() uses when
+     *  another block references this route, so the two stay consistent. */
+    get selectedRouteHeaderLabel(): string {
+        const r = this.selectedRoute
+        if (!r) return ''
+        const alias = this.state.getPrimaryAliasNameForId(r.id, 'Route')
+        if (alias) return `${alias} (${r.id})`
+        return r.description ? `${r.description} (${r.id})` : `(${r.id})`
+    }
+
     /** Reassigns `rowTab` rather than mutating in place — sequences-editor.ts's setRowTab has the same convention, for the same reason: this is a plain object on a class instance, not observed through Aurelia's dirty-checking of individual keys. */
     setRowTab(r: RouteEntry, tab: RowTab): void {
         if (tab === 'text') this.rowRawSnapshot = this.selectedRouteText

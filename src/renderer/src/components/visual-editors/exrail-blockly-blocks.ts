@@ -110,10 +110,19 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
         tooltip: def.label,
     }
 
-    const paramPlaceholders = def.params.map((_, i) => `%${i + 1}`).join(' ')
-    json.message0 = def.params.length > 0 ? `${def.label} ${paramPlaceholders}` : def.label
-    if (def.params.length > 0) {
-        json.args0 = def.params.map(fieldJsonFor)
+    if (def.shape === 'hat') {
+        // The hat block's own id/alias isn't an EXRAIL emit param (compileBody() never emits the
+        // hat node — see exrail-block-compiler.ts's walk()) — it's a display-only label the host
+        // editor pushes in via ExrailBlockCanvasCustomElement.headerLabel, purely so the canvas
+        // shows which route/sequence this body belongs to.
+        json.message0 = `${def.label} %1`
+        json.args0 = [{ type: 'field_label', name: 'HEADER_LABEL', text: '' }]
+    } else {
+        const paramPlaceholders = def.params.map((_, i) => `%${i + 1}`).join(' ')
+        json.message0 = def.params.length > 0 ? `${def.label} ${paramPlaceholders}` : def.label
+        if (def.params.length > 0) {
+            json.args0 = def.params.map(fieldJsonFor)
+        }
     }
 
     if (def.shape === 'branch') {
