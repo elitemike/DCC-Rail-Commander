@@ -206,7 +206,7 @@ export class RoutesEditorCustomElement {
 
     addRoute() {
         this.rowRawEditor?.flush()
-        const nextId = (this.state.routes[this.state.routes.length - 1]?.id ?? 0) + 1
+        const nextId = this.state.nextSequenceId
         this.state.routes = [...this.state.routes, { id: nextId, description: 'New Route', body: '' }]
         this.state.syncAll()
         this.selectedId = nextId

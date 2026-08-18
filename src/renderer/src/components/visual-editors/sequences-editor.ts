@@ -209,7 +209,7 @@ export class SequencesEditorCustomElement {
 
     addSequence() {
         this.rowRawEditor?.flush()
-        const nextId = (this.state.sequences[this.state.sequences.length - 1]?.id ?? 0) + 1
+        const nextId = this.state.nextSequenceId
         this.state.sequences = [...this.state.sequences, { id: nextId, description: 'New Sequence', body: '' }]
         this.state.syncAll()
         this.selectedId = nextId

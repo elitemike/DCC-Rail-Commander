@@ -11,7 +11,7 @@
 
 import * as monaco from 'monaco-editor'
 import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
-import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, type AliasEntry, type AliasTargetType, type ObjectIdCollections } from '../utils/myAutomationParser'
+import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
 
@@ -465,6 +465,48 @@ function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerDat
     }
 }
 
+// ── ROUTE/AUTOMATION/SEQUENCE ID uniqueness (myRoutes.h / mySequences.h / myAutomation.h) ─────
+
+const SEQUENCE_ID_MACRO: Record<string, { macroName: 'ROUTE' | 'SEQUENCE' | 'AUTOMATION'; kind: SequenceObjectKind }> = {
+    'myRoutes.h': { macroName: 'ROUTE', kind: 'Route' },
+    'mySequences.h': { macroName: 'SEQUENCE', kind: 'Sequence' },
+    'myAutomation.h': { macroName: 'AUTOMATION', kind: 'Automation' },
+}
+
+/**
+ * Flags every ROUTE/AUTOMATION/SEQUENCE id in this file that `validateSequenceIds` (see
+ * myAutomationParser.ts) reports as out-of-range or colliding with another entry — including one
+ * living in a different one of the three files, since they all share one id namespace.
+ */
+function validateSequenceIdRules(
+    text: string,
+    filename: string,
+    violations: SequenceIdViolation[],
+    out: monaco.editor.IMarkerData[],
+): void {
+    const target = SEQUENCE_ID_MACRO[filename]
+    if (!target) return
+
+    const byId = new Map<number, string[]>()
+    for (const v of violations) {
+        if (v.kind !== target.kind) continue
+        const list = byId.get(v.id)
+        if (list) list.push(v.reason)
+        else byId.set(v.id, [v.reason])
+    }
+    if (byId.size === 0) return
+
+    for (const { argsRaw, innerStart } of eachMacroCall(text, target.macroName)) {
+        const idArg = parseArgSpans(argsRaw, innerStart)[0]
+        if (!idArg || !isInt(idArg.value)) continue
+        const reasons = byId.get(Number(idArg.value))
+        if (!reasons) continue
+        for (const reason of reasons) {
+            out.push(makeMarker(text, idArg.start, idArg.end, reason))
+        }
+    }
+}
+
 // ── ALIAS validator (myAliases.h) ─────────────────────────────────────────────
 
 /**
@@ -742,6 +784,11 @@ function validateModel(model: monaco.editor.ITextModel): void {
         }
     }
 
+    if (SEQUENCE_ID_MACRO[filename]) {
+        const state = getSharedConfigEditorState()
+        if (state) validateSequenceIdRules(text, filename, state.getSequenceIdViolations(), markers)
+    }
+
     monaco.editor.setModelMarkers(model, OWNER, markers)
 }
 
@@ -754,11 +801,17 @@ function validateModel(model: monaco.editor.ITextModel): void {
  * `exrailData`, when supplied, also runs the EXRAIL object-reference validator
  * for myAutomation.h / myRoutes.h / mySequences.h (THROW/CLOSE/AT/SETLOCO/etc.),
  * or the ALIAS target-reference validator for myAliases.h.
+ *
+ * `sequenceIdEntries`, when supplied, also runs the ROUTE/AUTOMATION/SEQUENCE id
+ * range/uniqueness validator (see validateSequenceIds in myAutomationParser.ts) for
+ * myRoutes.h / mySequences.h / myAutomation.h, using the full combined list — same as
+ * ConfigEditorState.sequenceIdEntries would produce in the real app.
  */
 export function _runValidatorsForTest(
     filename: string,
     text: string,
     exrailData?: ExrailCompletionData,
+    sequenceIdEntries?: SequenceIdEntry[],
 ): Array<{ message: string; severity: number }> {
     const markers: monaco.editor.IMarkerData[] = []
 
@@ -773,6 +826,10 @@ export function _runValidatorsForTest(
 
     if (filename === 'myAliases.h' && exrailData) {
         validateAliasTargets(text, markers, exrailData)
+    }
+
+    if (sequenceIdEntries) {
+        validateSequenceIdRules(text, filename, validateSequenceIds(sequenceIdEntries), markers)
     }
 
     return markers.map((m) => ({ message: m.message, severity: m.severity }))

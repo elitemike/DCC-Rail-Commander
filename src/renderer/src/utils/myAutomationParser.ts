@@ -134,6 +134,19 @@ export interface SequenceEntry {
     body: string;
 }
 
+/**
+ * AUTOMATION(id, "desc") — structurally identical to ROUTE, but there is no visual editor for
+ * it; automation blocks live as free-form text inside myAutomation.h (see
+ * `ConfigEditorState.preservedAutomationContent`). This parser exists purely to extract IDs for
+ * `validateSequenceIds` — it is not round-tripped/serialized by the app.
+ */
+export interface AutomationEntry {
+    id: number;
+    description: string;
+    /** Raw text between AUTOMATION(...) and the next ROUTE/AUTOMATION/SEQUENCE(...)/EOF — see RouteEntry.body. */
+    body: string;
+}
+
 export interface AliasEntry {
     name: string;
     value: string;
@@ -352,6 +365,31 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
     return out;
 }
 
+/**
+ * Scans for top-level AUTOMATION(id, "desc") blocks anywhere in `fileContent` (unlike
+ * ROUTE/SEQUENCE, these aren't confined to a dedicated file — they live inside
+ * myAutomation.h's free-form preserved content). See AutomationEntry doc comment.
+ */
+export function parseAutomationsFromFile(fileContent: string): AutomationEntry[] {
+    const lines = fileContent.split('\n');
+    const out: AutomationEntry[] = [];
+    const automationStart = /^AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    let i = 0;
+    while (i < lines.length) {
+        const m = lines[i].match(automationStart);
+        if (m) {
+            const id = parseInt(m[1], 10);
+            const desc = m[2];
+            const { body, next } = scanBlockBody(lines, i + 1, automationStart);
+            i = next;
+            out.push({ id, description: desc, body });
+            continue;
+        }
+        i++;
+    }
+    return out;
+}
+
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {
@@ -397,6 +435,76 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
         lines.push('');
     }
     return lines.join('\n').trim();
+}
+
+// ─── ROUTE/AUTOMATION/SEQUENCE ID rules ──────────────────────────────────────
+
+export type SequenceObjectKind = 'Route' | 'Automation' | 'Sequence';
+
+export interface SequenceIdEntry {
+    kind: SequenceObjectKind;
+    id: number;
+}
+
+export interface SequenceIdViolation {
+    kind: SequenceObjectKind;
+    id: number;
+    reason: string;
+}
+
+/** Per https://dcc-ex.com/exrail/exrail-command-reference.html — ROUTE/AUTOMATION/SEQUENCE IDs
+ *  share one numbering pool (a THROW/FOLLOW-style reference by id is ambiguous otherwise), and
+ *  the valid range is 1-32767: id 0 is implicitly assigned to the startup sequence (the code
+ *  that runs before the first ROUTE/AUTOMATION/SEQUENCE in the script) and can't be reused. */
+export const MIN_SEQUENCE_ID = 1;
+export const MAX_SEQUENCE_ID = 32767;
+export const RESERVED_STARTUP_SEQUENCE_ID = 0;
+
+/**
+ * Validates a combined list of ROUTE/AUTOMATION/SEQUENCE ids: each must fall in
+ * [MIN_SEQUENCE_ID, MAX_SEQUENCE_ID] (id 0 is reserved, not just "out of range"), and no id may
+ * be reused by more than one entry regardless of which of the three types it belongs to. Returns
+ * one violation per offending entry — two entries sharing an id each get their own violation.
+ */
+export function validateSequenceIds(entries: SequenceIdEntry[]): SequenceIdViolation[] {
+    const violations: SequenceIdViolation[] = [];
+
+    for (const entry of entries) {
+        if (entry.id === RESERVED_STARTUP_SEQUENCE_ID) {
+            violations.push({
+                kind: entry.kind,
+                id: entry.id,
+                reason: 'ID 0 is reserved for the startup sequence (the code before the first ROUTE/AUTOMATION/SEQUENCE) and cannot be assigned explicitly.',
+            });
+        } else if (entry.id < MIN_SEQUENCE_ID || entry.id > MAX_SEQUENCE_ID) {
+            violations.push({
+                kind: entry.kind,
+                id: entry.id,
+                reason: `ID ${entry.id} is out of range — ROUTE/AUTOMATION/SEQUENCE IDs must be between ${MIN_SEQUENCE_ID} and ${MAX_SEQUENCE_ID}.`,
+            });
+        }
+    }
+
+    const owners = new Map<number, SequenceIdEntry[]>();
+    for (const entry of entries) {
+        const list = owners.get(entry.id);
+        if (list) list.push(entry);
+        else owners.set(entry.id, [entry]);
+    }
+
+    for (const [id, list] of owners) {
+        if (list.length < 2) continue;
+        const kinds = list.map((e) => e.kind);
+        for (const entry of list) {
+            violations.push({
+                kind: entry.kind,
+                id,
+                reason: `ID ${id} is used by more than one ROUTE/AUTOMATION/SEQUENCE entry (${kinds.join(', ')}) — IDs must be unique across all three types.`,
+            });
+        }
+    }
+
+    return violations;
 }
 
 /** ALIAS(name[, value]) — see https://dcc-ex.com/exrail/exrail-command-reference.html#aliases */
