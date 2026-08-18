@@ -53,6 +53,37 @@ export class SequencesEditorCustomElement {
         return parseBody(s.body, 'sequence', BLOCK_REGISTRY).ok
     }
 
+    private static readonly SEQ_HEADER_RE = /^SEQUENCE\s*\(\s*\d+\s*\)\s*(?:\/\/\s*(.*))?$/
+
+    /**
+     * The Text tab's textarea binds to this (not `selectedSequence.body` directly) so the
+     * SEQUENCE(id) header line is part of the actual editable/selectable text, matching the
+     * Blocks tab's hat node — not a separate read-only caption sitting outside the text control.
+     * The id itself stays whatever `selectedSequence.id` already is; only the trailing
+     * `// description` comment on that first line is round-tripped.
+     */
+    get selectedSequenceText(): string {
+        const s = this.selectedSequence
+        if (!s) return ''
+        const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : ''
+        return `SEQUENCE(${s.id})${desc}\n${s.body ?? ''}`
+    }
+
+    set selectedSequenceText(text: string) {
+        const s = this.selectedSequence
+        if (!s) return
+        const lines = text.split('\n')
+        const m = lines[0]?.match(SequencesEditorCustomElement.SEQ_HEADER_RE)
+        if (m) {
+            s.description = m[1] ? m[1].trim() : ''
+            s.body = lines.slice(1).join('\n')
+        } else {
+            // Header line got mangled/removed — don't discard what the user typed; keep the
+            // last-known description and fall back to treating everything as body.
+            s.body = text
+        }
+    }
+
     getDisplayName(s: SequenceEntry): string {
         return s.description ? `${s.description} (${s.id})` : `Sequence ${s.id}`
     }
