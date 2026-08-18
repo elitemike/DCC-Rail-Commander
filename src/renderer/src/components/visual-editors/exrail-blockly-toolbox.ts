@@ -1,15 +1,23 @@
 /**
- * Palette (block list) for the EXRAIL block canvas — three fixed groups,
- * Actions/Conditions/Ends, matching the old EJ2 SymbolPalette's groupings.
+ * Palette (block list) for the EXRAIL block canvas — a *custom* nested-category
+ * sidebar (rendered by exrail-block-canvas.html/.ts) driving Blockly's
+ * flyout-only toolbox (https://docs.blockly.com/guides/configure/toolboxes/flyout/):
+ * a single set of blocks displayed at all times, reserving its own permanent
+ * space next to the workspace.
  *
- * Deliberately NOT Blockly's category-toolbox (a sidebar of category labels
- * whose flyout pops up and overlays the workspace when clicked, then closes)
- * — that pattern hid the workspace behind the flyout with no way to see both
- * at once. Instead this builds a "simple" toolbox: a flat, always-visible
- * flyout with no categories of its own (Blockly reserves it permanent space
- * next to the workspace rather than overlaying it), and exrail-block-canvas.ts
- * supplies its own Actions/Conditions/Ends tab buttons that swap which
- * BLOCK_REGISTRY group populates it via `workspace.updateToolbox()`.
+ * Deliberately NOT Blockly's own category-toolbox
+ * (https://docs.blockly.com/guides/configure/toolboxes/nested/) — that class's
+ * flyout is *always* a floating overlay when a category opens (there is no
+ * config to make it a reserved, non-overlapping panel the way a flyout-only
+ * toolbox is; the two are structurally different toolbox classes), which hides
+ * the workspace behind it with no way to see both at once. Building the
+ * category tree ourselves keeps the always-visible, non-overlapping flyout
+ * while still giving nested categories (Locomotives > Driving/Functions).
+ *
+ * The tree and each leaf's contents are built entirely from each
+ * BLOCK_REGISTRY entry's `category` field (e.g. 'Turnouts' or
+ * 'Locomotives/Driving', slash-separated for one level of nesting) so the
+ * registry stays the single place a block's palette location is decided.
  */
 import type { BlockTypeDef, DefinedObjects } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
@@ -26,11 +34,68 @@ function defaultFieldsFor(def: BlockTypeDef, defined: DefinedObjects): Record<st
     return fields
 }
 
-/** Simple (non-category) toolbox JSON showing every available block of `shape` — the currently selected tab's contents. */
-export function flatToolboxFor(shape: BlockTypeDef['shape'], defined: DefinedObjects | null): Record<string, unknown> {
-    if (!defined) return { contents: [] }
+export interface PaletteCategoryNode {
+    /** This node's own label, e.g. 'Driving'. */
+    name: string
+    /** Full slash-separated path from the root, e.g. 'Locomotives/Driving' — matches BlockTypeDef.category exactly for a leaf. */
+    path: string
+    colour?: string
+    /** Non-empty only for a parent node (e.g. 'Locomotives') — a parent has no blocks of its own, only leaves do. */
+    children: PaletteCategoryNode[]
+    /**
+     * Whether a parent node's children are currently shown. Deliberately a plain property read
+     * directly by the template (`node.expanded`), never through a method call like
+     * `isExpanded(node.path)` — Aurelia's template compiler can set up a live observer for a
+     * direct property-access path, but has no way to know a method's return value depends on
+     * component state it never sees, so a method-call binding never re-evaluates after the
+     * state it reads changes. See exrail-block-canvas.ts's _rebuildPaletteTree(), which is what
+     * keeps this in sync with expandedCategoryPaths across tree rebuilds.
+     */
+    expanded: boolean
+}
+
+/** Builds the nested category tree for every currently-available (non-hat) block, grouped by `category`. */
+export function buildCategoryTree(defined: DefinedObjects | null): PaletteCategoryNode[] {
+    const root: PaletteCategoryNode = { name: '', path: '', children: [], expanded: false }
+    if (!defined) return root.children
+    const byPath = new Map<string, PaletteCategoryNode>([['', root]])
+
+    for (const def of BLOCK_REGISTRY) {
+        if (def.shape === 'hat') continue
+        if (!def.isAvailable(defined)) continue
+        const parts = def.category.split('/')
+        let parentPath = ''
+        for (const part of parts) {
+            const path = parentPath ? `${parentPath}/${part}` : part
+            let node = byPath.get(path)
+            if (!node) {
+                node = { name: part, path, children: [], expanded: false }
+                byPath.get(parentPath)!.children.push(node)
+                byPath.set(path, node)
+            }
+            node.colour = def.color
+            parentPath = path
+        }
+    }
+
+    return root.children
+}
+
+/** Flyout-only toolbox JSON for every currently-available block whose `category` is exactly `path` (a leaf). */
+export function flatToolboxForPath(path: string, defined: DefinedObjects | null): Record<string, unknown> {
+    if (!defined || path === '') return { contents: [] }
     const contents = BLOCK_REGISTRY
-        .filter((b) => b.shape === shape && b.isAvailable(defined))
+        .filter((b) => b.shape !== 'hat' && b.category === path && b.isAvailable(defined))
         .map((def) => ({ kind: 'block', type: def.id, fields: defaultFieldsFor(def, defined) }))
     return { contents }
+}
+
+/** First leaf category's path, depth-first — used as the default selection when no leaf is currently selected/valid. */
+export function firstLeafPath(nodes: PaletteCategoryNode[]): string {
+    for (const node of nodes) {
+        if (node.children.length === 0) return node.path
+        const nested = firstLeafPath(node.children)
+        if (nested !== '') return nested
+    }
+    return ''
 }

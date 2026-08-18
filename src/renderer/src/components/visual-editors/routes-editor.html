@@ -28,7 +28,12 @@
             <div id="routes-splitter" style="height:100%;width:100%;">
 
                 <!-- Sidebar -->
-                <div class="flex flex-col overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+                <!-- h-full (not just flex-col/flex-1): the Syncfusion Splitter takes over this div's own
+                     class attribute once it becomes a pane, replacing flex/flex-1 with its own e-pane
+                     classes (display:block) — flex-1 on this div's children then has no effect (it needs
+                     a flex parent), so they need height:100% against this element's own now-definite
+                     pixel height instead. See the Detail panel's h-full below for the same reasoning. -->
+                <div class="flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
                     <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
                         <span
                             class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Routes</span>
@@ -56,8 +61,18 @@
                 </div>
 
                 <!-- Detail panel -->
-                <div class="flex flex-col overflow-hidden">
-                    <div if.bind="selectedRoute" class="flex flex-col flex-1 min-h-0">
+                <div class="flex flex-col h-full overflow-hidden">
+                    <!-- h-full, not flex-1 — this div's own parent is the Splitter pane, whose class
+                         attribute the widget overwrites with its own e-pane (display:block) classes, so
+                         flex-1 here has no flex parent to grow against. h-full resolves against the
+                         pane's own definite pixel height (which Splitter does set) regardless of its
+                         display type. Without this, the whole detail column — including the Blocks
+                         canvas — collapses to its content's natural (tiny) height on every fresh mount:
+                         reported as the canvas showing "the wrong size" after navigating to a different
+                         config file and back (a full <routes-editor> destroy/recreate, unlike the file-
+                         level Visual/Raw tab or row-switch cases, which reuse this element and were
+                         already handled in exrail-block-canvas.ts). -->
+                    <div if.bind="selectedRoute" class="flex flex-col h-full min-h-0">
                         <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
                             <span class="text-xs font-mono text-gray-500 dark:text-gray-400 shrink-0">Route #${selectedRoute.id}</span>
                             <input type="text" value.two-way="selectedRoute.description"

@@ -60,6 +60,39 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         expect(byId.get('FOLLOW')!.isAvailable({ ...EMPTY, routes: [{ id: 1, description: '', body: '' }] })).toBe(true)
         expect(byId.get('FOLLOW')!.isAvailable({ ...EMPTY, sequences: [{ id: 1, body: '' }] })).toBe(true)
     })
+
+    it('gates SETLOCO/XFON/XFOFF on roster entries existing', () => {
+        for (const id of ['SETLOCO', 'XFON', 'XFOFF']) {
+            expect(byId.get(id)!.isAvailable(EMPTY)).toBe(false)
+            expect(byId.get(id)!.isAvailable(POPULATED)).toBe(true)
+        }
+    })
+
+    it('always allows FWD/REV/SPEED/STOP/ESTOP/FON/FOFF regardless of defined objects', () => {
+        for (const id of ['FWD', 'REV', 'SPEED', 'STOP', 'ESTOP', 'FON', 'FOFF']) {
+            expect(byId.get(id)!.isAvailable(EMPTY)).toBe(true)
+        }
+    })
+})
+
+describe('BLOCK_REGISTRY toolbox categories', () => {
+    const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
+
+    it('places every non-hat block under a non-empty category', () => {
+        for (const block of BLOCK_REGISTRY) {
+            if (block.shape === 'hat') continue
+            expect(block.category, `${block.id} has no toolbox category`).not.toBe('')
+        }
+    })
+
+    it('groups locomotive driving and function blocks into nested Locomotives subcategories', () => {
+        for (const id of ['SETLOCO', 'FWD', 'REV', 'SPEED', 'STOP', 'ESTOP']) {
+            expect(byId.get(id)!.category).toBe('Locomotives/Driving')
+        }
+        for (const id of ['FON', 'FOFF', 'XFON', 'XFOFF']) {
+            expect(byId.get(id)!.category).toBe('Locomotives/Functions')
+        }
+    })
 })
 
 describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference validators', () => {

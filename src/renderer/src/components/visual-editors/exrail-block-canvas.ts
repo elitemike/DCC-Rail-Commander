@@ -2,19 +2,13 @@ import { bindable, BindingMode, resolve } from 'aurelia'
 import * as Blockly from 'blockly/core'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { canonicalRefValue, parseBody, compileBody } from './exrail-block-compiler'
-import type { BlockTypeDef, DefinedObjects, ParsedGraph } from './exrail-block-compiler'
+import type { DefinedObjects, ParsedGraph } from './exrail-block-compiler'
 import { registerExrailBlocks, setWorkspaceDefined } from './exrail-blockly-blocks'
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
-import { flatToolboxFor } from './exrail-blockly-toolbox'
+import { buildCategoryTree, firstLeafPath, flatToolboxForPath } from './exrail-blockly-toolbox'
+import type { PaletteCategoryNode } from './exrail-blockly-toolbox'
 import { ThemeService } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
-
-/** Palette tabs shown above the canvas — matches the old EJ2 SymbolPalette's groupings. */
-export const PALETTE_TABS: Array<{ shape: BlockTypeDef['shape']; label: string }> = [
-    { shape: 'stack', label: 'Actions' },
-    { shape: 'branch', label: 'Conditions' },
-    { shape: 'cap', label: 'Ends' },
-]
 
 /** Workspace chrome only (background/toolbox/flyout/scrollbar) — block fill colors come straight from each BLOCK_REGISTRY entry's own `color`, set per-block via JSON, not from theme block styles. */
 let themesDefined = false
@@ -24,6 +18,10 @@ const EXRAIL_DARK_THEME_NAME = 'exrail-dark'
 function defineExrailThemes(): void {
     if (themesDefined) return
     themesDefined = true
+    // Blockly's default scrollbar (15px) reads as noticeably thicker than this app's own native
+    // scrollbars — a static, workspace-independent setting (Blockly.Scrollbar has no per-instance
+    // thickness option), so it only needs setting once, here.
+    Blockly.Scrollbar.scrollbarThickness = 8
     Blockly.Theme.defineTheme(EXRAIL_LIGHT_THEME_NAME, {
         name: EXRAIL_LIGHT_THEME_NAME,
         base: Blockly.Themes.Classic,
@@ -95,6 +93,7 @@ export class ExrailBlockCanvasCustomElement {
     private container!: HTMLElement
     private workspace: Blockly.WorkspaceSvg | null = null
     private _resizeObserver: ResizeObserver | null = null
+    private _visibilityObserver: IntersectionObserver | null = null
     private _unsubTheme: (() => void) | null = null
     private _unsubBlocklySounds: (() => void) | null = null
     private _changeListener: ((e: Blockly.Events.Abstract) => void) | null = null
@@ -102,12 +101,11 @@ export class ExrailBlockCanvasCustomElement {
     private _detached = false
 
     parseError: string | null = null
-    /** Which palette tab is currently populating the always-visible flyout — defaults to Actions. */
-    selectedCategory: BlockTypeDef['shape'] = 'stack'
 
-    get paletteTabs(): typeof PALETTE_TABS {
-        return PALETTE_TABS
-    }
+    /** Custom nested-category sidebar state — see exrail-blockly-toolbox.ts for why this isn't Blockly's own category toolbox. */
+    paletteTree: PaletteCategoryNode[] = []
+    selectedLeafPath = ''
+    expandedCategoryPaths: string[] = []
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -122,6 +120,8 @@ export class ExrailBlockCanvasCustomElement {
         this._detached = true
         this._resizeObserver?.disconnect()
         this._resizeObserver = null
+        this._visibilityObserver?.disconnect()
+        this._visibilityObserver = null
         this._unsubTheme?.()
         this._unsubTheme = null
         this._unsubBlocklySounds?.()
@@ -146,28 +146,83 @@ export class ExrailBlockCanvasCustomElement {
         if (this._detached || !this.workspace) return
         this.workspace.clear()
         this._loadInto(this.workspace)
+        // clear()/reload never itself resizes the container, but re-forces Blockly's own cached
+        // metrics (scrollbar geometry, zoom-control position) to match it regardless — cheap
+        // insurance against the same staleness the visibility observer above guards against, in
+        // case a resize happened while this instance sat unobserved-but-unchanged between reloads.
+        Blockly.svgResize(this.workspace)
     }
 
     definedChanged(): void {
         if (!this.workspace) return
         setWorkspaceDefined(this.workspace, this.defined)
-        this.workspace.updateToolbox(flatToolboxFor(this.selectedCategory, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
+        this._rebuildPaletteTree()
+        this.workspace.updateToolbox(flatToolboxForPath(this.selectedLeafPath, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
         this._normalizeExistingBlocks()
     }
 
-    /** Switches which BLOCK_REGISTRY group populates the always-visible flyout — called by the Actions/Conditions/Ends tab buttons. */
-    selectCategory(shape: BlockTypeDef['shape']): void {
-        this.selectedCategory = shape
-        this.workspace?.updateToolbox(flatToolboxFor(shape, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
+    /**
+     * Rebuilds the custom sidebar tree from the current `defined` objects (categories can appear/
+     * disappear as the project's turnouts/sensors/roster/etc. change — see BLOCK_REGISTRY's
+     * isAvailable()), keeping the current leaf selection if it's still valid or falling back to the
+     * first available leaf otherwise. Does not itself push the new leaf's blocks into the toolbox —
+     * callers (definedChanged()/_build()) do that afterwards since only they know whether the
+     * workspace exists yet.
+     */
+    private _rebuildPaletteTree(): void {
+        this.paletteTree = buildCategoryTree(this.defined)
+        const stillValid = this.selectedLeafPath !== '' && BLOCK_REGISTRY.some((b) => b.category === this.selectedLeafPath && b.shape !== 'hat' && this.defined && b.isAvailable(this.defined))
+        if (!stillValid) this.selectedLeafPath = firstLeafPath(this.paletteTree)
+        const parentPath = this.selectedLeafPath.includes('/') ? this.selectedLeafPath.slice(0, this.selectedLeafPath.lastIndexOf('/')) : ''
+        if (parentPath !== '' && !this.expandedCategoryPaths.includes(parentPath)) {
+            this.expandedCategoryPaths = [...this.expandedCategoryPaths, parentPath]
+        }
+        // buildCategoryTree() above returns brand-new node objects every call, so restamp each
+        // one's `expanded` from the durable (path-keyed) expandedCategoryPaths — see that field's
+        // comment on PaletteCategoryNode for why the template reads `node.expanded` directly rather
+        // than calling back into this component.
+        for (const node of this.paletteTree) {
+            if (node.children.length > 0) node.expanded = this.expandedCategoryPaths.includes(node.path)
+        }
+    }
+
+    /**
+     * Forces Blockly to recompute its size against the container's current bounding rect —
+     * exposed for the host editor (routes-editor.ts/sequences-editor.ts) to call explicitly right
+     * after switching the file-level tab back to Visual, the same way they already force Monaco's
+     * raw editor to re-layout when switching to Raw. Belt-and-suspenders alongside the
+     * IntersectionObserver in _build(): that observer's callback timing isn't guaranteed to land
+     * before the user starts interacting, so the host calling this directly at the one moment it
+     * knows the tab just became visible is the more deterministic fix.
+     */
+    refreshSize(): void {
+        if (this.workspace) Blockly.svgResize(this.workspace)
+    }
+
+    /** Toggles a parent category open/closed, or selects a leaf category's blocks into the always-visible flyout. */
+    onCategoryClick(node: PaletteCategoryNode): void {
+        if (node.children.length > 0) {
+            node.expanded = !node.expanded
+            this.expandedCategoryPaths = node.expanded
+                ? [...this.expandedCategoryPaths, node.path]
+                : this.expandedCategoryPaths.filter((p) => p !== node.path)
+            return
+        }
+        this.selectedLeafPath = node.path
+        this.workspace?.updateToolbox(flatToolboxForPath(node.path, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
     }
 
     private _build(): void {
         if (!this.container) return
+        this._rebuildPaletteTree()
         this.workspace = Blockly.inject(this.container, {
-            // A flat (non-category) toolbox — Blockly reserves this permanent space next to the
-            // workspace rather than the popup-on-click, overlay-and-close behavior a category
-            // toolbox's flyout has. selectCategory() swaps its contents via updateToolbox().
-            toolbox: flatToolboxFor(this.selectedCategory, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition,
+            // A flyout-only toolbox — Blockly reserves this permanent space next to the workspace
+            // rather than the popup-on-click, overlay-and-close behavior Blockly's own category
+            // toolbox's flyout has. The nested-category *sidebar* driving it (paletteTree, rendered
+            // in exrail-block-canvas.html) is entirely our own, not Blockly's — see
+            // exrail-blockly-toolbox.ts for why. onCategoryClick() swaps this flyout's contents via
+            // updateToolbox().
+            toolbox: flatToolboxForPath(this.selectedLeafPath, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition,
             // Served from src/renderer/public/blockly-media/ (Vite's publicDir, copied verbatim
             // into the build output) — without this, Blockly defaults to fetching its icon/sound
             // sprites from static.blockly.com, which the app's CSP blocks (img-src/connect-src
@@ -189,6 +244,20 @@ export class ExrailBlockCanvasCustomElement {
             if (this.workspace) Blockly.svgResize(this.workspace)
         })
         this._resizeObserver.observe(this.container)
+
+        // ResizeObserver alone misses the case that matters here: routes-editor.html/
+        // sequences-editor.html keep this element mounted but `display:none` (a CSS `hidden` class
+        // on an ancestor, not this component) while the file-level Raw tab is active, rather than
+        // tearing it down — see their own comments on why (avoids rebuilding the toolbox/flyout on
+        // every tab switch). A `display:none` ancestor gives `container` a 0×0 box that Blockly's
+        // last resize() baked into the SVG, and nothing re-triggers a resize when the ancestor's
+        // `hidden` class is removed again since that's a plain class toggle elsewhere, not a change
+        // to this element's own subtree. IntersectionObserver does fire on that transition (unlike
+        // ResizeObserver, whose target never itself changes size at the moment display flips).
+        this._visibilityObserver = new IntersectionObserver((entries) => {
+            if (this.workspace && entries.some((e) => e.isIntersecting)) Blockly.svgResize(this.workspace)
+        })
+        this._visibilityObserver.observe(this.container)
 
         this._unsubTheme = this.themeService.onChange((effective) => {
             this.workspace?.setTheme(themeFor(effective))

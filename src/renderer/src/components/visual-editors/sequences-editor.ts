@@ -15,7 +15,7 @@ export class SequencesEditorCustomElement {
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across sequence selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
-    blockCanvas: { reload(body: string): void } | null = null
+    blockCanvas: { reload(body: string): void; refreshSize(): void } | null = null
     /** Ref to the per-row Raw Monaco editor — reused across row selections via switchModel(), same reasoning as blockCanvas above. */
     rowRawEditor: { flush(): string; switchModel(filename: string, value: string): void } | null = null
 
@@ -194,6 +194,10 @@ export class SequencesEditorCustomElement {
         if (t === 'raw') this.rawSnapshot = this.state.sequencesRaw
         this.activeTab = t
         if (t === 'raw') setTimeout(() => { try { this.rawEditor?.editor?.layout?.() } catch { } }, 50)
+        // Same reasoning as the Monaco layout() call above — Blockly, injected while `hidden`,
+        // needs an explicit resize once the tab is visible again, since nothing about a plain CSS
+        // class toggle on this element's own DOM notifies exrail-block-canvas.ts on its own.
+        if (t === 'visual') setTimeout(() => this.blockCanvas?.refreshSize(), 50)
     }
 
     rawSnapshot = ''
