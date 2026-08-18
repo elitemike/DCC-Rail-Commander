@@ -154,8 +154,18 @@ function getAliasSuggestions(targetTypes: AliasTargetType[], data: ExrailComplet
         })
 }
 
+/**
+ * Strips a `#<suffix>` off a filename — used for per-row scoped Monaco models
+ * (e.g. `mySequences.h#42` for the SEQUENCE(42) row's own editor) so they're
+ * still recognized as the underlying real file for completion/hover/diagnostics.
+ */
+export function baseFilename(filename: string): string {
+    const i = filename.indexOf('#')
+    return i === -1 ? filename : filename.slice(0, i)
+}
+
 export function isExrailCompletionFile(filename: string): boolean {
-    return EXRAIL_FILENAMES.has(filename)
+    return EXRAIL_FILENAMES.has(baseFilename(filename))
 }
 
 export function getExrailCommandContext(linePrefix: string): ExrailCommandContext | null {

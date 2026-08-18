@@ -9,6 +9,8 @@
  * Custom (user-created) files that don't appear here fall back to the
  * generic Monaco editor with no specific completions.
  */
+import { baseFilename } from '../utils/exrail-completions'
+
 export interface HoverDoc {
     title: string
     description: string
@@ -696,5 +698,5 @@ export function friendlyName(filename: string): string {
  * Returns the completion snippets for the given filename (empty array if none).
  */
 export function getCompletions(filename: string): CompletionSnippet[] {
-    return FILE_CONFIGS[filename]?.completions ?? []
+    return FILE_CONFIGS[baseFilename(filename)]?.completions ?? []
 }

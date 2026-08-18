@@ -36,7 +36,7 @@ async function openSequencesEditor(page: import('@playwright/test').Page) {
 
 async function switchToRaw(page: import('@playwright/test').Page) {
     await page.getByTestId('editor-tab-raw').click()
-    await expect(page.locator('div.monaco-editor')).toBeVisible()
+    await expect(page.getByTestId('file-body-monaco').locator('div.monaco-editor')).toBeVisible()
     // Allow rawText binding to propagate to Monaco after visual processing
     await page.waitForTimeout(400)
 }
@@ -46,7 +46,7 @@ async function switchToVisual(page: import('@playwright/test').Page) {
 }
 
 async function setMonacoContent(page: import('@playwright/test').Page, text: string) {
-    const editor = page.locator('div.monaco-editor').first()
+    const editor = page.getByTestId('file-body-monaco').locator('div.monaco-editor')
     await editor.click()
     await page.keyboard.press('Control+A')
     await page.keyboard.press('Delete')
@@ -62,7 +62,21 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
 
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
-        const editorEl = document.querySelector('div.monaco-editor')
+        const editorEl = document.querySelector('[data-testid="file-body-monaco"] div.monaco-editor')
+        const lines = Array.from(editorEl?.querySelectorAll('.view-line') ?? [])
+        return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
+    })
+}
+
+/**
+ * Reads the per-row Raw Monaco editor's content specifically — needed once a row falls back
+ * to Raw mode, because the whole-file Raw tab's `<monaco-editor>` stays mounted (class-toggled
+ * hidden, not if.bind — see sequences-editor.html) even while on the Visual tab, so an
+ * unscoped `div.monaco-editor` locator would be ambiguous between the two live instances.
+ */
+async function getRowMonacoContent(page: import('@playwright/test').Page): Promise<string> {
+    return page.evaluate(() => {
+        const editorEl = document.querySelector('[data-testid="row-body-monaco"] div.monaco-editor')
         const lines = Array.from(editorEl?.querySelectorAll('.view-line') ?? [])
         return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
     })
@@ -268,9 +282,9 @@ test.describe('Sequences branch logic', () => {
         await expect(blocksButton).toBeDisabled()
         await expect(blocksButton).toHaveAttribute('title', "This body can't be edited visually yet — switch to Raw.")
 
-        const textarea = page.getByTestId('row-body-textarea')
-        await expect(textarea).toBeVisible()
-        await expect(textarea).toHaveValue(/ELSE/)
+        const rowEditor = page.getByTestId('row-body-monaco')
+        await expect(rowEditor).toBeVisible()
+        await expect.poll(() => getRowMonacoContent(page)).toMatch(/ELSE/)
     })
 
     test('an unclosed IF (missing ENDIF) also falls back to Raw mode', async ({ workspacePage: page }) => {
@@ -282,8 +296,8 @@ test.describe('Sequences branch logic', () => {
         ].join('\n'))
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeDisabled()
-        const textarea = page.getByTestId('row-body-textarea')
-        await expect(textarea).toBeVisible()
-        await expect(textarea).toHaveValue(/IF\(1\)/)
+        const rowEditor = page.getByTestId('row-body-monaco')
+        await expect(rowEditor).toBeVisible()
+        await expect.poll(() => getRowMonacoContent(page)).toMatch(/IF\(1\)/)
     })
 })

@@ -212,22 +212,7 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
         // corresponding color token is non-null in the active theme.
         defineEditorThemes()
 
-        // Use a URI based on filename so completion/hover providers can identify
-        // which file is active and return the correct per-file suggestions.
-        const uri = this.filename
-            ? monaco.Uri.file(this.filename)
-            : undefined
-
-        // Reuse an existing model for this URI if one already exists (e.g. the
-        // same file re-opened after navigation), otherwise create a fresh one.
-        this.model = uri
-            ? monaco.editor.getModel(uri) ?? monaco.editor.createModel(this.value ?? '', this.language, uri)
-            : monaco.editor.createModel(this.value ?? '', this.language)
-
-        // Sync value in case the model was reused with stale content
-        if (this.model.getValue() !== (this.value ?? '')) {
-            this.model.setValue(this.value ?? '')
-        }
+        this.model = this.resolveModel(this.filename, this.value)
 
         // Ensure document.body has the monaco-editor class so overflow widgets
         // (autocomplete, hover cards) are styled correctly when mounted there.
@@ -318,7 +303,29 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
         })
 
         // Propagate editor changes → binding
-        this.changeDisposable = this.model.onDidChangeContent(() => {
+        this.changeDisposable = this.wireContentListener(this.model)
+    }
+
+    /**
+     * Resolves the Monaco model for `filename`, reusing a cached model for that
+     * URI if one already exists (e.g. the same file re-opened after navigation)
+     * so undo history/view state survives, otherwise creating a fresh one.
+     */
+    private resolveModel(filename: string, seedValue: string): monaco.editor.ITextModel {
+        const uri = filename ? monaco.Uri.file(filename) : undefined
+        const model = uri
+            ? monaco.editor.getModel(uri) ?? monaco.editor.createModel(seedValue ?? '', this.language, uri)
+            : monaco.editor.createModel(seedValue ?? '', this.language)
+
+        // Sync value in case the model was reused with stale content
+        if (model.getValue() !== (seedValue ?? '')) {
+            model.setValue(seedValue ?? '')
+        }
+        return model
+    }
+
+    private wireContentListener(model: monaco.editor.ITextModel): monaco.IDisposable {
+        return model.onDidChangeContent(() => {
             if (this.isUpdatingFromBinding) return
             if (this.debounceTimer) clearTimeout(this.debounceTimer)
             this.debounceTimer = setTimeout(() => {
@@ -330,6 +337,38 @@ export class MonacoEditorCustomElement implements ICustomElementViewModel {
                 )
             }, 300)
         })
+    }
+
+    /**
+     * Swaps the editor onto a different Monaco model (e.g. a different scoped
+     * filename/content, such as a different EXRAIL row) without disposing the
+     * editor instance itself — cheaper than destroy/recreate and preserves each
+     * model's own undo history/scroll position across repeat visits. Mirrors
+     * exrail-block-canvas's `reload()` for the same reason: callers must push
+     * new content into a live instance explicitly, since binding `filename`/
+     * `value` reactively at the same time gives no ordering guarantee between
+     * the two bindables' changed callbacks.
+     *
+     * Flushes the outgoing model's pending debounced edit FIRST, before it's
+     * swapped out — otherwise a stale 300ms timer would later fire, read the
+     * new (just-swapped-in) `this.model`, and misattribute or drop the old
+     * model's last edit.
+     */
+    switchModel(filename: string, value: string): void {
+        if (!this.editor) return
+        this.flush()
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer)
+            this.debounceTimer = null
+        }
+        this.changeDisposable?.dispose()
+        this.filename = filename
+        this.model = this.resolveModel(filename, value)
+        this.editor.setModel(this.model)
+        this.changeDisposable = this.wireContentListener(this.model)
+        this.value = value
+        monaco.editor.setModelMarkers(this.model, 'dccex-validator', [])
+        revalidateModel(this.model, this.editor)
     }
 
     /**

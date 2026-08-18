@@ -14,6 +14,8 @@ export class RoutesEditorCustomElement {
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across route selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
     blockCanvas: { reload(body: string): void } | null = null
+    /** Ref to the per-row Raw Monaco editor — reused across row selections via switchModel(), same reasoning as blockCanvas above. */
+    rowRawEditor: { flush(): string; switchModel(filename: string, value: string): void } | null = null
 
     private splitterObj: Splitter | null = null
     /** Guards the queueTask() below — this component (or its #routes-splitter, gated behind activeTab === 'visual') can be torn down before the deferred Splitter creation runs, which would otherwise append a live widget into a detached/stale element and leave a broken splitterObj for detaching() to (potentially) throw on. */
@@ -87,12 +89,44 @@ export class RoutesEditorCustomElement {
 
     /** Reassigns `rowTab` rather than mutating in place — sequences-editor.ts's setRowTab has the same convention, for the same reason: this is a plain object on a class instance, not observed through Aurelia's dirty-checking of individual keys. */
     setRowTab(r: RouteEntry, tab: RowTab): void {
+        if (tab === 'text') this.rowRawSnapshot = this.selectedRouteText
         this.rowTab = { ...this.rowTab, [r.id]: tab }
     }
 
+    /** Synthetic per-row Monaco filename — disambiguates this row's scoped model from the whole-file `myRoutes.h` model owned by the Raw tab below, while still being recognized as EXRAIL content (see baseFilename() in exrail-completions.ts). */
+    get rowRawFilename(): string {
+        return this.selectedId !== null ? `myRoutes.h#${this.selectedId}` : 'myRoutes.h'
+    }
+
+    rowRawSnapshot = ''
+
+    /** Arrow field (not a template `.call` expression) so it stays a stable function reference across
+     *  re-renders, matching `onRawChange` above — delegates to a plain method so the state-mutation
+     *  logic itself is directly callable/testable without needing this arrow's `this` capture. */
+    onRowRawChange = (text: string) => this.applyRowRawChange(text)
+
+    applyRowRawChange(text: string): void {
+        this.rowRawSnapshot = text
+        this.selectedRouteText = text
+        const r = this.selectedRoute
+        if (r) this.updateRoute(this.state.routes.indexOf(r), r)
+    }
+
+    /** Flushes both the whole-file and per-row Raw Monaco editors — called by file-editor-panel.ts before save/tab-switch so an edit still sitting in Monaco's 300ms debounce isn't lost. */
+    flushPending(): void {
+        this.rawEditor?.flush()
+        this.rowRawEditor?.flush()
+    }
+
     selectEntry(r: RouteEntry): void {
+        // Flush the outgoing row's pending edit while selectedId still points at it —
+        // switchModel() below also flushes, but only after selectedId has already moved,
+        // which would misattribute the old row's edit to the new one via onRowRawChange.
+        this.rowRawEditor?.flush()
         this.selectedId = r.id
         this.blockCanvas?.reload(r.body)
+        this.rowRawSnapshot = this.selectedRouteText
+        this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
     /** Looks the route up by id at call time rather than closing over `r` — updateRoute() replaces the routes array with new entry objects on every call, so a captured `r` reference goes stale after the first edit. */
@@ -156,11 +190,14 @@ export class RoutesEditorCustomElement {
     }
 
     addRoute() {
+        this.rowRawEditor?.flush()
         const nextId = (this.state.routes[this.state.routes.length - 1]?.id ?? 0) + 1
         this.state.routes = [...this.state.routes, { id: nextId, description: 'New Route', body: '' }]
         this.state.syncAll()
         this.selectedId = nextId
         this.blockCanvas?.reload('')
+        this.rowRawSnapshot = this.selectedRouteText
+        this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
     removeRoute(idx: number, event?: Event) {
@@ -171,6 +208,8 @@ export class RoutesEditorCustomElement {
         if (this.selectedId === removedId) {
             this.selectedId = this.state.routes[0]?.id ?? null
             this.blockCanvas?.reload(this.selectedRoute?.body ?? '')
+            this.rowRawSnapshot = this.selectedRouteText
+            this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
         }
     }
 

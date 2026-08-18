@@ -4,6 +4,7 @@ import { getCompletions } from '../../src/renderer/src/config/file-configs'
 import {
     buildExrailSymbolSuggestions,
     getExrailCommandContext,
+    isExrailCompletionFile,
 } from '../../src/renderer/src/utils/exrail-completions'
 
 const COMPLETION_DATA = {
@@ -71,5 +72,20 @@ describe('EXRAIL completion helpers', () => {
 
         const doneSnippet = getCompletions('myRoutes.h').find(s => s.label === 'DONE')
         expect(doneSnippet?.insertText).toBe('DONE')
+    })
+
+    it('recognizes a per-row scoped filename (mySequences.h#<id>) as EXRAIL content', () => {
+        expect(isExrailCompletionFile('mySequences.h#42')).toBe(true)
+        expect(isExrailCompletionFile('myRoutes.h#7')).toBe(true)
+        expect(isExrailCompletionFile('mySequences.h')).toBe(true)
+        expect(isExrailCompletionFile('myRoster.h#1')).toBe(false)
+
+        const suggestions = buildExrailSymbolSuggestions('mySequences.h#42', '  THROW(', COMPLETION_DATA)
+        expect(suggestions.map(s => s.label)).toContain('JUNCTION_MAIN')
+    })
+
+    it('returns the same completions for a per-row scoped filename as the unsuffixed file', () => {
+        expect(getCompletions('mySequences.h#42')).toEqual(getCompletions('mySequences.h'))
+        expect(getCompletions('myRoutes.h#7')).toEqual(getCompletions('myRoutes.h'))
     })
 })
