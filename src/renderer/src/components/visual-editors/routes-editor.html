@@ -7,7 +7,7 @@
                 class.bind="activeTab === 'visual' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
                 Visual
             </button>
-            <button click.trigger="setTab('raw')"
+            <button click.trigger="setTab('raw')" data-testid="editor-tab-raw"
                 class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
                 class.bind="activeTab === 'raw' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
                 Raw
@@ -67,15 +67,17 @@
                         </div>
                         <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
                             <button click.trigger="setRowTab(selectedRoute, 'blocks')" disabled.bind="!canUseBlocks(selectedRoute)"
-                                title.bind="canUseBlocks(selectedRoute) ? '' : 'This body can\'t be edited visually yet — switch to Text.'"
+                                title.bind="canUseBlocks(selectedRoute) ? '' : 'This body can\'t be edited visually yet — switch to Raw.'"
+                                data-testid="row-tab-blocks"
                                 class="px-2.5 py-1 rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                                 class.bind="selectedTab === 'blocks' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
                                 Blocks
                             </button>
                             <button click.trigger="setRowTab(selectedRoute, 'text')"
+                                data-testid="row-tab-raw"
                                 class="px-2.5 py-1 rounded text-xs font-medium"
                                 class.bind="selectedTab === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
-                                Text
+                                Raw
                             </button>
                         </div>
 
@@ -86,6 +88,7 @@
                         <textarea else value.two-way="selectedRouteText"
                             blur.trigger="updateRoute(state.routes.indexOf(selectedRoute), selectedRoute)"
                             placeholder="ROUTE(id, &quot;description&quot;)"
+                            data-testid="row-body-textarea"
                             class="flex-1 min-h-0 w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none resize-none"></textarea>
                     </div>
 

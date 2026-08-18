@@ -8,7 +8,7 @@
  * target the branch constructs that no other spec touches: parsing a branch's then/else
  * legs, nested branches, a DONE cap block nested inside a leg, editing a branch's
  * condition, and the parser's rejection of a dangling ELSE / unclosed IF (falls back to
- * Text mode rather than corrupting the body).
+ * Raw mode rather than corrupting the body).
  *
  * The canvas is Google Blockly (see exrail-block-canvas.ts). Blocks loaded from a parsed
  * body get deterministic ids matching their ParsedGraph node ids, assigned depth-first —
@@ -35,7 +35,7 @@ async function openSequencesEditor(page: import('@playwright/test').Page) {
 }
 
 async function switchToRaw(page: import('@playwright/test').Page) {
-    await page.getByRole('button', { name: 'Raw' }).click()
+    await page.getByTestId('editor-tab-raw').click()
     await expect(page.locator('div.monaco-editor')).toBeVisible()
     // Allow rawText binding to propagate to Monaco after visual processing
     await page.waitForTimeout(400)
@@ -256,7 +256,7 @@ test.describe('Sequences branch logic', () => {
         expect((raw.match(/ENDIF/g) ?? []).length).toBe(2)
     })
 
-    test('a dangling ELSE with no matching IF falls back to Text mode instead of corrupting the body', async ({ workspacePage: page }) => {
+    test('a dangling ELSE with no matching IF falls back to Raw mode instead of corrupting the body', async ({ workspacePage: page }) => {
         await seedAndSelectSequence(page, [
             'SEQUENCE(1) // Dangling Else',
             'ELSE',
@@ -266,14 +266,14 @@ test.describe('Sequences branch logic', () => {
 
         const blocksButton = page.getByRole('button', { name: 'Blocks' })
         await expect(blocksButton).toBeDisabled()
-        await expect(blocksButton).toHaveAttribute('title', "This body can't be edited visually yet — switch to Text.")
+        await expect(blocksButton).toHaveAttribute('title', "This body can't be edited visually yet — switch to Raw.")
 
-        const textarea = page.locator('textarea[placeholder="Sequence body"]')
+        const textarea = page.getByTestId('row-body-textarea')
         await expect(textarea).toBeVisible()
         await expect(textarea).toHaveValue(/ELSE/)
     })
 
-    test('an unclosed IF (missing ENDIF) also falls back to Text mode', async ({ workspacePage: page }) => {
+    test('an unclosed IF (missing ENDIF) also falls back to Raw mode', async ({ workspacePage: page }) => {
         await seedAndSelectSequence(page, [
             'SEQUENCE(1) // Missing Endif',
             'IF(1)',
@@ -282,7 +282,7 @@ test.describe('Sequences branch logic', () => {
         ].join('\n'))
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeDisabled()
-        const textarea = page.locator('textarea[placeholder="Sequence body"]')
+        const textarea = page.getByTestId('row-body-textarea')
         await expect(textarea).toBeVisible()
         await expect(textarea).toHaveValue(/IF\(1\)/)
     })
