@@ -275,7 +275,7 @@ async function warmUpBuilds() {
 const EXTRA_PACKAGES = {
     atmelavr: ['framework-arduino-avr', 'tool-avrdude'],
     atmelmegaavr: ['framework-arduino-megaavr', 'tool-avrdude'],
-    espressif32: ['framework-arduinoespressif32', 'tool-esptoolpy', 'tool-mkspiffs', 'tool-mklittlefs'],
+    espressif32: ['framework-arduinoespressif32', 'tool-esptoolpy', 'tool-mkspiffs', 'tool-mklittlefs', 'tool-mkfatfs'],
     ststm32: ['framework-arduinoststm32', 'framework-cmsis', 'tool-openocd', 'tool-dfuutil', 'tool-stm32duino'],
 }
 
@@ -344,6 +344,15 @@ async function writeManifest(pythonDigest) {
         }
     }
 
+    // Read back the package dir names too (not just platforms): EXTRA_PACKAGES
+    // additions/removals don't bump any of the pinned version constants, but they
+    // do change what lands in resources/pio-core/packages, and the stamp needs to
+    // notice that or an already-seeded machine will never pick the change up.
+    let packageNames = []
+    try {
+        packageNames = (await readdir(join(RESOURCES, 'pio-core', 'packages'))).filter((n) => !n.startsWith('.')).sort()
+    } catch { /* no packages installed */ }
+
     const manifest = {
         python: PYTHON_VERSION,
         platformio: PLATFORMIO_VERSION,
@@ -353,7 +362,7 @@ async function writeManifest(pythonDigest) {
         // Anything that changes what a user builds with changes the stamp, which
         // is what makes the app re-seed its core dir after an update.
         stamp: createHash('sha256')
-            .update(JSON.stringify({ PYTHON_VERSION, PLATFORMIO_VERSION, ESPTOOL_VERSION, platforms, LIBRARIES }))
+            .update(JSON.stringify({ PYTHON_VERSION, PLATFORMIO_VERSION, ESPTOOL_VERSION, platforms, LIBRARIES, packageNames }))
             .digest('hex')
             .slice(0, 16),
     }
