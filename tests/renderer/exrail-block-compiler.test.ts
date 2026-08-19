@@ -127,4 +127,34 @@ describe('parseBody failure modes', () => {
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/omment/)
     })
+
+    // Fuzz coverage for "an unknown word must never crash the parser" — see
+    // exrail-block-canvas.ts's parseError fallback, which depends on parseBody() always
+    // returning rather than throwing, no matter how garbled the input.
+    it('never throws on random unknown words, whatever shape they take', () => {
+        const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-. "()/\\'
+        function randomWord(maxLen: number): string {
+            const len = 1 + Math.floor(Math.random() * maxLen)
+            let s = ''
+            for (let i = 0; i < len; i++) s += CHARS[Math.floor(Math.random() * CHARS.length)]
+            return s
+        }
+        function randomBody(): string {
+            const lineCount = 1 + Math.floor(Math.random() * 5)
+            const lines: string[] = []
+            for (let i = 0; i < lineCount; i++) {
+                const word = randomWord(15)
+                lines.push(Math.random() < 0.5 ? word : `${word}(${randomWord(8)}, ${randomWord(8)})`)
+            }
+            return lines.join('\n')
+        }
+
+        for (let i = 0; i < 300; i++) {
+            const body = randomBody()
+            let result: ReturnType<typeof parseBody>
+            expect(() => { result = parseBody(body, Math.random() < 0.5 ? 'route' : 'sequence', BLOCK_REGISTRY) }).not.toThrow()
+            expect(typeof result!.ok).toBe('boolean')
+            if (!result!.ok) expect(typeof result!.reason).toBe('string')
+        }
+    })
 })
