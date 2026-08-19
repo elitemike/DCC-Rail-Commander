@@ -32,7 +32,6 @@ import { TurnoutEditorCustomElement } from './components/visual-editors/turnout-
 import { ConfigHEditorCustomElement } from './components/visual-editors/config-h-editor'
 import { AutomationEditorCustomElement } from './components/visual-editors/automation-editor'
 import { FileEditorPanelCustomElement } from './components/visual-editors/file-editor-panel'
-import { ConfirmDialog } from './components/dialogs/confirm-dialog'
 import { CompileProgressCustomElement } from './components/compile-progress'
 import { CompileOutputTerminalCustomElement } from './components/compile-output-terminal'
 import { SensorsEditorCustomElement } from './components/visual-editors/sensors-editor'
@@ -104,7 +103,6 @@ new Aurelia()
         SequencesEditorCustomElement,
         AliasesEditorCustomElement,
         ExrailBlockCanvasCustomElement,
-        ConfirmDialog,
         CompileProgressCustomElement,
         CompileOutputTerminalCustomElement,
         SerialMonitorCustomElement,
