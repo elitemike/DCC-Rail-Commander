@@ -90,15 +90,11 @@ export class SequencesEditorCustomElement {
         return s.description ? `${s.description} (${s.id})` : `Sequence ${s.id}`
     }
 
-    /** Text pushed into the Blocks tab's hat block via <exrail-block-canvas header-label.bind> —
-     *  alias takes priority over description, same precedence optionsForRefKind() uses when
-     *  another block references this sequence, so the two stay consistent. */
-    get selectedSequenceHeaderLabel(): string {
+    /** Alias pushed into the Blocks tab's hat block via <exrail-block-canvas header-alias.bind> —
+     *  see exrail-block-canvas.ts's headerId/headerAlias bindables. */
+    get selectedSequenceAlias(): string {
         const s = this.selectedSequence
-        if (!s) return ''
-        const alias = this.state.getPrimaryAliasNameForId(s.id, 'Sequence')
-        if (alias) return `${alias} (${s.id})`
-        return s.description ? `${s.description} (${s.id})` : `(${s.id})`
+        return s ? this.state.getPrimaryAliasNameForId(s.id, 'Sequence') : ''
     }
 
     /** Reassigns `rowTab` rather than mutating in place — routes-editor.ts's setRowTab has the same convention, for the same reason: this is a plain object on a class instance, not observed through Aurelia's dirty-checking of individual keys. */
@@ -231,12 +227,35 @@ export class SequencesEditorCustomElement {
         }
     }
 
+    /** Passed to <exrail-block-canvas on-id-change.bind>. Looks the sequence up by id at call
+     *  time, same reasoning as makeBodyChangeHandler() above. */
+    makeIdChangeHandler(sequenceId: number): (id: number) => void {
+        return (id: number) => {
+            const idx = this.state.sequences.findIndex((v) => v.id === sequenceId)
+            if (idx === -1) return
+            this.updateSequence(idx, { ...this.state.sequences[idx], id })
+        }
+    }
+
     updateSequence(idx: number, s: SequenceEntry) {
-        this.state.sequences = this.state.sequences.map((v, i) => i === idx ? { ...s } : v)
+        // `value.two-way` on `<input type="text">` (description) round-trips through the DOM's
+        // `.value`, always a string, but `id` comes from makeIdChangeHandler()'s already-numeric
+        // callback param — Number() here is a no-op for that path and just guards the description-
+        // only path, where `s` is a spread of the existing (already-numeric) entry.
+        const entry: SequenceEntry = { ...s, id: Number(s.id) }
+        const previousId = this.state.sequences[idx]?.id ?? null
+        this.state.sequences = this.state.sequences.map((v, i) => i === idx ? entry : v)
+        if (previousId !== null && previousId !== entry.id) {
+            this.selectedId = entry.id
+            const aliasName = this.state.getPrimaryAliasNameForId(previousId, 'Sequence')
+            if (aliasName) this.state.syncAliasForId(previousId, entry.id, aliasName, 'Sequence', aliasName)
+            const violation = this.state.getSequenceIdViolations().find((v) => v.kind === 'Sequence' && v.id === entry.id)
+            if (violation) this.toastService.show({ title: 'Sequence ID Warning', content: violation.reason, cssClass: 'e-toast-warning' })
+        }
         this.state.syncAll()
     }
 
-    /** Passed to <alias-picker on-change.bind>. Sequence ids aren't user-editable (unlike sensors' inline id field), so there's no rename to carry forward — just persist the chosen name against the current id. */
+    /** Passed to <exrail-block-canvas on-alias-change.bind>. */
     makeAliasChangeHandler(sequenceId: number): (name: string) => void {
         return (name: string) => {
             const existingAliasName = this.state.getPrimaryAliasNameForId(sequenceId, 'Sequence')

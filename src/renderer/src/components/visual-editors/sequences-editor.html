@@ -79,8 +79,6 @@
                                 blur.trigger="updateSequence(state.sequences.indexOf(selectedSequence), selectedSequence)"
                                 placeholder="Description" aria-label="Sequence description"
                                 class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                            <alias-picker target-id.bind="selectedSequence.id" alias-type="Sequence"
-                                on-change.bind="makeAliasChangeHandler(selectedSequence.id)"></alias-picker>
                         </div>
                         <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
                             <button click.trigger="setRowTab(selectedSequence, 'blocks')" disabled.bind="!canUseBlocks(selectedSequence)"
@@ -100,8 +98,10 @@
 
                         <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
                             <exrail-block-canvas component.ref="blockCanvas" kind="sequence" initial-body.bind="selectedSequence.body" defined.bind="defined"
-                                header-label.bind="selectedSequenceHeaderLabel"
-                                on-body-change.bind="makeBodyChangeHandler(selectedSequence.id)"></exrail-block-canvas>
+                                header-id.bind="selectedSequence.id" header-alias.bind="selectedSequenceAlias"
+                                on-body-change.bind="makeBodyChangeHandler(selectedSequence.id)"
+                                on-id-change.bind="makeIdChangeHandler(selectedSequence.id)"
+                                on-alias-change.bind="makeAliasChangeHandler(selectedSequence.id)"></exrail-block-canvas>
                         </div>
                         <!-- Content is seeded via a one-time binding, not a reactive one: switchModel()
                              is the sole channel that pushes new content into an already-mounted instance

@@ -23,6 +23,7 @@ function makeEditor(sequences: { id: number; description?: string; body?: string
             else aliases.push({ name: trimmed, value: String(nextId), aliasType: 'Sequence' })
             return { ok: true }
         }),
+        getSequenceIdViolations: vi.fn(() => []),
     } as unknown as ConfigEditorState
 
     const toastShow = vi.fn()
@@ -74,6 +75,63 @@ describe('SequencesEditorCustomElement.makeAliasChangeHandler', () => {
         const [payload] = toastShow.mock.calls[0]
         expect(payload).toMatchObject({ title: 'Alias Error', cssClass: 'e-toast-warning' })
         expect(payload.content).toContain('YARD_SHUNT')
+    })
+})
+
+// ── updateSequence (id rename) ──────────────────────────────────────────────
+
+describe('SequencesEditorCustomElement.updateSequence (id rename)', () => {
+    it('carries the alias forward and updates selectedId when the ID is edited', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 1, description: 'Yard shunt' }],
+            [{ name: 'YARD_SHUNT', value: '1', aliasType: 'Sequence' }],
+        )
+        editor.selectedId = 1
+
+        editor.updateSequence(0, { ...state.sequences[0], id: 5 })
+
+        expect(editor.selectedId).toBe(5)
+        expect(state.syncAliasForId).toHaveBeenCalledWith(1, 5, 'YARD_SHUNT', 'Sequence', 'YARD_SHUNT')
+        expect(state.aliases[0]).toMatchObject({ name: 'YARD_SHUNT', value: '5' })
+    })
+
+    it('does not touch aliases when the ID is unchanged', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        editor.selectedId = 1
+
+        editor.updateSequence(0, { ...state.sequences[0], description: 'New desc' })
+
+        expect(state.syncAliasForId).not.toHaveBeenCalled()
+    })
+
+    it('warns via toast when the new ID collides with the shared ROUTE/AUTOMATION/SEQUENCE namespace', () => {
+        const { editor, state, toastShow } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        ;(state.getSequenceIdViolations as any).mockReturnValue([{ kind: 'Sequence', id: 5, reason: 'ID 5 is already used by Route 5.' }])
+        editor.selectedId = 1
+
+        editor.updateSequence(0, { ...state.sequences[0], id: 5 })
+
+        expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Sequence ID Warning' }))
+    })
+})
+
+describe('SequencesEditorCustomElement.makeIdChangeHandler', () => {
+    it('looks the sequence up by the id captured at bind time and persists the new id', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        editor.selectedId = 1
+
+        editor.makeIdChangeHandler(1)(5)
+
+        expect(state.sequences[0]).toMatchObject({ id: 5 })
+        expect(editor.selectedId).toBe(5)
+    })
+
+    it('does nothing when the captured id no longer matches any sequence', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+
+        editor.makeIdChangeHandler(99)(5)
+
+        expect(state.syncAll).not.toHaveBeenCalled()
     })
 })
 

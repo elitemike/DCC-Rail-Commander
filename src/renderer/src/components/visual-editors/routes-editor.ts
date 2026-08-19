@@ -5,11 +5,13 @@ import type { RouteEntry } from '../../utils/myAutomationParser'
 import { parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
+import { ToastService } from '../../services/toast.service'
 
 type RowTab = 'blocks' | 'text'
 
 export class RoutesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly toastService = resolve(ToastService)
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across route selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
@@ -87,15 +89,11 @@ export class RoutesEditorCustomElement {
         return r.description ? `${r.description} (${r.id})` : `Route ${r.id}`
     }
 
-    /** Text pushed into the Blocks tab's hat block via <exrail-block-canvas header-label.bind> —
-     *  alias takes priority over description, same precedence optionsForRefKind() uses when
-     *  another block references this route, so the two stay consistent. */
-    get selectedRouteHeaderLabel(): string {
+    /** Alias pushed into the Blocks tab's hat block via <exrail-block-canvas header-alias.bind> —
+     *  see exrail-block-canvas.ts's headerId/headerAlias bindables. */
+    get selectedRouteAlias(): string {
         const r = this.selectedRoute
-        if (!r) return ''
-        const alias = this.state.getPrimaryAliasNameForId(r.id, 'Route')
-        if (alias) return `${alias} (${r.id})`
-        return r.description ? `${r.description} (${r.id})` : `(${r.id})`
+        return r ? this.state.getPrimaryAliasNameForId(r.id, 'Route') : ''
     }
 
     /** Reassigns `rowTab` rather than mutating in place — sequences-editor.ts's setRowTab has the same convention, for the same reason: this is a plain object on a class instance, not observed through Aurelia's dirty-checking of individual keys. */
@@ -228,8 +226,42 @@ export class RoutesEditorCustomElement {
         }
     }
 
+    /** Passed to <exrail-block-canvas on-id-change.bind>. Looks the route up by id at call time,
+     *  same reasoning as makeBodyChangeHandler() above. */
+    makeIdChangeHandler(routeId: number): (id: number) => void {
+        return (id: number) => {
+            const idx = this.state.routes.findIndex((v) => v.id === routeId)
+            if (idx === -1) return
+            this.updateRoute(idx, { ...this.state.routes[idx], id })
+        }
+    }
+
+    /** Passed to <exrail-block-canvas on-alias-change.bind>. Mirrors sequences-editor.ts's makeAliasChangeHandler. */
+    makeAliasChangeHandler(routeId: number): (name: string) => void {
+        return (name: string) => {
+            const existingAliasName = this.state.getPrimaryAliasNameForId(routeId, 'Route')
+            const result = this.state.syncAliasForId(routeId, routeId, name, 'Route', existingAliasName)
+            if (!result.ok) {
+                this.toastService.show({ title: 'Alias Error', content: result.reason, cssClass: 'e-toast-warning' })
+            }
+        }
+    }
+
     updateRoute(idx: number, r: RouteEntry) {
-        this.state.routes = this.state.routes.map((v, i) => i === idx ? { ...r } : v)
+        // `value.two-way` on `<input type="text">` (description) round-trips through the DOM's
+        // `.value`, always a string, but `id` comes from makeIdChangeHandler()'s already-numeric
+        // callback param — Number() here is a no-op for that path and just guards the description-
+        // only path, where `r` is a spread of the existing (already-numeric) entry.
+        const entry: RouteEntry = { ...r, id: Number(r.id) }
+        const previousId = this.state.routes[idx]?.id ?? null
+        this.state.routes = this.state.routes.map((v, i) => i === idx ? entry : v)
+        if (previousId !== null && previousId !== entry.id) {
+            this.selectedId = entry.id
+            const aliasName = this.state.getPrimaryAliasNameForId(previousId, 'Route')
+            if (aliasName) this.state.syncAliasForId(previousId, entry.id, aliasName, 'Route', aliasName)
+            const violation = this.state.getSequenceIdViolations().find((v) => v.kind === 'Route' && v.id === entry.id)
+            if (violation) this.toastService.show({ title: 'Route ID Warning', content: violation.reason, cssClass: 'e-toast-warning' })
+        }
         this.state.syncAll()
     }
 }
