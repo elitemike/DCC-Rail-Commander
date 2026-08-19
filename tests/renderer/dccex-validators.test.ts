@@ -337,7 +337,7 @@ describe('validateAliasTargets', () => {
         const markers = _runValidatorsForTest('myAliases.h', text, baseData)
         const warnings = markers.filter((m) => m.message.includes('does not match any configured'))
         expect(warnings).toHaveLength(1)
-        expect(warnings[0].severity).toBe(WARNING)
+        expect(warnings[0].severity).toBe(ERROR)
     })
 
     it('does not flag an ALIAS value that matches a configured turnout ID', () => {
