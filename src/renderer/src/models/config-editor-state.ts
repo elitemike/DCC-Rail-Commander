@@ -21,6 +21,8 @@ import {
     getPrimaryAliasForId,
     parseAliasNumericValue,
     collectObjectIdReferences,
+    listObjectIdsForType,
+    inferAliasTypes,
     parseAliasTypeComment,
     validateAliasName,
     validateAliasValue,
@@ -473,9 +475,33 @@ export class ConfigEditorState {
         })
     }
 
+    /**
+     * IDs of `type` not already claimed by an alias — the "one alias per ID" pool the aliases
+     * editor's new-alias ID picker draws from, scoped by type (like the rest of alias handling
+     * — see the cross-type-reuse note on validateAliasTargetId) so a Turnout and a Roster loco
+     * that happen to share a numeric ID don't block each other's alias. An existing alias's
+     * type is its declared `aliasType`, or — for legacy untyped entries — whichever type(s) its
+     * value resolves to.
+     */
+    getAvailableAliasTargetIds(type: AliasTargetType): { id: number; label: string }[] {
+        const collections = { roster: this.roster, turnouts: this.turnouts, sensors: this.sensors, routes: this.routes, sequences: this.sequences }
+        const used = new Set<number>()
+        for (const alias of this.aliases) {
+            const numericValue = parseAliasNumericValue(alias.value)
+            if (numericValue === null) continue
+            const aliasTypes = alias.aliasType ? [alias.aliasType] : inferAliasTypes(alias, collections)
+            if (aliasTypes.includes(type)) used.add(numericValue)
+        }
+        return listObjectIdsForType(type, collections).filter(o => !used.has(o.id))
+    }
+
     validateAliasTargetId(id: number): { ok: true } | { ok: false; reason: string } {
-        // Alias lookup is context-driven (command/editor target type), so
-        // cross-type ID reuse is valid and should not be rejected.
+        // Cross-type ID reuse is fine (lookup is context-driven by command/editor target
+        // type) — but the id must belong to *some* configured object, or the alias would
+        // resolve to nothing.
+        if (this.getObjectIdReferences(id).length === 0) {
+            return { ok: false, reason: `Alias value ${id} does not match any configured Roster/Turnout/Sensor/Route/Sequence ID.` }
+        }
         return { ok: true }
     }
 
@@ -515,6 +541,27 @@ export class ConfigEditorState {
             normalized.push(result.alias)
         }
         return { ok: true, aliases: normalized }
+    }
+
+    /**
+     * Like normalizeAliases, but drops individually-invalid entries instead of rejecting
+     * the whole list — used only when loading myAliases.h from disk, where a single stale
+     * alias (its target Roster/Turnout/Sensor/Route/Sequence entry deleted since it was
+     * created) must not wipe out every other alias in the file. Duplicate names keep the
+     * first occurrence and drop the rest, same as normalizeAliases' error would.
+     */
+    private normalizeAliasesLenient(aliases: AliasEntry[]): AliasEntry[] {
+        const seen = new Set<string>()
+        const kept: AliasEntry[] = []
+        for (const alias of aliases) {
+            const name = alias.name.trim()
+            if (seen.has(name)) continue
+            const result = this.normalizeAliasEntry(alias)
+            if (!result.ok) continue
+            seen.add(name)
+            kept.push(result.alias)
+        }
+        return kept
     }
 
     syncAliasForId(
@@ -802,6 +849,7 @@ export class ConfigEditorState {
         this.generatedTrackManagerContent = ''
 
         let automationContent = ''
+        let aliasesContent: string | null = null
         for (const f of files) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
                 this.configHContent = f.content
@@ -818,8 +866,10 @@ export class ConfigEditorState {
             } else if (f.name === 'mySequences.h') {
                 this.sequences = parseSequencesFromFile(f.content)
             } else if (f.name === 'myAliases.h') {
-                const normalized = this.normalizeAliases(parseAliasesFromFile(f.content))
-                this.aliases = normalized.ok ? normalized.aliases : []
+                // Deferred until every other file has been parsed (see below) — alias
+                // target validation needs the fully-populated roster/turnouts/etc.
+                // collections, and files are not guaranteed to arrive in a fixed order.
+                aliasesContent = f.content
             } else if (f.name === 'myAutomation.h') {
                 automationContent = f.content
                 // Strip managed includes block; preserve the user's custom code
@@ -833,6 +883,10 @@ export class ConfigEditorState {
                 // otherwise it stays empty until the Accessories tab is visited.
                 this.generatedHalDevicesContent = extractManagedBlockBody(f.content, MANAGED_HAL_DEVICES_TAG)
             }
+        }
+
+        if (aliasesContent !== null) {
+            this.aliases = this.normalizeAliasesLenient(parseAliasesFromFile(aliasesContent))
         }
 
         if (automationContent) {

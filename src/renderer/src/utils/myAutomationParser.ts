@@ -228,13 +228,15 @@ export function validateAliasName(rawName: string): { ok: true } | { ok: false; 
 }
 
 /**
- * The ALIAS value is an optional plain integer (EX-RAIL auto-assigns one when omitted).
+ * The ALIAS value must be a plain integer matching an existing Roster/Turnout/Sensor/Route/
+ * Sequence ID — EX-RAIL itself allows omitting it (auto-assigning one), but this app requires
+ * every alias to point at a real object so it's never left dangling.
  * A leading zero on a multi-digit value is flagged because C interprets it as octal —
  * see the "Important Restriction" note on the ALIAS command reference page.
  */
 export function validateAliasValue(rawValue: string): { ok: true } | { ok: false; reason: string } {
     const trimmed = rawValue.trim();
-    if (trimmed === '') return { ok: true };
+    if (trimmed === '') return { ok: false, reason: 'Alias value is required and must match an existing object\'s ID.' };
     if (!/^\d+$/.test(trimmed)) {
         return { ok: false, reason: `Alias value "${trimmed}" must be a whole number, or left blank to auto-assign one.` };
     }
@@ -284,6 +286,29 @@ export function inferAliasTypes(alias: AliasEntry, data: ObjectIdCollections): A
     if (numericValue === null) return [];
 
     return Array.from(new Set(collectObjectIdReferences(numericValue, data).map(reference => reference.type)));
+}
+
+/**
+ * All id+label pairs for one target type — the "every id for this type" counterpart to
+ * collectObjectIdReferences' "every type for this id". Used to populate the aliases editor's
+ * ID picker once a target type has been chosen. The label always leads with the numeric ID
+ * (what ALIAS actually stores) followed by the name/description, since either alone can be
+ * ambiguous — several turnouts can share a description, and an ID alone doesn't say what it is.
+ */
+export function listObjectIdsForType(type: AliasTargetType, data: ObjectIdCollections): { id: number; label: string }[] {
+    const idAndDescription = (id: number, description: string) => description ? `${id} - ${description}` : `${id}`;
+    switch (type) {
+        case 'Roster':
+            return data.roster.map(r => ({ id: r.dccAddress, label: idAndDescription(r.dccAddress, r.name) }));
+        case 'Turnout':
+            return data.turnouts.map(t => ({ id: t.id, label: idAndDescription(t.id, t.description) }));
+        case 'Sensor':
+            return (data.sensors ?? []).map(s => ({ id: s.id, label: idAndDescription(s.id, s.description) }));
+        case 'Route':
+            return (data.routes ?? []).map(r => ({ id: r.id, label: idAndDescription(r.id, r.description) }));
+        case 'Sequence':
+            return (data.sequences ?? []).map(s => ({ id: s.id, label: idAndDescription(s.id, s.description ?? '') }));
+    }
 }
 
 export function parseSensorsFromFile(fileContent: string): SensorEntry[] {

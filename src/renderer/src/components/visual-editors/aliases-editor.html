@@ -21,13 +21,37 @@
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
             <div class="flex-1 overflow-y-auto p-4">
-                <div class="flex items-center justify-between gap-3 mb-4">
-                    <p class="text-xs text-gray-500">Friendly names for pins, IDs, or numeric constants used
-                        elsewhere in your configuration.</p>
+                <p class="text-xs text-gray-500 mb-3">Friendly names for the ID of a Roster, Turnout, Sensor,
+                    Route, or Sequence entry defined elsewhere in your configuration.</p>
+
+                <div data-testid="new-alias-form" class="flex items-end gap-3 mb-1">
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+                        <input type="text" value.two-way="newAliasName" placeholder="NAME"
+                            keydown.trigger="handleNewAliasKeydown($event)"
+                            class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Type</label>
+                        <div class="w-32">
+                            <input ref="newAliasTypeEl" type="text" data-testid="new-alias-type" />
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">ID</label>
+                        <div class="w-56">
+                            <input ref="newAliasIdEl" type="text" data-testid="new-alias-id" />
+                        </div>
+                    </div>
                     <button click.trigger="addAlias()"
                         class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
                         Add Alias
                     </button>
+                </div>
+
+                <div if.bind="newAliasError"
+                    class="mb-3 px-3 py-2 bg-red-50 dark:bg-red-950/60 border border-red-500/40 rounded-md text-red-700 dark:text-red-300 text-sm">
+                    ${newAliasError}
                 </div>
 
                 <div if.bind="errorMessage"
@@ -42,29 +66,34 @@
                             d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 6h.008v.008H6V6z" />
                     </svg>
-                    <p class="text-sm">No aliases yet. Click "Add Alias" to create one.</p>
+                    <p class="text-sm">No aliases yet. Enter a name and an ID above, then click "Add Alias".</p>
                 </div>
 
-                <div if.bind="state.aliases.length > 0" class="flex flex-col gap-2">
-                    <div repeat.for="a of state.aliases"
-                        class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
-                        <div class="flex flex-col gap-1">
-                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
-                            <input type="text" value.two-way="a.name" blur.trigger="commitAlias($index)"
-                                placeholder="NAME"
-                                class="w-40 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                <div if.bind="state.aliases.length > 0" class="flex flex-col gap-4">
+                    <div repeat.for="group of groupedAliases" class="flex flex-col gap-2">
+                        <h3 data-testid="alias-group-header"
+                            class="px-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                            ${group.label} <span class="font-normal normal-case text-gray-400 dark:text-gray-500">(${group.items.length})</span>
+                        </h3>
+                        <div repeat.for="item of group.items" data-testid="alias-row"
+                            class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
+                            <div class="flex flex-col gap-1 flex-1">
+                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+                                <input type="text" value.two-way="item.alias.name" blur.trigger="commitAlias(item.index)"
+                                    placeholder="NAME"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">ID</label>
+                                <input type="text" value.two-way="item.alias.value" blur.trigger="commitAlias(item.index)"
+                                    placeholder="ID"
+                                    class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            </div>
+                            <span
+                                class="mb-0.5 px-2 py-1.5 rounded-md text-xs bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 whitespace-nowrap">${getAliasTypeLabel(item.alias)}</span>
+                            <button click.trigger="removeAlias(item.index)" aria-label="Delete" title="Delete"
+                                class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
                         </div>
-                        <div class="flex flex-col gap-1 flex-1">
-                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Value
-                                (optional)</label>
-                            <input type="text" value.two-way="a.value" blur.trigger="commitAlias($index)"
-                                placeholder="VALUE"
-                                class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                        </div>
-                        <span
-                            class="mb-0.5 px-2 py-1.5 rounded-md text-xs bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 whitespace-nowrap">${getAliasTypeLabel(a)}</span>
-                        <button click.trigger="removeAlias($index)" aria-label="Delete" title="Delete"
-                            class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
                     </div>
                 </div>
             </div>

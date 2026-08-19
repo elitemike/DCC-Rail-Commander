@@ -510,10 +510,11 @@ function validateSequenceIdRules(
 // ── ALIAS validator (myAliases.h) ─────────────────────────────────────────────
 
 /**
- * ALIAS(name[, value])
+ * ALIAS(name, value)
  *   arg 1 — identifier: starts with a letter/underscore, then letters/digits/underscores,
  *           must not collide with an EXRAIL command name
- *   arg 2 — optional plain integer (no leading zero — C treats that as octal)
+ *   arg 2 — required plain integer matching an existing object's ID (no leading zero —
+ *           C treats that as octal)
  */
 function validateAlias(text: string, out: monaco.editor.IMarkerData[]): void {
     const seen = new Map<string, number>()
@@ -546,6 +547,11 @@ function validateAlias(text: string, out: monaco.editor.IMarkerData[]): void {
             if (!valueCheck.ok) {
                 out.push(makeMarker(text, value.start, value.end, valueCheck.reason))
             }
+        } else {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                'ALIAS requires a value referencing an existing Roster/Turnout/Sensor/Route/Sequence ID.',
+            ))
         }
     }
 }
@@ -564,7 +570,7 @@ interface AliasTargetData extends ObjectIdCollections {
 function validateAliasTargets(text: string, out: monaco.editor.IMarkerData[], data: AliasTargetData): void {
     for (const { argsRaw, innerStart } of eachMacroCall(text, 'ALIAS')) {
         const args = parseArgSpans(argsRaw, innerStart)
-        if (args.length < 2) continue // value omitted — EX-RAIL auto-assigns one, nothing to check
+        if (args.length < 2) continue // missing value already flagged by validateAlias
 
         const value = args[1]
         if (!isInt(value.value)) continue // malformed value already flagged by validateAliasValue
@@ -573,7 +579,6 @@ function validateAliasTargets(text: string, out: monaco.editor.IMarkerData[], da
         if (collectObjectIdReferences(n, data).length === 0) {
             out.push(makeMarker(text, value.start, value.end,
                 `Alias value ${n} does not match any configured Roster/Turnout/Sensor/Route/Sequence ID.`,
-                monaco.MarkerSeverity.Warning,
             ))
         }
     }

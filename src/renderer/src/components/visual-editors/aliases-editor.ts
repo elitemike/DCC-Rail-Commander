@@ -1,7 +1,16 @@
 import { resolve } from 'aurelia'
+import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
-import type { AliasEntry } from '../../utils/myAutomationParser'
+import type { AliasEntry, AliasTargetType } from '../../utils/myAutomationParser'
 import { inferAliasTypes } from '../../utils/myAutomationParser'
+
+const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
+    { text: 'Roster', value: 'Roster' },
+    { text: 'Turnout', value: 'Turnout' },
+    { text: 'Sensor', value: 'Sensor' },
+    { text: 'Route', value: 'Route' },
+    { text: 'Sequence', value: 'Sequence' },
+]
 
 export class AliasesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
@@ -10,6 +19,13 @@ export class AliasesEditorCustomElement {
     errorMessage = ''
     private lastValidAliases: AliasEntry[] = []
 
+    readonly aliasTypeOptions = ALIAS_TYPE_OPTIONS
+
+    newAliasTypeEl!: HTMLInputElement
+    newAliasIdEl!: HTMLInputElement
+    private sfNewAliasType?: DropDownList
+    private sfNewAliasId?: DropDownList
+
     private cloneAliases(aliases: AliasEntry[]): AliasEntry[] {
         return aliases.map(alias => ({ ...alias }))
     }
@@ -17,6 +33,44 @@ export class AliasesEditorCustomElement {
     attached(): void {
         try { console.debug('AliasesEditor attached') } catch { /* ignore */ }
         this.lastValidAliases = this.cloneAliases(this.state.aliases)
+
+        this.sfNewAliasType = new DropDownList({
+            dataSource: [...ALIAS_TYPE_OPTIONS],
+            fields: { text: 'text', value: 'value' },
+            value: this.newAliasType,
+            change: (args) => {
+                this.newAliasType = (args.value as AliasTargetType) ?? 'Roster'
+                this.newAliasId = null
+                this.newAliasError = ''
+                if (this.sfNewAliasId) {
+                    this.sfNewAliasId.dataSource = this.state.getAvailableAliasTargetIds(this.newAliasType)
+                    this.sfNewAliasId.value = null
+                }
+            },
+        })
+        this.sfNewAliasType.appendTo(this.newAliasTypeEl)
+
+        this.sfNewAliasId = new DropDownList({
+            dataSource: this.state.getAvailableAliasTargetIds(this.newAliasType),
+            fields: { text: 'label', value: 'id' },
+            placeholder: 'Select an ID…',
+            // Refreshed lazily right before the popup opens — an alias added/removed
+            // elsewhere doesn't otherwise notify this SF widget that its dataSource
+            // (which IDs are still unaliased) is stale. Same pattern as throttle-panel's
+            // roster picker.
+            open: () => {
+                if (this.sfNewAliasId) this.sfNewAliasId.dataSource = this.state.getAvailableAliasTargetIds(this.newAliasType)
+            },
+            change: (args) => {
+                this.newAliasId = typeof args.value === 'number' ? args.value : null
+            },
+        })
+        this.sfNewAliasId.appendTo(this.newAliasIdEl)
+    }
+
+    detaching(): void {
+        this.sfNewAliasType?.destroy()
+        this.sfNewAliasId?.destroy()
     }
 
     setTab(t: 'visual' | 'raw') {
@@ -38,10 +92,41 @@ export class AliasesEditorCustomElement {
         }
     }
 
-    addAlias() {
-        this.state.aliases = [...this.state.aliases, { name: 'NEW_ALIAS', value: '' }]
+    // ── New-alias mini form ────────────────────────────────────────────────
+    // Kept separate from state.aliases until both fields validate, so a
+    // still-being-typed name/value pair is never mid-air invalid inside the
+    // live editor list (which every row's blur handler re-validates in full).
+    newAliasName = ''
+    newAliasType: AliasTargetType = 'Roster'
+    newAliasId: number | null = null
+    newAliasError = ''
+
+    addAlias(): void {
+        if (this.newAliasId == null) {
+            this.newAliasError = `Select a ${this.newAliasType} ID to alias.`
+            return
+        }
+        const candidate: AliasEntry = { name: this.newAliasName.trim(), value: String(this.newAliasId), aliasType: this.newAliasType }
+        const normalized = this.state.normalizeAliases([...this.state.aliases, candidate])
+        if (!normalized.ok) {
+            this.newAliasError = normalized.reason
+            return
+        }
+        this.newAliasError = ''
+        this.state.aliases = normalized.aliases
         this.state.syncAll()
         this.lastValidAliases = this.cloneAliases(this.state.aliases)
+        this.newAliasName = ''
+        this.newAliasId = null
+        if (this.sfNewAliasId) {
+            this.sfNewAliasId.dataSource = this.state.getAvailableAliasTargetIds(this.newAliasType)
+            this.sfNewAliasId.value = null
+        }
+    }
+
+    handleNewAliasKeydown(event: KeyboardEvent): boolean {
+        if (event.key === 'Enter') { this.addAlias(); return false }
+        return true
     }
 
     removeAlias(idx: number) {
@@ -81,5 +166,22 @@ export class AliasesEditorCustomElement {
             sequences: this.state.sequences,
         })
         return types.length > 0 ? types.join(', ') : 'Unmatched'
+    }
+
+    /** Aliases grouped by inferred/declared type, sorted alphabetically by group label, and by name within each group. Each item keeps its index into state.aliases so edit/remove handlers can target it directly. */
+    get groupedAliases(): { label: string; items: { alias: AliasEntry; index: number }[] }[] {
+        const groups = new Map<string, { alias: AliasEntry; index: number }[]>()
+        this.state.aliases.forEach((alias, index) => {
+            const label = this.getAliasTypeLabel(alias)
+            const items = groups.get(label)
+            if (items) items.push({ alias, index })
+            else groups.set(label, [{ alias, index }])
+        })
+        return Array.from(groups.entries())
+            .map(([label, items]) => ({
+                label,
+                items: items.slice().sort((a, b) => a.alias.name.localeCompare(b.alias.name)),
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label))
     }
 }

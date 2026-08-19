@@ -97,8 +97,10 @@ describe('ALIAS validator (myAliases.h)', () => {
         expect(_runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH, 200)')).toHaveLength(0)
     })
 
-    it('produces no marker for a valid ALIAS with no value', () => {
-        expect(_runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH)')).toHaveLength(0)
+    it('flags an ALIAS missing its required value', () => {
+        const markers = _runValidatorsForTest('myAliases.h', 'ALIAS(YARD_SWITCH)')
+        expect(markers.length).toBeGreaterThanOrEqual(1)
+        expect(markers[0].message).toContain('requires a value')
     })
 
     it('flags a name that does not start with a letter or underscore', () => {
