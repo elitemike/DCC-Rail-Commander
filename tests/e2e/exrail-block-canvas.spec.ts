@@ -83,6 +83,23 @@ async function pickDropdownOption(page: import('@playwright/test').Page, current
     await menuItem.click()
 }
 
+/**
+ * Generates a random EXRAIL-command-shaped word Blocks mode has never heard of — a made-up
+ * ALL_CAPS identifier, optionally called with garbage arguments. Blocks mode must never crash
+ * on this (see exrail-block-compiler.ts's parseBody() doc comment: any unrecognized line
+ * returns `{ ok: false, reason }` instead of throwing or partially compiling), only ever
+ * degrade to "can't be edited visually — switch to Raw".
+ */
+function randomUnknownCommand(): string {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let word = ''
+    const len = 6 + Math.floor(Math.random() * 10)
+    for (let i = 0; i < len; i++) word += letters[Math.floor(Math.random() * letters.length)]
+    const argCount = Math.floor(Math.random() * 3)
+    const args = Array.from({ length: argCount }, () => Math.floor(Math.random() * 999)).join(', ')
+    return argCount > 0 ? `${word}(${args})` : word
+}
+
 test.describe('EXRAIL block canvas', () => {
     test('renders the Blocks tab for a route whose body parses cleanly', async ({ workspacePage: page }) => {
         await openRoutesEditor(page)
@@ -391,5 +408,96 @@ test.describe('EXRAIL block canvas', () => {
         // And the wrapper itself should be tall — a regression here would otherwise pass trivially
         // by having both sides of the comparison collapse together.
         expect(viewportBox?.height).toBeGreaterThan(300)
+    })
+
+    test('a random unknown EXRAIL word disables Blocks mode instead of crashing the canvas', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+
+        const unknownWord = randomUnknownCommand()
+        const rawButton = page.getByTestId('row-tab-raw')
+        await rawButton.click()
+        const rowEditor = page.getByTestId('row-body-monaco')
+        await expect(rowEditor).toBeVisible()
+        const editor = rowEditor.locator('div.monaco-editor')
+        await editor.click()
+        await page.keyboard.press('Control+A')
+        await page.keyboard.type(`ROUTE(1, "Main Line")\n${unknownWord}\nDONE`)
+        await page.waitForTimeout(500)
+
+        // Blocks becomes unselectable rather than the app throwing/blank-screening on a word it
+        // has no block definition for.
+        const blocksButton = page.getByRole('button', { name: 'Blocks' })
+        await expect(blocksButton).toBeDisabled()
+        await expect(blocksButton).toHaveAttribute('title', /can't be edited visually/)
+
+        // The app itself stays alive and interactive — not just the button's disabled state.
+        // Typed text survives untouched (nothing silently discarded it) and normal navigation
+        // still works.
+        await expect(editor).toContainText(unknownWord)
+        await openAliasesEditor(page)
+        await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+    })
+
+    test('random unknown words in many shapes never crash Blocks mode, across several routes', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+
+        // A spread of shapes a hand-edited file could plausibly contain: a bare unknown word, an
+        // unknown word called with args, one nested inside a branch, and one mixed in with real
+        // commands — every one of these must degrade to "Raw only", never break the page.
+        const bareWord = randomUnknownCommand().replace(/\(.*/, '')
+        const shapes = [
+            bareWord,
+            randomUnknownCommand(),
+            `IF(200)\n  ${randomUnknownCommand()}\nENDIF`,
+            `THROW(200)\n${randomUnknownCommand()}\nCLOSE(201)`,
+        ]
+
+        for (let i = 0; i < shapes.length; i++) {
+            const rawButton = page.getByTestId('row-tab-raw')
+            // The row may already be showing Raw from a prior iteration (Blocks got disabled) —
+            // click it defensively either way.
+            if (await rawButton.isVisible()) await rawButton.click()
+            const rowEditor = page.getByTestId('row-body-monaco')
+            await expect(rowEditor).toBeVisible()
+            const editor = rowEditor.locator('div.monaco-editor')
+            await editor.click()
+            await page.keyboard.press('Control+A')
+            await page.keyboard.type(`ROUTE(1, "Main Line")\n${shapes[i]}`)
+            await page.waitForTimeout(500)
+
+            const blocksButton = page.getByRole('button', { name: 'Blocks' })
+            await expect(blocksButton).toBeDisabled()
+            // The page never crashed partway through — the routes list is still there and clickable.
+            await expect(page.locator('routes-editor nav[aria-label="Routes"] a').first()).toBeVisible()
+        }
+    })
+
+    test('an unknown word introduced via the whole-file Raw tab does not corrupt an already-open Blocks canvas', async ({ workspacePage: page }) => {
+        // MOCK_ROUTES_H's route parses cleanly, so Blocks mode is open and mounted by default.
+        // Editing the same route's body to include a made-up word through the file-level Raw tab
+        // (rather than the per-row Raw editor) exercises a different code path — the block canvas
+        // stays mounted underneath while the underlying body text changes from outside it.
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        const unknownWord = randomUnknownCommand()
+        await page.getByTestId('editor-tab-raw').click()
+        await expect(page.locator('div.monaco-editor')).toBeVisible()
+        await setMonacoContent(page, ['ROUTE(1, "Main Route")', unknownWord, 'DONE'].join('\n'))
+
+        // Switching back to the Visual tab (and reselecting the route, the normal way a user
+        // would look at it again) must never crash — either the canvas reflects the new body via
+        // its parseError fallback, or it disables Blocks for that row. Either way, no exception.
+        await page.getByRole('button', { name: 'Visual', exact: true }).click()
+        await page.locator('routes-editor nav[aria-label="Routes"] a').first().click()
+        await page.waitForTimeout(300)
+
+        // The app is still responsive: some sane state is showing (either the canvas or the
+        // disabled-Blocks Raw fallback), never a blank/broken panel.
+        const blocksButton = page.getByRole('button', { name: 'Blocks' })
+        await expect(blocksButton).toBeVisible()
+        const canvasVisible = await page.locator('.blocklySvg').first().isVisible().catch(() => false)
+        const rawVisible = await page.getByTestId('row-body-monaco').isVisible().catch(() => false)
+        expect(canvasVisible || rawVisible).toBe(true)
     })
 })
