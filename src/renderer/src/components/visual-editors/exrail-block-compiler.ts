@@ -58,6 +58,8 @@ export interface BlockTypeDef {
      * Branch nodes: header line only (`IF(200)`) — compileBody owns ELSE/ENDIF.
      */
     emit(paramValues: Record<string, string | number>): string
+    /** DCC-EX command-reference URL shown via Blockly's right-click "Help" menu item, if set. */
+    helpUrl?: string
 }
 
 // ── Ref-kind param options ────────────────────────────────────────────────

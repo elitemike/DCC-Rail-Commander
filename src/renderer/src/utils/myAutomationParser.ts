@@ -194,7 +194,7 @@ export function parseAliasNumericValue(value: string): number | null {
 const EXRAIL_RESERVED_WORDS = new Set([
     'ALIAS', 'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT',
     'SEQUENCE', 'ROUTE', 'AUTOMATION', 'AUTOSTART',
-    'THROW', 'CLOSE', 'ONTHROW', 'ONCLOSE',
+    'THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'ONTHROW', 'ONCLOSE',
     'SETLOCO', 'SENDLOCO', 'START', 'FOLLOW',
     'IFOCCUPIED', 'IF', 'ELSE', 'ENDIF', 'AT', 'AFTER',
     'FWD', 'REV', 'STOP', 'SPEED', 'ESTOP', 'POWERON', 'POWEROFF',

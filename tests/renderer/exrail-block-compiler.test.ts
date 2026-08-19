@@ -15,6 +15,12 @@ describe('parseBody / compileBody round-trip', () => {
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
     })
 
+    it('round-trips TOGGLE_TURNOUT', () => {
+        const body = 'TOGGLE_TURNOUT(200)\nDELAY(500)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
     it('round-trips a single IF/ENDIF', () => {
         const body = 'IF(1)\n  THROW(200)\nENDIF'
         const graph = parseOk(body)
