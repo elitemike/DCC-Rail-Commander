@@ -98,8 +98,10 @@
 
                         <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
                             <exrail-block-canvas component.ref="blockCanvas" kind="route" initial-body.bind="selectedRoute.body" defined.bind="defined"
-                                header-label.bind="selectedRouteHeaderLabel"
-                                on-body-change.bind="makeBodyChangeHandler(selectedRoute.id)"></exrail-block-canvas>
+                                header-id.bind="selectedRoute.id" header-alias.bind="selectedRouteAlias"
+                                on-body-change.bind="makeBodyChangeHandler(selectedRoute.id)"
+                                on-id-change.bind="makeIdChangeHandler(selectedRoute.id)"
+                                on-alias-change.bind="makeAliasChangeHandler(selectedRoute.id)"></exrail-block-canvas>
                         </div>
                         <!-- Content is seeded via a one-time binding, not a reactive one: switchModel()
                              is the sole channel that pushes new content into an already-mounted instance

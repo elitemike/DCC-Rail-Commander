@@ -1,7 +1,8 @@
 /**
  * E2E tests: Sequences editor — friendly name/description on SEQUENCE() entries,
- * plus myAliases.h alias support (the selected sequence's alias-picker in the
- * detail pane).
+ * plus myAliases.h alias support (edited directly on the Blocks tab's hat block —
+ * see exrail-blockly-blocks.ts's ExrailAliasField/ExrailIdField — not a sidebar
+ * control).
  *
  * SEQUENCE(id) has no description argument in EXRAIL itself, so the friendly
  * name is stored as a trailing `// comment` on the SEQUENCE(id) line (same
@@ -58,12 +59,45 @@ function descriptionInput(page: import('@playwright/test').Page) {
     return page.locator('sequences-editor input[aria-label="Sequence description"]')
 }
 
-function aliasInput(page: import('@playwright/test').Page) {
-    return page.locator('sequences-editor alias-picker input')
-}
-
 async function addSequence(page: import('@playwright/test').Page) {
     await page.locator('sequences-editor button[title="Add new sequence"]').click()
+}
+
+/**
+ * The hat block's ALIAS field (see exrail-blockly-blocks.ts's ExrailAliasField) —
+ * a Blockly field, not a plain `<input>`, so it's targeted by its accessible role/
+ * label the same way exrail-block-canvas.spec.ts's pickDropdownOption() targets
+ * ref-kind dropdowns. Blockly renders its own inline `<input>` as a floating
+ * widget only while the field is being edited, so reading the current value (via
+ * `hatAliasFieldValue`) reads the field's aria-label instead of that transient
+ * widget, and setting a new value opens the widget, types, then commits with
+ * Enter (blur/Tab were tried and don't commit it — Enter does).
+ */
+function hatAliasField(page: import('@playwright/test').Page) {
+    return page.getByRole('button', { name: /^Edit text:/ })
+}
+
+async function hatAliasFieldValue(page: import('@playwright/test').Page): Promise<string> {
+    const label = await hatAliasField(page).getAttribute('aria-label')
+    const value = (label ?? '').replace(/^Edit text:\s*/, '')
+    return value === 'empty' ? '' : value
+}
+
+/** The hat block's ID field, alongside ALIAS above — read only, never driven, since these tests
+ *  don't exercise id-editing. myRoutes.h's seeded Route(1) already occupies id 1 in the shared
+ *  ROUTE/AUTOMATION/SEQUENCE namespace, so a freshly added sequence gets id 2, not 1 — read the
+ *  actual assigned id here rather than assuming 1. */
+async function hatIdFieldValue(page: import('@playwright/test').Page): Promise<number> {
+    const label = await page.getByRole('button', { name: /^Edit number:/ }).getAttribute('aria-label')
+    return Number((label ?? '').replace(/^Edit number:\s*/, ''))
+}
+
+async function setHatAlias(page: import('@playwright/test').Page, value: string) {
+    await hatAliasField(page).click()
+    await page.keyboard.press('Control+A')
+    if (value) await page.keyboard.type(value)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -171,37 +205,46 @@ test.describe('Sequences Editor', () => {
     test('setting an alias on a sequence writes ALIAS(...) with type: Sequence to myAliases.h', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        // The workspacePage fixture's myRoutes.h already occupies id 1 in the shared
+        // ROUTE/AUTOMATION/SEQUENCE namespace, so this freshly added sequence gets id 2.
+        const id = await hatIdFieldValue(page)
 
-        await aliasInput(page).fill('YARD_SHUNT')
-        await aliasInput(page).blur()
+        await setHatAlias(page, 'YARD_SHUNT')
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(YARD_SHUNT, 1) // type: Sequence')
+        await expect(page.locator('div.monaco-editor')).toContainText(`ALIAS(YARD_SHUNT, ${id}) // type: Sequence`)
     })
 
     test('an alias already defined in myAliases.h populates in the sequence visual editor', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        const id = await hatIdFieldValue(page)
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'ALIAS(LOOP_A, 1) // type: Sequence')
+        await setMonacoContent(page, `ALIAS(LOOP_A, ${id}) // type: Sequence`)
 
         await openSequencesEditor(page)
-        await expect(aliasInput(page)).toHaveValue('LOOP_A')
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        expect(await hatAliasFieldValue(page)).toBe('LOOP_A')
     })
 
     test('deleting a sequence alias in the aliases editor clears the alias field in the sequences editor', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        const id = await hatIdFieldValue(page)
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'ALIAS(LOOP_A, 1) // type: Sequence')
+        await setMonacoContent(page, `ALIAS(LOOP_A, ${id}) // type: Sequence`)
 
         await openSequencesEditor(page)
-        await expect(aliasInput(page)).toHaveValue('LOOP_A')
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        expect(await hatAliasFieldValue(page)).toBe('LOOP_A')
 
         await openAliasesEditor(page)
         await switchToVisual(page)
@@ -210,7 +253,8 @@ test.describe('Sequences Editor', () => {
         await expect(page.getByText('No aliases')).toBeVisible({ timeout: 3_000 })
 
         await openSequencesEditor(page)
-        await expect(aliasInput(page)).toHaveValue('')
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        expect(await hatAliasFieldValue(page)).toBe('')
     })
 
     test('assigning a sequence alias name already used by a different-typed object shows an error toast', async ({ workspacePage: page }) => {
@@ -225,10 +269,9 @@ test.describe('Sequences Editor', () => {
 
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
 
-        await aliasInput(page).click()
-        await aliasInput(page).fill('SHARED_NAME')
-        await aliasInput(page).blur()
+        await setHatAlias(page, 'SHARED_NAME')
 
         const toast = page.locator('.e-toast-container .e-toast').first()
         await expect(toast).toBeVisible({ timeout: 5_000 })

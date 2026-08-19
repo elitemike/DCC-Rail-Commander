@@ -4,7 +4,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { canonicalRefValue, parseBody, compileBody } from './exrail-block-compiler'
 import type { DefinedObjects, ParsedGraph } from './exrail-block-compiler'
-import { registerExrailBlocks, setWorkspaceDefined } from './exrail-blockly-blocks'
+import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceHatCallbacks, withHatCallbacksSuppressed } from './exrail-blockly-blocks'
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
 import { buildCategoryTree, firstLeafPath, flatToolboxForPath } from './exrail-blockly-toolbox'
 import type { PaletteCategoryNode } from './exrail-blockly-toolbox'
@@ -87,9 +87,15 @@ export class ExrailBlockCanvasCustomElement {
     @bindable({ mode: BindingMode.oneTime }) initialBody = ''
     @bindable defined: DefinedObjects | null = null
     @bindable onBodyChange: ((body: string) => void) | null = null
-    /** Display-only id/alias text shown next to "Route"/"Sequence" on the hat block — see the
-     *  HEADER_LABEL field comment in exrail-blockly-blocks.ts. Not part of the compiled graph. */
-    @bindable headerLabel = ''
+    /** Seeds the hat block's editable ID/Alias fields (see ExrailIdField/ExrailAliasField in
+     *  exrail-blockly-blocks.ts) — not part of the compiled graph (compileBody() never emits the
+     *  hat node). Edits made directly on the block are reported back via onIdChange/onAliasChange
+     *  rather than round-tripped through these bindables, so the host (routes-editor.ts/
+     *  sequences-editor.ts) owns persisting them to ConfigEditorState. */
+    @bindable headerId = 0
+    @bindable headerAlias = ''
+    @bindable onIdChange: ((id: number) => void) | null = null
+    @bindable onAliasChange: ((alias: string) => void) | null = null
 
     private container!: HTMLElement
     private workspace: Blockly.WorkspaceSvg | null = null
@@ -156,6 +162,7 @@ export class ExrailBlockCanvasCustomElement {
         this._unsubBlocklySounds = null
         if (this.workspace && this._changeListener) this.workspace.removeChangeListener(this._changeListener)
         this._changeListener = null
+        if (this.workspace) setWorkspaceHatCallbacks(this.workspace, null)
         try { this.workspace?.dispose() } catch { /* already broken — nothing to clean up */ }
         this.workspace = null
         try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
@@ -272,6 +279,10 @@ export class ExrailBlockCanvasCustomElement {
             sounds: this.blocklySounds.enabled,
         })
         setWorkspaceDefined(this.workspace, this.defined)
+        setWorkspaceHatCallbacks(this.workspace, {
+            onIdChange: (id) => this.onIdChange?.(id),
+            onAliasChange: (alias) => this.onAliasChange?.(alias),
+        })
         this._loadInto(this.workspace)
 
         this._changeListener = (e: Blockly.Events.Abstract) => this._onWorkspaceEvent(e)
@@ -309,24 +320,41 @@ export class ExrailBlockCanvasCustomElement {
         const graph = this._loadGraph()
         this._suppressChange = true
         try {
-            buildWorkspaceFromGraph(workspace, graph, BLOCK_REGISTRY)
-            this._applyHeaderLabel()
+            // Also covers the hat block's own construction: buildWorkspaceFromGraph() creates it
+            // with the ID/ALIAS fields' plain JSON-default values (see jsonFor() in
+            // exrail-blockly-blocks.ts), which would otherwise itself report a spurious "edit" the
+            // instant _applyHeaderFields() below hasn't corrected it yet.
+            withHatCallbacksSuppressed(workspace, () => {
+                buildWorkspaceFromGraph(workspace, graph, BLOCK_REGISTRY)
+                this._applyHeaderFields()
+            })
         } finally {
             this._suppressChange = false
         }
         this._refreshOutput()
     }
 
-    /** Pushes `headerLabel` onto the hat block's display-only field — called after (re)building
-     *  the workspace and whenever the bindable changes on an already-mounted canvas. */
-    headerLabelChanged(): void {
-        this._applyHeaderLabel()
+    /** Pushes `headerId`/`headerAlias` onto the hat block's editable fields — called after
+     *  (re)building the workspace and whenever either bindable changes on an already-mounted
+     *  canvas (e.g. the host reverting/normalizing a value after a failed rename). Callers outside
+     *  _loadInto() (i.e. these two *Changed() hooks) also need the suppression, for the same
+     *  reason _loadInto() wraps its own call — see ExrailIdField/ExrailAliasField's
+     *  doValueUpdate_ in exrail-blockly-blocks.ts for why programmatic sets must never reach
+     *  onIdChange/onAliasChange. */
+    headerIdChanged(): void {
+        if (this.workspace) withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
     }
 
-    private _applyHeaderLabel(): void {
+    headerAliasChanged(): void {
+        if (this.workspace) withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
+    }
+
+    private _applyHeaderFields(): void {
         if (!this.workspace) return
-        const hat = this.workspace.getTopBlocks(true).find((b) => b.getField('HEADER_LABEL'))
-        hat?.setFieldValue(this.headerLabel, 'HEADER_LABEL')
+        const hat = this.workspace.getTopBlocks(true).find((b) => b.type === 'ROUTE' || b.type === 'SEQUENCE')
+        if (!hat) return
+        if (String(hat.getFieldValue('ID') ?? '') !== String(this.headerId)) hat.setFieldValue(String(this.headerId), 'ID')
+        if ((hat.getFieldValue('ALIAS') ?? '') !== this.headerAlias) hat.setFieldValue(this.headerAlias, 'ALIAS')
     }
 
     private _loadGraph(): ParsedGraph {
@@ -345,6 +373,17 @@ export class ExrailBlockCanvasCustomElement {
         return result.graph
     }
 
+    /**
+     * Hat block ID/ALIAS edits are reported to onIdChange/onAliasChange directly by
+     * ExrailIdField/ExrailAliasField (exrail-blockly-blocks.ts), not through this listener — see
+     * that file's HatFieldCallbacks comment for why: this listener only ever sees them
+     * asynchronously (a later task, not synchronously off the setFieldValue call that triggered
+     * them — confirmed empirically), which is unsafe specifically for the hat's id/alias
+     * (unlike everything else this listener handles) because reload() can tear the workspace down
+     * — via the Blockly-internal but *reused* block id `'hat'` — before a deferred event for the
+     * old hat block has a chance to fire, misattributing it to whichever route/sequence is
+     * selected by the time it does.
+     */
     private _onWorkspaceEvent(e: Blockly.Events.Abstract): void {
         if (this._suppressChange) return
         if (!e.type || !STRUCTURAL_EVENT_TYPES.has(e.type)) return
