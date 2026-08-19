@@ -94,6 +94,9 @@ export class ExrailBlockCanvasCustomElement {
      *  sequences-editor.ts) owns persisting them to ConfigEditorState. */
     @bindable headerId = 0
     @bindable headerAlias = ''
+    /** Route description (SEQUENCE has no equivalent) — only used to render the `ROUTE(id, "desc")`
+     *  header line in the readonly output pane; the hat block itself has no description field. */
+    @bindable headerDescription = ''
     @bindable onIdChange: ((id: number) => void) | null = null
     @bindable onAliasChange: ((alias: string) => void) | null = null
 
@@ -343,10 +346,15 @@ export class ExrailBlockCanvasCustomElement {
      *  onIdChange/onAliasChange. */
     headerIdChanged(): void {
         if (this.workspace) withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
+        this._refreshOutput()
     }
 
     headerAliasChanged(): void {
         if (this.workspace) withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
+    }
+
+    headerDescriptionChanged(): void {
+        this._refreshOutput()
     }
 
     private _applyHeaderFields(): void {
@@ -398,8 +406,11 @@ export class ExrailBlockCanvasCustomElement {
 
     /** Recompiles the workspace and stores the result on `outputText` for the readonly output pane
      *  — the single choke point every load/structural-change path routes through, so the pane never
-     *  drifts from what onBodyChange would push out. Returns the text so _commitNow() doesn't need
-     *  a second compile just to hand it to onBodyChange. */
+     *  drifts from what onBodyChange would push out. Returns the *body* text (no header line) so
+     *  _commitNow() doesn't need a second compile just to hand it to onBodyChange — onBodyChange's
+     *  contract is body-only, matching RouteEntry.body/SequenceEntry.body, while outputText is the
+     *  full on-disk shape (header line + body, mirroring serializeRoutesToFile/
+     *  serializeSequencesToFile) since that's what a readonly preview pane is actually for. */
     private _refreshOutput(): string {
         if (!this.workspace) {
             this.outputText = ''
@@ -407,8 +418,19 @@ export class ExrailBlockCanvasCustomElement {
         }
         const graph = buildGraphFromWorkspace(this.workspace, BLOCK_REGISTRY)
         const text = compileBody(graph, BLOCK_REGISTRY)
-        this.outputText = text
+        this.outputText = `${this._headerLine()}\n${text.trim() || 'DONE'}`
         return text
+    }
+
+    /** Builds the `ROUTE(id, "desc")`/`SEQUENCE(id)` line the compiled body is written under —
+     *  compileBody() never emits it (see that function's own doc comment), so the output pane has
+     *  to add it back for the preview to actually look like what ends up on disk. */
+    private _headerLine(): string {
+        // headerDescription is optional on SequenceEntry (undefined, not ''), so this can arrive
+        // unset despite the class field's own default.
+        const description = (this.headerDescription ?? '').trim()
+        if (this.kind === 'route') return `ROUTE(${this.headerId}, "${description}")`
+        return `SEQUENCE(${this.headerId})${description ? ` // ${description}` : ''}`
     }
 
     /**

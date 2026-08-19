@@ -4,9 +4,12 @@
             Couldn't load this body into Blocks mode: ${parseError}
         </div>
         <!-- Syncfusion Splitter: pane 1 is the palette+canvas row (unchanged from before), pane 2 is
-             an always-visible readonly pane showing the same compiled EXRAIL text onBodyChange sends
-             to the host editor — kept current by exrail-block-canvas.ts's _refreshOutput(), which
-             runs on every load and every structural workspace change. Built/destroyed in
+             an always-visible readonly pane showing the full on-disk shape of this route/sequence —
+             the ROUTE(...)/SEQUENCE(...) header line (built from headerId/headerDescription, since
+             compileBody() itself only ever emits the body) plus the same compiled body text
+             onBodyChange sends to the host editor — kept current by exrail-block-canvas.ts's
+             _refreshOutput(), which runs on every load and every structural workspace change,
+             headerId change, and headerDescription change. Built/destroyed in
              attached()/detaching() like every other Splitter instance in this codebase (see
              routes-editor.ts), not via if.bind, so resizing it doesn't fight Aurelia's rendering. -->
         <!-- Splitter's appendTo() wholesale-replaces each DIRECT child's class attribute with its own
