@@ -109,6 +109,7 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
         colour: def.color,
         tooltip: def.label,
     }
+    if (def.helpUrl) json.helpUrl = def.helpUrl
 
     if (def.shape === 'hat') {
         // The hat block's own id/alias isn't an EXRAIL emit param (compileBody() never emits the

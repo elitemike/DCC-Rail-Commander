@@ -34,8 +34,8 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         }
     })
 
-    it('gates THROW/CLOSE/IFCLOSED/IFTHROWN on turnouts existing', () => {
-        for (const id of ['THROW', 'CLOSE', 'IFCLOSED', 'IFTHROWN']) {
+    it('gates THROW/CLOSE/TOGGLE_TURNOUT/IFCLOSED/IFTHROWN on turnouts existing', () => {
+        for (const id of ['THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'IFCLOSED', 'IFTHROWN']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(false)
             expect(byId.get(id)!.isAvailable(POPULATED)).toBe(true)
         }
@@ -72,6 +72,16 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         for (const id of ['FWD', 'REV', 'SPEED', 'STOP', 'ESTOP', 'FON', 'FOFF']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(true)
         }
+    })
+})
+
+describe('BLOCK_REGISTRY helpUrl', () => {
+    const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
+
+    it('points TOGGLE_TURNOUT at its DCC-EX command-reference anchor', () => {
+        expect(byId.get('TOGGLE_TURNOUT')!.helpUrl).toBe(
+            'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#toggle_turnoutturnout_id',
+        )
     })
 })
 

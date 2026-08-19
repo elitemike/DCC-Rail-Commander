@@ -57,6 +57,17 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         emit: (p) => `CLOSE(${p.turnoutId})`,
     },
     {
+        id: 'TOGGLE_TURNOUT',
+        shape: 'stack',
+        label: 'Toggle turnout',
+        color: '#e67e22',
+        category: 'Turnouts',
+        params: [{ name: 'turnoutId', label: 'Turnout', kind: 'turnoutRef' }],
+        isAvailable: hasTurnouts,
+        emit: (p) => `TOGGLE_TURNOUT(${p.turnoutId})`,
+        helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#toggle_turnoutturnout_id',
+    },
+    {
         id: 'IFCLOSED',
         shape: 'branch',
         label: 'If turnout closed',
