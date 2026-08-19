@@ -50,6 +50,12 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
     await page.waitForTimeout(500)
 }
 
+/** Reads the always-visible readonly output pane (exrail-block-canvas.ts's outputText, rendered
+ *  into a plain `<pre>` — no Monaco view-line juggling needed, unlike getMonacoContent above). */
+async function getOutputPaneText(page: import('@playwright/test').Page): Promise<string> {
+    return (await page.getByTestId('exrail-output-text').textContent()) ?? ''
+}
+
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     return page.evaluate(() => {
         // Scoped to the whole-file Raw tab specifically — the per-row Raw editor (when a row
@@ -100,6 +106,18 @@ test.describe('EXRAIL block canvas', () => {
         // The seeded body's two blocks are present, each ending on its own field's value.
         await expect(page.locator('[data-id="n1"]')).toContainText('Throw turnout')
         await expect(page.locator('[data-id="n2"]')).toContainText('Close turnout')
+    })
+
+    test('shows an always-visible readonly output pane matching the seeded route body', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // The pane sits beside the canvas (not behind a Raw toggle) and starts populated from the
+        // initial load, not just after the first edit.
+        await expect(page.getByTestId('exrail-output-pane')).toBeVisible()
+        const outputText = await getOutputPaneText(page)
+        expect(outputText).toContain('THROW(200)')
+        expect(outputText).toContain('CLOSE(201)')
     })
 
     test('the palette groups blocks into nested categories without ever overlaying the workspace', async ({ workspacePage: page }) => {
@@ -188,6 +206,21 @@ test.describe('EXRAIL block canvas', () => {
         const rawText = await getMonacoContent(page)
         expect(rawText).toContain('THROW(201)')
         expect(rawText).not.toContain('NaN')
+    })
+
+    test('output pane updates live when a block field changes, without switching to Raw', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('[data-id="n1"]')).toContainText('Main Line Junction (200)')
+        await expect(page.getByTestId('exrail-output-text')).toContainText('THROW(200)')
+
+        // Picking a different turnout is a structural workspace change (BLOCK_CHANGE) — the output
+        // pane must recompile from the same _commitNow() path that feeds onBodyChange, without the
+        // test ever visiting the Raw tab.
+        await pickDropdownOption(page, 'Main Line Junction (200)', 'Yard Entry (201)')
+
+        await expect(page.getByTestId('exrail-output-text')).toContainText('THROW(201)')
+        await expect(page.getByTestId('exrail-output-text')).not.toContainText('THROW(200)')
     })
 
     test('a turnout alias shows up in the turnout-ref dropdown and compiles by name, not NaN', async ({ workspacePage: page }) => {
@@ -292,6 +325,35 @@ test.describe('EXRAIL block canvas', () => {
         const sizeAfter = await page.locator('.blocklySvg').first().boundingBox()
         expect(sizeAfter?.width).toBeGreaterThanOrEqual((sizeBefore?.width ?? 0) - 5)
         expect(sizeAfter?.height).toBeGreaterThanOrEqual((sizeBefore?.height ?? 0) - 5)
+    })
+
+    test('output pane reflects the newly selected row after switching sequences', async ({ workspacePage: page }) => {
+        await page.getByText('Sequences', { exact: true }).first().click()
+        await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+        await page.getByTestId('editor-tab-raw').click()
+        await expect(page.locator('div.monaco-editor')).toBeVisible()
+        await setMonacoContent(page, [
+            'SEQUENCE(1)',
+            'DELAY(500)',
+            'DONE',
+            '',
+            'SEQUENCE(2)',
+            'DELAY(1000)',
+            'DONE',
+        ].join('\n'))
+        await page.getByRole('button', { name: 'Visual', exact: true }).click()
+
+        const rows = page.locator('sequences-editor nav[aria-label="Sequences"] a')
+        await rows.nth(0).click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await expect(page.getByTestId('exrail-output-text')).toContainText('DELAY(500)')
+
+        // reload() reuses the same Blockly instance across row switches (see exrail-block-canvas.ts)
+        // rather than a fresh attached()/detaching() cycle — the output pane must be re-derived from
+        // that reload too, not just from the initial mount.
+        await rows.nth(1).click()
+        await expect(page.getByTestId('exrail-output-text')).toContainText('DELAY(1000)')
+        await expect(page.getByTestId('exrail-output-text')).not.toContainText('DELAY(500)')
     })
 
     test('resizes correctly after navigating away to a different config file and back', async ({ workspacePage: page }) => {

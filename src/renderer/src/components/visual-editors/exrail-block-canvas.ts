@@ -1,5 +1,6 @@
-import { bindable, BindingMode, resolve } from 'aurelia'
+import { bindable, BindingMode, queueTask, resolve } from 'aurelia'
 import * as Blockly from 'blockly/core'
+import { Splitter } from '@syncfusion/ej2-layouts'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { canonicalRefValue, parseBody, compileBody } from './exrail-block-compiler'
 import type { DefinedObjects, ParsedGraph } from './exrail-block-compiler'
@@ -99,8 +100,15 @@ export class ExrailBlockCanvasCustomElement {
     private _changeListener: ((e: Blockly.Events.Abstract) => void) | null = null
     private _suppressChange = false
     private _detached = false
+    private splitterObj: Splitter | null = null
 
     parseError: string | null = null
+    /** Compiled EXRAIL text for the always-visible readonly output pane — kept in sync with the
+     *  workspace by _refreshOutput(), called from every point that changes what the workspace would
+     *  compile to (initial/reloaded load, structural edits). Deliberately a plain display field, not
+     *  round-tripped through onBodyChange — see that bindable's own call sites for why loads don't
+     *  push a body back out to the host editor. */
+    outputText = ''
 
     /** Custom nested-category sidebar state — see exrail-blockly-toolbox.ts for why this isn't Blockly's own category toolbox. */
     paletteTree: PaletteCategoryNode[] = []
@@ -114,6 +122,26 @@ export class ExrailBlockCanvasCustomElement {
         registerExrailBlocks()
         defineExrailThemes()
         this._build()
+        // Deferred (same convention as routes-editor.ts/sequences-editor.ts's own Splitter setup):
+        // the palette+canvas row and the output pane below are already rendered as static DOM by the
+        // time attached() runs, so appendTo() just wraps them — no need to wait on Blockly itself.
+        queueTask(() => {
+            if (this._detached || !document.getElementById('exrail-output-splitter')) return
+            const savedSize = this._loadOutputPaneWidth()
+            this.splitterObj = new Splitter({
+                paneSettings: [
+                    {},
+                    { size: savedSize, min: '160px', max: '480px' },
+                ],
+                width: '100%',
+                height: '100%',
+                resizeStop: () => {
+                    const pane = document.querySelector('#exrail-output-splitter > div:last-child') as HTMLElement
+                    if (pane) this._saveOutputPaneWidth(`${pane.offsetWidth}px`)
+                },
+            })
+            this.splitterObj.appendTo('#exrail-output-splitter')
+        })
     }
 
     detaching(): void {
@@ -130,6 +158,15 @@ export class ExrailBlockCanvasCustomElement {
         this._changeListener = null
         try { this.workspace?.dispose() } catch { /* already broken — nothing to clean up */ }
         this.workspace = null
+        try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.splitterObj = null
+    }
+
+    private _loadOutputPaneWidth(): string {
+        try { return localStorage.getItem('exrail-block-canvas-output-width') ?? '280px' } catch { return '280px' }
+    }
+    private _saveOutputPaneWidth(size: string): void {
+        try { localStorage.setItem('exrail-block-canvas-output-width', size) } catch { /* ignore */ }
     }
 
     /**
@@ -277,6 +314,7 @@ export class ExrailBlockCanvasCustomElement {
         } finally {
             this._suppressChange = false
         }
+        this._refreshOutput()
     }
 
     /** Pushes `headerLabel` onto the hat block's display-only field — called after (re)building
@@ -315,9 +353,23 @@ export class ExrailBlockCanvasCustomElement {
 
     private _commitNow(): void {
         if (!this.workspace) return
+        const text = this._refreshOutput()
+        this.onBodyChange?.(text)
+    }
+
+    /** Recompiles the workspace and stores the result on `outputText` for the readonly output pane
+     *  — the single choke point every load/structural-change path routes through, so the pane never
+     *  drifts from what onBodyChange would push out. Returns the text so _commitNow() doesn't need
+     *  a second compile just to hand it to onBodyChange. */
+    private _refreshOutput(): string {
+        if (!this.workspace) {
+            this.outputText = ''
+            return ''
+        }
         const graph = buildGraphFromWorkspace(this.workspace, BLOCK_REGISTRY)
         const text = compileBody(graph, BLOCK_REGISTRY)
-        this.onBodyChange?.(text)
+        this.outputText = text
+        return text
     }
 
     /**
