@@ -27,9 +27,14 @@
     "dependencies": {
         "@aurelia/dialog": "2.0.0-rc.1",
         "@aurelia/router": "2.0.0-rc.1",
-        "@aurelia/vite-plugin": "^2.0.0-rc.0",
         "@fontsource/roboto": "^5.2.10",
-        "@syncfusion/ej2": "^32.1.24",
+        "@syncfusion/ej2-base": "^32.1.24",
+        "@syncfusion/ej2-buttons": "^32.1.24",
+        "@syncfusion/ej2-dropdowns": "^32.1.24",
+        "@syncfusion/ej2-inputs": "^32.1.24",
+        "@syncfusion/ej2-layouts": "^32.1.24",
+        "@syncfusion/ej2-navigations": "^32.1.24",
+        "@syncfusion/ej2-notifications": "^32.1.24",
         "@xterm/addon-canvas": "^0.7.0",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
@@ -44,6 +49,7 @@
         "usb": "^2.13.0"
     },
     "devDependencies": {
+        "@aurelia/vite-plugin": "^2.0.0-rc.0",
         "@playwright/test": "^1.58.2",
         "@tailwindcss/vite": "^4.2.0",
         "@types/node": "^24.10.13",
@@ -71,10 +77,22 @@
             "output": "release"
         },
         "publish": null,
+        "compression": "maximum",
+        "electronLanguages": [
+            "en-US"
+        ],
         "files": [
             "out/**/*",
             "package.json",
-            "node_modules/**/*"
+            "node_modules/**/*",
+            "!node_modules/@aurelia/**/*",
+            "!node_modules/aurelia/**/*",
+            "!node_modules/@syncfusion/**/*",
+            "!node_modules/blockly/**/*",
+            "!node_modules/monaco-editor/**/*",
+            "!node_modules/vite-plugin-monaco-editor/**/*",
+            "!node_modules/@fontsource/**/*",
+            "!node_modules/@xterm/**/*"
         ],
         "asarUnpack": [
             "**/*.node"
