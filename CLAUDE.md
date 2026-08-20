@@ -43,12 +43,38 @@ is the real static check to run before considering a change done.
 generators, validators). Use a Playwright E2E test in `tests/e2e/` when the bug/feature only manifests through
 the Aurelia UI, Monaco editor, or Syncfusion controls — see `tests/e2e/fixtures.ts` for the mock-Electron
 fixtures (`workspacePage`, `csb1StackedPage`, `ioExpanderPage`, `rosterGroupedPage`) that seed config files and
-launch the app with `--mock-device --mock-compile --skip-startup --test-data-dir=<tmp>`.
+launch the app with `--mock-device --mock-upload --skip-startup --test-data-dir=<tmp>`. Compile always runs for
+real against the bundled PlatformIO toolchain (it never touches hardware, so there's nothing to fake); only
+upload is mocked, since e2e tests never have a real device to flash. There is no more mock-compile flag or
+COMPILE_E2E opt-in gate — real compile is simply the default everywhere now.
 
-Known pre-existing E2E failures unrelated to feature work (27 of them, same set before and after any change):
-`throttle.spec.ts` (whole file — the throttle nav item never appears), four `load-from-folder.spec.ts` cases,
-and two `turnout-editor.spec.ts` AUTOSTART cases. The raw↔visual round-trip cases in `turnout-editor.spec.ts`
-are flaky under full-suite parallelism and pass in isolation.
+As of 2026-08-20, all 259 tests pass individually and in most full runs (`pnpm test:e2e`), but the full suite has
+a residual intermittent failure mode under `workers` parallelism (`playwright.config.ts`) that is **not** fixed by
+lowering the worker count: at `workers: 6` a run was observed with an Electron child process (a Chromium zygote
+helper, normally near-0% CPU) pegged at 200%+ CPU indefinitely, starving sibling workers and causing unrelated
+tests to fail with "Tearing down electronApp exceeded the test timeout." Lowering to `workers: 4` and `workers: 2`
+both still hit the same failure signature on a different, unpredictable subset of tests (never the same tests
+twice, and not correlated with which spec does real work) — `workers: 2` failed too, just after a slower run, which
+rules out simple CPU contention as the root cause. Passing `--no-zygote` to the Electron launch args (a common
+mitigation for this exact Chromium zygote pattern) breaks Electron's own startup entirely in this environment, so
+that fix is unavailable here. This predates the 2026-08-20 changes below — it reproduces with unrelated specs
+(never `compile.spec.ts` specifically) — so treat any full-run failure as this known issue first: re-run the
+specific failing test in isolation (`--grep` or a direct file path) before treating it as a regression, and if it
+passes in isolation, it almost certainly is this issue, not new breakage. `workers: 4` is left as the default as a
+reasonable balance; it is not a fix, just a value that produced clean runs at least as often as any other tried.
+
+Believed to be a WSL2-specific Electron/Chromium sandbox quirk (zygote helper process hang), not a bug in this
+codebase or its tests. Not investigated further — root-causing it means digging into Chromium sandbox internals
+under WSL2, a materially different and open-ended task from fixing the test suite itself. If this box's Electron/
+Chromium version changes, or the suite runs on native Linux/CI, re-check whether it still reproduces before
+assuming it still applies.
+
+Do not use `locator.isVisible({ timeout })` to wait for something to appear — Playwright documents that option
+as ignored; `isVisible()` never polls, it checks current DOM state and returns immediately. This bit two Aurelia
+confirm-dialog flows (`roster-editor.spec.ts`, `turnout-editor.spec.ts`, `config-editor.spec.ts`) where the
+dialog is opened via a dynamic `import()`: the check ran before the dialog rendered, silently skipped the click,
+and the test then hung waiting on a state change that could never happen. Use `locator.waitFor({ state: 'visible',
+timeout })` (which does poll) before checking, or `expect(locator).toBeVisible()`.
 
 `electron`, `python-shell`, `simple-git`, `serialport`, `usb` and `tar` are aliased to stubs in
 `tests/stubs/` (wired up in `vitest.config.ts`) — without that, a test file's `vi.mock('<pkg>', …)` does not
@@ -69,8 +95,9 @@ reach the source modules that import them and every main-process test fails. See
 - `src/renderer/` — the Aurelia 2 app, built by `@aurelia/vite-plugin` via `electron.vite.config.ts`. Renderer
   services (`services/*.service.ts`) are thin wrappers that just call `window.<namespace>.*` — no business logic
   should live in preload.
-- Mock mode: `--mock-device` (fake USB/serial devices, see `src/main/dev-mock.ts`) and `--mock-compile` (skip
-  the real PlatformIO toolchain) let E2E tests and local dev run without hardware. `--test-data-dir=<path>`
+- Mock mode: `--mock-device` (fake USB/serial devices, see `src/main/dev-mock.ts`) fakes hardware discovery, and
+  `--mock-upload` fakes the upload (flash-to-device) response only — compile is never gated by a flag and always
+  runs for real against the bundled PlatformIO toolchain, since it never touches hardware. `--test-data-dir=<path>`
   redirects Electron's `userData` so preferences don't bleed between test runs. See `src/DEV-MOCK.md` for the
   full per-IPC-handler breakdown of what's faked vs. real.
 

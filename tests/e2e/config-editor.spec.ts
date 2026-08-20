@@ -607,9 +607,12 @@ test.describe('Roster Editor — Visual TreeView', () => {
         await percyRow.locator('.e-fullrow').click({ button: 'right' })
         await workspacePage.waitForTimeout(300)
         await workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Delete' }).click()
-        // Handle Aurelia confirm dialog (fixture dialog auto-accept may not handle Aurelia dialogs)
+        // Handle Aurelia confirm dialog (fixture dialog auto-accept may not handle Aurelia dialogs).
+        // isVisible()'s timeout option is ignored (it never polls) — wait for the
+        // dialog's async import/render with waitFor() first.
         const deleteBtn = workspacePage.getByRole('button', { name: 'Delete' })
-        if (await deleteBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null)
+        if (await deleteBtn.isVisible()) {
             await deleteBtn.click()
         }
         await expect(workspacePage.locator('#roster-treeview').getByText('Percy')).not.toBeVisible({ timeout: 5_000 })
@@ -630,9 +633,11 @@ test.describe('Roster Editor — Visual TreeView', () => {
         await percyRow.locator('.e-fullrow').click({ button: 'right' })
         await workspacePage.waitForTimeout(300)
         await workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Delete' }).click()
-        // Handle Aurelia confirm dialog
+        // Handle Aurelia confirm dialog. isVisible()'s timeout option is ignored
+        // (it never polls) — wait for the dialog's async import/render with waitFor() first.
         const deleteBtn = workspacePage.getByRole('button', { name: 'Delete' })
-        if (await deleteBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null)
+        if (await deleteBtn.isVisible()) {
             await deleteBtn.click()
         }
         await expect(workspacePage.locator('#roster-treeview').getByText('Percy')).not.toBeVisible({ timeout: 5_000 })

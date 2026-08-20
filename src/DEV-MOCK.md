@@ -1,6 +1,6 @@
 # EX-Installer — Dev Mock Mode
 
-Mock mode lets you run the full UI wizard and workspace without a physical Arduino connected. It does everything for real — real git clones, real compilation via the bundled PlatformIO toolchain — the **only** thing that is faked is USB device scanning.
+Mock mode lets you run the full UI wizard and workspace without a physical Arduino connected. It does everything for real — real git clones, real compilation via the bundled PlatformIO toolchain — what's faked is USB device scanning and, separately, firmware upload (flashing a physical device), since mock mode never has real hardware to write to.
 
 ---
 
@@ -11,7 +11,8 @@ Mock behaviour lives entirely in the **IPC layer** — the UI components have no
 | IPC handler | Mock mode behaviour |
 |---|---|
 | `pio:list-boards` | Gated by `IS_MOCK_DEVICE`. Returns `MOCK_SERIAL_PORTS` from `dev-mock.ts` mapped to board name + FQBN via VID:PID lookup |
-| `pio:compile` / `pio:upload` | Gated by `IS_MOCK_COMPILE`. Fast fake success responses instead of a real PlatformIO build/flash |
+| `pio:compile` | **Always real.** Runs the bundled PlatformIO toolchain regardless of any mock flag — it never touches hardware, so there's nothing to fake |
+| `pio:upload` | Gated by `IS_MOCK_UPLOAD`. Fast fake success response instead of a real PlatformIO flash |
 | `usb:list-serial-ports` | Gated by `IS_MOCK_DEVICE`. Returns `MOCK_SERIAL_PORTS` |
 | `usb:list-usb-devices` | Gated by `IS_MOCK_DEVICE`. Returns `[]` |
 | `usb:open-port` / `usb:write-to-port` / `usb:close-port` / `usb:is-port-open` | Gated by `IS_MOCK_DEVICE`. Served by `MockSerialTransport` (`src/main/mock-serial-transport.ts`) instead of the real `UsbManager`, since mock port paths don't correspond to real hardware |
@@ -44,25 +45,25 @@ device mocking without bypassing the real compiler:
 | Flag | Controls |
 |---|---|
 | `--mock-device` | USB/device scanning (virtual boards, no real hardware needed) |
-| `--mock-compile` | PlatformIO compile & upload responses (fast fake responses) |
+| `--mock-upload` | PlatformIO upload response only (fast fake response). Compile is never gated by any flag — it's always real |
 
-| Launch command | Device mock | Compile mock |
+| Launch command | Device mock | Upload mock |
 |---|---|---|
 | `pnpm dev` | **OFF** | **OFF** |
 | `pnpm dev:mock` | **ON** | **OFF** |
-| `pnpm dev -- --mock-device --mock-compile` | **ON** | **ON** |
+| `pnpm dev -- --mock-device --mock-upload` | **ON** | **ON** |
 | `pnpm build` (packaged) | **OFF** | **OFF** |
 
 `pnpm dev:mock` only passes `--mock-device` (see the `dev:mock` script in `package.json`) — add
-`--mock-compile` yourself if you also want fake compile/upload responses.
+`--mock-upload` yourself if you also want a fake upload response.
 
 Flags are independent — for example, `--mock-device` lets you use virtual boards
 while still running a real PlatformIO compile against the sketch.
 
-E2E tests (Playwright) pass both `--mock-device` and `--mock-compile` by default
-via the shared `launchApp(true)` helper in `tests/e2e/fixtures.ts`. Real-compiler
-e2e tests use `workspacePageNative` (which calls `launchApp(false)`) and are
-gated behind `COMPILE_E2E=1`.
+E2E tests (Playwright) pass both `--mock-device` and `--mock-upload` by default
+via the shared `launchApp()` helper in `tests/e2e/fixtures.ts`. Compile is real
+in every e2e run — there's no mock-compile flag or opt-in gate anymore; only
+upload is faked, since these tests never have a real device to flash.
 
 ---
 
@@ -112,12 +113,13 @@ Common VID:PID values (full list in `src/types/boards.ts`):
 ```
 src/
 ├── main/
-│   ├── index.ts               ← IS_MOCK_DEVICE + IS_MOCK_COMPILE flag detection
+│   ├── index.ts               ← IS_MOCK_DEVICE + IS_MOCK_UPLOAD flag detection
 │   ├── dev-mock.ts            ← MOCK_SERIAL_PORTS
 │   ├── mock-serial-transport.ts ← fake open/write/close/is-open for mock ports
 │   └── ipc/
 │       ├── platformio-ipc.ts   ← list-boards mocked by IS_MOCK_DEVICE;
-│       │                          compile/upload mocked by IS_MOCK_COMPILE
+│       │                          compile always real; upload mocked by
+│       │                          IS_MOCK_UPLOAD
 │       ├── git-ipc.ts          ← all real (no mock guards)
 │       └── usb-ipc.ts          ← list-serial-ports/list-usb-devices mocked by
 │                                  IS_MOCK_DEVICE; open/write/close/is-open served
