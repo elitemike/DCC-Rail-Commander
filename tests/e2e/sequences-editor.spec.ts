@@ -121,8 +121,10 @@ test.describe('Sequences Editor', () => {
 
         await expect(sequenceListItems(page).first()).toContainText('Yard shunt')
 
+        // myRoutes.h's seeded Route(1) already occupies id 1 in the shared
+        // ROUTE/AUTOMATION/SEQUENCE namespace, so a freshly added sequence gets id 2.
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(1) // Yard shunt')
+        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(2) // Yard shunt')
     })
 
     test('editing a sequence description updates the sidebar label and raw', async ({ workspacePage: page }) => {
@@ -132,15 +134,16 @@ test.describe('Sequences Editor', () => {
         const descInput = descriptionInput(page)
         await descInput.fill('Loop A')
         await descInput.blur()
-        await expect(sequenceListItems(page).first()).toContainText('Loop A (1)')
+        // myRoutes.h's seeded Route(1) already occupies id 1, so this sequence gets id 2.
+        await expect(sequenceListItems(page).first()).toContainText('Loop A (2)')
 
         await descInput.fill('Loop A Renamed')
         await descInput.blur()
-        await expect(sequenceListItems(page).first()).toContainText('Loop A Renamed (1)')
+        await expect(sequenceListItems(page).first()).toContainText('Loop A Renamed (2)')
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(1) // Loop A Renamed')
-        await expect(page.locator('div.monaco-editor')).not.toContainText('Loop A (1)')
+        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(2) // Loop A Renamed')
+        await expect(page.locator('div.monaco-editor')).not.toContainText('Loop A (2)')
     })
 
     test('a sequence with no description falls back to "Sequence id" and omits the comment', async ({ workspacePage: page }) => {
@@ -153,11 +156,12 @@ test.describe('Sequences Editor', () => {
         await descInput.fill('')
         await descInput.blur()
 
-        await expect(sequenceListItems(page).first()).toContainText('Sequence 1')
+        // myRoutes.h's seeded Route(1) already occupies id 1, so this sequence gets id 2.
+        await expect(sequenceListItems(page).first()).toContainText('Sequence 2')
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(1)')
-        await expect(page.locator('div.monaco-editor')).not.toContainText('SEQUENCE(1) //')
+        await expect(page.locator('div.monaco-editor')).toContainText('SEQUENCE(2)')
+        await expect(page.locator('div.monaco-editor')).not.toContainText('SEQUENCE(2) //')
     })
 
     test('removing a sequence with a description removes it from raw', async ({ workspacePage: page }) => {

@@ -1,17 +1,18 @@
 /**
  * Shared Playwright fixtures for EX-Installer E2E tests.
  *
- * The `workspacePage` fixture (mock compile):
+ * The `workspacePage` fixture:
  *   1. Creates an isolated temp directory for Electron userData.
  *   2. Seeds mock myRoster.h, myTurnouts.h, and config.h files on disk.
  *   3. Writes a SavedConfiguration into the preferences JSON so the home
  *      screen shows a card that can be clicked to load the workspace.
- *   4. Launches Electron with --mock-device --mock-compile --skip-startup --test-data-dir=<tmp>.
+ *   4. Launches Electron with --mock-device --mock-upload --skip-startup --test-data-dir=<tmp>.
  *   5. Navigates: home → workspace (by clicking the mock config card).
  *   6. Returns the Playwright Page for the workspace view.
  *
- * The `workspacePageNative` fixture omits --mock-compile so compile calls
- * hit the real PlatformIO toolchain. Use it for COMPILE_E2E=1 tests.
+ * Compile always runs for real, against the bundled PlatformIO toolchain — it
+ * never touches hardware, so there's nothing to mock. Only upload (--mock-upload)
+ * is faked, since e2e tests never have a real device to flash.
  */
 
 import { test as base, expect } from '@playwright/test'
@@ -131,8 +132,6 @@ interface WorkspaceFixtures {
     workspacePage: Page
     csb1StackedApp: ElectronApplication
     csb1StackedPage: Page
-    electronAppNative: ElectronApplication
-    workspacePageNative: Page
     ioExpanderApp: ElectronApplication
     ioExpanderPage: Page
     rosterGroupedApp: ElectronApplication
@@ -141,7 +140,7 @@ interface WorkspaceFixtures {
 
 // ── Shared: seed temp dir + launch Electron ───────────────────────────────────
 
-async function launchApp(mockCompile: boolean): Promise<{ app: ElectronApplication; testDataDir: string }> {
+async function launchApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
     const testDataDir = mkdtempSync(join(tmpdir(), 'ex-installer-e2e-'))
 
     const scratchPath = join(testDataDir, 'scratch', 'CommandStation-EX')
@@ -182,7 +181,7 @@ async function launchApp(mockCompile: boolean): Promise<{ app: ElectronApplicati
     const args = [
         ELECTRON_MAIN,
         '--mock-device',
-        ...(mockCompile ? ['--mock-compile'] : []),
+        '--mock-upload',
         '--skip-startup',
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu',
@@ -242,7 +241,7 @@ async function launchIOExpanderApp(): Promise<{ app: ElectronApplication; testDa
     const args = [
         ELECTRON_MAIN,
         '--mock-device',
-        '--mock-compile',
+        '--mock-upload',
         '--skip-startup',
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu',
@@ -294,7 +293,7 @@ async function launchRosterGroupedApp(): Promise<{ app: ElectronApplication; tes
     const args = [
         ELECTRON_MAIN,
         '--mock-device',
-        '--mock-compile',
+        '--mock-upload',
         '--skip-startup',
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu',
@@ -348,7 +347,7 @@ async function launchCsb1StackedApp(): Promise<{ app: ElectronApplication; testD
     const args = [
         ELECTRON_MAIN,
         '--mock-device',
-        '--mock-compile',
+        '--mock-upload',
         '--skip-startup',
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu',
@@ -381,7 +380,7 @@ async function navigateToIOExpanderWorkspace(app: ElectronApplication): Promise<
 export const test = base.extend<WorkspaceFixtures>({
     // eslint-disable-next-line no-empty-pattern
     electronApp: async ({ }, use) => {
-        const { app, testDataDir } = await launchApp(true)
+        const { app, testDataDir } = await launchApp()
         await use(app)
         await app.close()
         rmSync(testDataDir, { recursive: true, force: true })
@@ -402,19 +401,6 @@ export const test = base.extend<WorkspaceFixtures>({
 
     csb1StackedPage: async ({ csb1StackedApp }, use) => {
         await use(await navigateToWorkspace(csb1StackedApp))
-    },
-
-    // ── Real-compiler variants (no --mock-compile) ────────────────────────────
-    // eslint-disable-next-line no-empty-pattern
-    electronAppNative: async ({ }, use) => {
-        const { app, testDataDir } = await launchApp(false)
-        await use(app)
-        await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
-    },
-
-    workspacePageNative: async ({ electronAppNative }, use) => {
-        await use(await navigateToWorkspace(electronAppNative))
     },
 
     // ── IOExpander workspace ──────────────────────────────────────────────────

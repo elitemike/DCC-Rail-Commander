@@ -179,9 +179,11 @@ test.describe('Turnout Editor', () => {
         const removeBtn = entryRow.locator('button[title="Remove"]')
         await removeBtn.click()
 
-        // Accept any confirmation dialog
+        // Accept any confirmation dialog. isVisible()'s timeout option is ignored
+        // (it never polls) — wait for the dialog's async import/render with waitFor() first.
         const deleteBtn = page.getByRole('button', { name: 'Delete' })
-        if (await deleteBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null)
+        if (await deleteBtn.isVisible()) {
             await deleteBtn.click()
         }
 
