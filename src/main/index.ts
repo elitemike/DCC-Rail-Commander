@@ -21,14 +21,17 @@ if (testDataDir) {
  * IS_MOCK_DEVICE — mocks USB/device scanning (virtual boards, no real hardware).
  * Enable with `--mock-device`.
  *
- * IS_MOCK_COMPILE — mocks PlatformIO compile/upload responses so e2e tests
- * don't require a real toolchain. Enable with `--mock-compile`.
+ * IS_MOCK_UPLOAD — mocks the PlatformIO upload (flash-to-device) response only.
+ * Compile always runs for real, against the bundled toolchain — it never touches
+ * hardware, so there's no reason to fake it. Upload does write to a physical
+ * serial port, which e2e tests can never have, so it stays mocked whenever this
+ * flag is set. Enable with `--mock-upload`.
  */
 export const IS_MOCK_DEVICE =
     app.commandLine.hasSwitch('mock-device') || process.argv.includes('--mock-device')
 
-export const IS_MOCK_COMPILE =
-    app.commandLine.hasSwitch('mock-compile') || process.argv.includes('--mock-compile')
+export const IS_MOCK_UPLOAD =
+    app.commandLine.hasSwitch('mock-upload') || process.argv.includes('--mock-upload')
 
 // Expose CJS require as a global so Playwright's app.evaluate() can call it.
 // evaluate() runs in a V8 eval context where the CJS module-wrapper's `require`

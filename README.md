@@ -64,6 +64,12 @@ network access once if the bundled Python/PlatformIO toolchain hasn't been fetch
 - Electron on WSL2 needs extra libs beyond GTK too — nss, libnotify, alsa, xss, etc. If the GTK fix doesn't
   clear it, run the full set:
   `sudo apt-get install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0`
+- `pnpm release` (and any Electron-rebuild of native modules, e.g. after `pnpm install`) needs `libudev.h` to
+  compile the `usb` package's native binding. Without it node-gyp fails with
+  `fatal error: libudev.h: No such file or directory`. Fix:
+  `sudo apt-get install -y libudev-dev`
+  If a build already failed partway, clear the stale build output before retrying:
+  `rm -rf node_modules/usb/build`
 
 ## What's in this repository?
 

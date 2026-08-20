@@ -704,6 +704,7 @@ export class Workspace {
 
     /** Copies the full Output panel log (ANSI stripped) to the OS clipboard. */
     async copyCompileLog(): Promise<void> {
+        await this.compileTerminal?.flush()
         const text = this.compileTerminal?.getText() ?? ''
         try {
             await navigator.clipboard.writeText(text)
@@ -723,6 +724,7 @@ export class Workspace {
 
     /** Prompts for a save location and writes the full Output panel log to disk. */
     async saveCompileLog(): Promise<void> {
+        await this.compileTerminal?.flush()
         const text = this.compileTerminal?.getText() ?? ''
         const path = await this.files.selectSavePath('compile-output.txt')
         if (!path) return

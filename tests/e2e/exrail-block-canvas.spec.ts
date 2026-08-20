@@ -57,6 +57,14 @@ async function getOutputPaneText(page: import('@playwright/test').Page): Promise
 }
 
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
+    // Monaco paints `.view-line` nodes asynchronously (next frame) after a model swap —
+    // right after clicking the Raw tab the editor container can exist with zero rendered
+    // lines yet, which would read back as "". Poll until at least one line has painted.
+    await page.waitForFunction(() => {
+        const editorEl = document.querySelector('[data-testid="file-body-monaco"] div.monaco-editor')
+            ?? document.querySelector('div.monaco-editor')
+        return (editorEl?.querySelectorAll('.view-line').length ?? 0) > 0
+    })
     return page.evaluate(() => {
         // Scoped to the whole-file Raw tab specifically — the per-row Raw editor (when a row
         // is in text mode) is a second, separate `<monaco-editor>` that can coexist in the DOM

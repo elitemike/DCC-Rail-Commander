@@ -158,8 +158,11 @@ test.describe('Roster Editor', () => {
 
         // ConfirmDialog appears as an Aurelia dialog overlay — click "Delete".
         // The dialog handler on the page fixture auto-accepts window.confirm() fallback.
+        // isVisible()'s timeout option is ignored (it never polls) — wait for the
+        // dialog's async import/render with waitFor() before checking.
         const deleteBtn = page.getByRole('button', { name: 'Delete' })
-        if (await deleteBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null)
+        if (await deleteBtn.isVisible()) {
             await deleteBtn.click()
         }
 

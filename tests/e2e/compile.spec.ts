@@ -1,25 +1,18 @@
 /**
  * E2E tests: Compile button.
  *
- * The default describe block always runs using the mock compile handler
- * (--mock-compile flag is passed by the standard e2e fixture).
- *
- * The "real compiler" block requires the bundled PlatformIO toolchain and
- * is skipped by default. Enable with:
- *
- *   COMPILE_E2E=1 pnpm test:e2e --grep "Compile"
+ * Compile always runs for real against the bundled PlatformIO toolchain — it
+ * never touches hardware, so there's nothing to mock. Only upload is mocked
+ * (--mock-upload, passed by the standard e2e fixture), since these tests never
+ * have a real device to flash.
  *
  * Prerequisites: build the app with `pnpm build` before running.
  */
 
 import { test, expect } from './fixtures'
 
-const COMPILE_E2E = !!process.env['COMPILE_E2E']
-
-// ── Default: runs with mock compile (always on in e2e fixture) ────────────────
-
 test.describe('Compile button', () => {
-    test('compile button is visible in mock mode', async ({ workspacePage }) => {
+    test('compile button is visible', async ({ workspacePage }) => {
         const compileBtn = workspacePage.getByRole('button', { name: 'Compile' })
         await expect(compileBtn).toBeVisible()
         await expect(workspacePage.getByRole('button', { name: 'Compile & Upload' })).not.toBeVisible()
@@ -79,9 +72,13 @@ test.describe('Compile button', () => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
 
+        // xterm's accessibility tree only renders the current scroll viewport, not the
+        // full buffer — a real compile streams far more lines than the terminal can show
+        // at once, so only lines still near the end (where output naturally settles) are
+        // asserted here. The Copy-button test below reads the full clipboard buffer and
+        // covers the early "Compiling for" line.
         const outputPanel = workspacePage.locator('compile-output-terminal .xterm-accessibility-tree')
-        await expect(outputPanel).toContainText('Compiling for')
-        await expect(outputPanel).toContainText('program storage space')
+        await expect(outputPanel).toContainText('Flash:')
         await expect(outputPanel).toContainText('✓ Compile successful!')
     })
 
@@ -146,35 +143,6 @@ test.describe('Compile button', () => {
 
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
         await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
-    })
-})
-
-// ── Real compiler: requires the bundled PlatformIO toolchain (COMPILE_E2E=1) ─────────────
-
-test.describe('Compile button — real compiler', () => {
-    test.skip(!COMPILE_E2E, 'Set COMPILE_E2E=1 to run against the real PlatformIO toolchain')
-
-    test('real compile succeeds and shows ✓ Success', async ({ workspacePageNative }) => {
-        await workspacePageNative.getByRole('button', { name: 'Compile' }).click()
-
-        await expect(workspacePageNative.getByRole('button', { name: 'Compiling...' })).toBeVisible()
-
-        // Real compilation can take a few minutes
-        await expect(workspacePageNative.getByText('✓ Success')).toBeVisible({ timeout: 120_000 })
-        await expect(workspacePageNative.getByRole('button', { name: 'Compile' })).toBeEnabled()
-
-        await expect(workspacePageNative.locator('.e-toast-success')).toBeVisible({ timeout: 5_000 })
-        await expect(workspacePageNative.locator('.e-toast-success')).toContainText('Compile Successful')
-    })
-
-    test('real compile output contains Compiling for', async ({ workspacePageNative }) => {
-        const outputPanel = workspacePageNative.locator('compile-output-terminal .xterm-accessibility-tree')
-
-        await workspacePageNative.getByRole('button', { name: 'Compile' }).click()
-        await expect(outputPanel).toContainText('Compiling for', { timeout: 5_000 })
-
-        await expect(workspacePageNative.getByText('✓ Success')).toBeVisible({ timeout: 120_000 })
-        await expect(outputPanel).toContainText('✓ Compile successful!')
     })
 })
 

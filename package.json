@@ -2,6 +2,10 @@
     "name": "ex-installer-electron",
     "version": "0.1.0",
     "description": "EX-Installer - Electron/Aurelia 2 frontend",
+    "author": {
+        "name": "DCC-EX",
+        "email": "m.j.stankovich@gmail.com"
+    },
     "private": true,
     "main": "out/main/index.js",
     "scripts": {
