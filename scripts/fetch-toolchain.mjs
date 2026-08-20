@@ -195,7 +195,32 @@ async function installPlatforms(platforms) {
         })
     }
     await installFrameworkPackages()
+    await pruneUnusedEspressif32Sdks()
     await warmUpBuilds()
+}
+
+/**
+ * framework-arduinoespressif32 ships precompiled ESP-IDF SDK blobs for every
+ * chip variant it supports, but `board-targets.ts` only ever builds the
+ * classic ESP32 (board `esp32dev`, `build.mcu: "esp32"`). The framework's own
+ * `tools/platformio-build.py` looks up `tools/sdk/<build_mcu>/` at build time,
+ * so the S2/S3/C3 SDKs (~550 MB combined) are never touched by anything this
+ * app builds — pruned here, before the warm-up build below compiles esp32dev
+ * and would catch it if that assumption ever stopped holding.
+ */
+const UNUSED_ESP32_SDK_VARIANTS = ['esp32s2', 'esp32s3', 'esp32c3']
+
+async function pruneUnusedEspressif32Sdks() {
+    const sdkDir = join(RESOURCES, 'pio-core', 'packages', 'framework-arduinoespressif32', 'tools', 'sdk')
+    if (!(await exists(sdkDir))) return
+
+    for (const variant of UNUSED_ESP32_SDK_VARIANTS) {
+        const dir = join(sdkDir, variant)
+        if (await exists(dir)) {
+            log(`pruning unused ESP32 SDK variant ${variant}`)
+            await rm(dir, { recursive: true, force: true })
+        }
+    }
 }
 
 /**
