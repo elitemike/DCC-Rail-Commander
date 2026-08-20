@@ -14,7 +14,7 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
     testDir: './tests/e2e',
     outputDir: './tests/e2e/test-results',
-    timeout: 30_000,
+    timeout: 60_000,
     expect: { timeout: 10_000 },
     reporter: [['list'], ['html', { outputFolder: './tests/e2e/playwright-report', open: 'never' }]],
     use: {
@@ -22,7 +22,12 @@ export default defineConfig({
         screenshot: 'only-on-failure',
         trace: 'retain-on-failure',
     },
-    // Run all E2E tests parallel — each test launches its own Electron process.
-    workers: 6,
+    // Each test launches its own full Electron process, and compile.spec.ts now
+    // additionally spawns a real PlatformIO/avr-gcc build per test (compile is no
+    // longer mocked — see CLAUDE.md). 6 concurrent Electron instances plus bursts of
+    // native compiler processes was enough to push fixture teardown (app.close()) past
+    // the test timeout under load; 4 workers keeps this reliable without a large
+    // runtime cost. The 45s test timeout (up from 30s) adds headroom on top of that.
+    workers: 4,
 })
 

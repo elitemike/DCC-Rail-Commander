@@ -83,7 +83,7 @@ async function launchBareApp(): Promise<{ app: ElectronApplication; testDataDir:
     )
     const args = [
         ELECTRON_MAIN,
-        '--mock-device', '--mock-compile', '--skip-startup',
+        '--mock-device', '--mock-upload', '--skip-startup',
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu', '--no-sandbox', '--js-flags=--no-expose-wasm',
     ]
