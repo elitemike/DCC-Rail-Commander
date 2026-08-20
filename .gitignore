@@ -182,6 +182,12 @@ tests/e2e/playwright-report/
 tests/e2e/test-results/
 tests/e2e/playwright-report/index.html
 
+# electron-builder icon sources — build/ above is ignored for Python's setup.py
+# artifacts, but electron-builder reads app icons from this same directory name.
+!/build/
+!/build/icon.ico
+!/build/icon.png
+
 # electron-builder output
 release/
 

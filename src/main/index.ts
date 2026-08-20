@@ -62,8 +62,16 @@ export const fileService = new FileService()
 export const preferencesService = new PreferencesService()
 
 // ── Window factory ───────────────────────────────────────────────────────────
+// electron-builder's win/linux `icon` config only brands the packaged installer/exe —
+// it has no effect on a window created at runtime, so `pnpm dev`/`pnpm debug` (which run
+// the stock electron.exe binary) need the icon set here too.
+const windowIconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../build/icon.png')
+
 function createWindow(): BrowserWindow {
     const win = new BrowserWindow({
+        icon: windowIconPath,
         width: config.window.width,
         height: config.window.height,
         minWidth: config.window.minWidth,

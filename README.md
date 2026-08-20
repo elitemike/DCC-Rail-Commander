@@ -49,7 +49,13 @@ pnpm typecheck     # tsc --noEmit
 pnpm test          # vitest unit tests
 pnpm test:e2e      # playwright end-to-end tests (runs pnpm build first)
 pnpm package       # build + electron-builder -> release/
+pnpm release       # one-command build: checks Node, installs, builds, packages -> release/
 ```
+
+`pnpm release` is the easiest way to produce a native executable for whatever machine you run it on — a
+Windows `.exe` (NSIS installer), macOS `.dmg`, or Linux `.AppImage`/`.deb`, depending on the OS. It needs
+network access once if the bundled Python/PlatformIO toolchain hasn't been fetched yet for that OS/arch
+(see `TOOLCHAIN.md`); after that it's offline and fast to re-run.
 
 ### WSL requirements
 
