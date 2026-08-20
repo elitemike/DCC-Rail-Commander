@@ -144,14 +144,32 @@ export class CompileOutputTerminalCustomElement {
         this.resizeObserver.observe(this.terminalEl)
     }
 
+    /**
+     * Resolves once every write() queued so far has been fully parsed into the buffer.
+     * xterm's Terminal.write() is asynchronous — during a large burst (e.g. a real,
+     * non-incremental compile streaming hundreds of lines) the buffer can still be
+     * mid-parse when getText() would otherwise read it immediately afterward, racing
+     * ahead and returning partial or empty content. Await this before getText().
+     */
+    private pendingWrite: Promise<void> = Promise.resolve()
+
     /** Called imperatively via component.ref from workspace.ts — raw passthrough, preserves ANSI. */
     write(text: string): void {
-        this.term?.write(text)
+        const term = this.term
+        if (!term) return
+        this.pendingWrite = this.pendingWrite.then(() => new Promise<void>((resolve) => {
+            term.write(text, resolve)
+        }))
     }
 
     /** Fully clears the screen and scrollback. */
     reset(): void {
         this.term?.reset()
+    }
+
+    /** Waits for all writes queued so far to finish before the caller reads the buffer. */
+    async flush(): Promise<void> {
+        await this.pendingWrite
     }
 
     /** Full buffer content (scrollback + screen) as plain text, ANSI stripped — used for copy-all/save-to-file. */
