@@ -25,12 +25,6 @@
                     Route, or Sequence entry defined elsewhere in your configuration.</p>
 
                 <div data-testid="new-alias-form" class="flex items-end gap-3 mb-1">
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
-                        <input type="text" value.two-way="newAliasName" placeholder="NAME"
-                            keydown.trigger="handleNewAliasKeydown($event)"
-                            class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                    </div>
                     <div class="flex flex-col gap-1">
                         <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Type</label>
                         <div class="w-32">
@@ -42,6 +36,12 @@
                         <div class="w-56">
                             <input ref="newAliasIdEl" type="text" data-testid="new-alias-id" />
                         </div>
+                    </div>
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+                        <input type="text" value.two-way="newAliasName" placeholder="NAME"
+                            keydown.trigger="handleNewAliasKeydown($event)"
+                            class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                     </div>
                     <button click.trigger="addAlias()"
                         class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">
