@@ -134,6 +134,14 @@ slice of users — and instead get an actionable in-app error plus an "import to
 layout `seedRuntime()` uses. Build one by running `fetch-toolchain.mjs --platforms ststm32@19.0.0` and
 archiving the resulting `resources/pio-core`.
 
+Within `espressif32`, `board-targets.ts` only ever targets the classic ESP32 (board `esp32dev`). The
+`framework-arduinoespressif32` package ships precompiled SDK blobs for every ESP32 variant it supports
+(`tools/sdk/{esp32,esp32s2,esp32s3,esp32c3}/`), so `fetch-toolchain.mjs`'s `pruneUnusedEspressif32Sdks()`
+deletes the S2/S3/C3 ones (~550MB) right after installing the framework package and before the warm-up
+build compiles `esp32dev` — if a board needing one of those variants is ever added to `board-targets.ts`,
+that pruning step needs to drop it from `UNUSED_ESP32_SDK_VARIANTS` too, or its build will fail with a
+missing-SDK error that looks like a corrupted seed.
+
 ## Debugging checklist
 
 - **"The bundled build runtime is missing…"** — `hasBundledRuntime()` is false: `resources/python` or
