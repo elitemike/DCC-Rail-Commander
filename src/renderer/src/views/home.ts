@@ -278,6 +278,10 @@ export class Home {
         this.state.sourceFolder = sourceFolder
         this.state.configFiles = config.configFiles.map(f => ({ ...f }))
         this.state.activeConfigId = config.id
+        // Normalizing an externally-authored file (adding the generator header)
+        // changes bytes without any explicit user edit — flag it as a pending
+        // change so the upcoming workspace bind surfaces Save for it.
+        this.state.pendingMigrationOnLoad = needsMigration
 
         if (needsMigration) {
             this.toastService.show({

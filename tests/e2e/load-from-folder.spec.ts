@@ -269,8 +269,9 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
         await expect(homePage.getByText('Select Your Board')).not.toBeVisible()
 
-        // Save so the reconciled port is written back to disk
-        await homePage.getByRole('button', { name: 'Save' }).click()
+        // The reconciled port is written back to disk immediately by
+        // loadFromFolder() itself — no Save click needed (and none is possible;
+        // there's nothing left pending once the workspace has loaded).
         await homePage.waitForTimeout(500)
 
         const savedConfig = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
@@ -596,7 +597,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         await expect(homePage.getByText('config.h').first()).not.toBeVisible()
     })
 
-    test('confirming a board injects device header into config.h on Save', async ({ electronApp, homePage, sourceFolder }) => {
+    test('confirming a board injects device header into config.h immediately', async ({ electronApp, homePage, sourceFolder }) => {
         writeFileSync(join(sourceFolder, 'config.h'), MOCK_CONFIG_H, 'utf-8')
         await mockSelectDirectory(electronApp, sourceFolder)
         await mockListBoards(electronApp, [MOCK_DEVICE])
@@ -610,7 +611,8 @@ test.describe('Load from Folder — device picker dialog', () => {
         await homePage.getByRole('button', { name: 'Use This Board' }).click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
-        await homePage.getByRole('button', { name: 'Save' }).click()
+        // loadFromFolder() writes the injected device header back to
+        // sourceFolder immediately — no Save click needed.
         await homePage.waitForTimeout(500)
 
         const savedContent = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
@@ -619,7 +621,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         expect(savedContent).toContain('arduino:avr:mega')
     })
 
-    test('re-opening same folder after Save skips the device picker', async ({ electronApp, homePage, sourceFolder }) => {
+    test('re-opening same folder after loading skips the device picker', async ({ electronApp, homePage, sourceFolder }) => {
         // First load — device picker shown, user confirms
         writeFileSync(join(sourceFolder, 'config.h'), MOCK_CONFIG_H, 'utf-8')
         await mockSelectDirectory(electronApp, sourceFolder)
@@ -630,8 +632,8 @@ test.describe('Load from Folder — device picker dialog', () => {
         await homePage.getByRole('button', { name: 'Use This Board' }).click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
-        // Save so device header is written to disk
-        await homePage.getByRole('button', { name: 'Save' }).click()
+        // The device header is written back to disk immediately by
+        // loadFromFolder() itself — no Save click needed.
         await homePage.waitForTimeout(500)
 
         // Navigate back to home
@@ -691,7 +693,10 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
         await homePage.locator('.e-toast-warning').click().catch(() => undefined)
+        // Save now opens the Changes dialog for review; click through its own
+        // Save button to complete a real end-to-end write.
         await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.locator('[data-testid="file-changes-save-button"]').click()
         await homePage.waitForTimeout(500)
 
         const savedContent = readFileSync(join(sourceFolder, 'myRoster.h'), 'utf-8')
@@ -718,6 +723,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         await aliasInput.blur()
 
         await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.locator('[data-testid="file-changes-save-button"]').click()
         await homePage.waitForTimeout(500)
 
         const aliasesPath = join(sourceFolder, 'myAliases.h')
@@ -742,8 +748,10 @@ test.describe('Load from Folder — save writes back to source folder', () => {
             .first()
         await aliasInput.fill('THOMAS_ALIAS_NO_BLUR')
 
-        // Intentionally do not blur the alias field before saving.
+        // Intentionally do not blur the alias field before saving — Save must
+        // flush the pending edit itself (flushPendingFormEdits()).
         await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.locator('[data-testid="file-changes-save-button"]').click()
         await homePage.waitForTimeout(500)
 
         const aliasesPath = join(sourceFolder, 'myAliases.h')
@@ -770,6 +778,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         await aliasInput.blur()
 
         await homePage.getByRole('button', { name: 'Save' }).click()
+        await homePage.locator('[data-testid="file-changes-save-button"]').click()
         await homePage.waitForTimeout(500)
 
         const aliasesPath = join(sourceFolder, 'myAliases.h')
@@ -836,10 +845,8 @@ test.describe('Load from Folder — internal sketch path setup', () => {
             // The user's config.h was overlaid into the scratch dir
             expect(existsSync(join(sketchDir, 'config.h'))).toBe(true)
 
-            // Save — config.h must be written back to the user's original source folder
-            await homePage.getByRole('button', { name: 'Save' }).click()
-            await homePage.waitForTimeout(500)
-
+            // config.h is written back to the user's original source folder
+            // immediately by loadFromFolder() — no Save click needed.
             const savedConfig = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
             expect(savedConfig).toContain('#define MAIN_DRIVER_MOTOR_SHIELD')
         } finally {

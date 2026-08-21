@@ -213,6 +213,10 @@ export class Workspace {
         await this.loadSavedConfigs()
         await this.refreshConfigFilesFromDisk()
         this.configEditorState.loadFromInstallerState()
+        if (this.state.pendingMigrationOnLoad) {
+            this.configEditorState.hasChanges = true
+            this.state.pendingMigrationOnLoad = false
+        }
         this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
         this.showMonitorOnConnect = (await this.preferences.get<boolean>('showMonitorOnConnect')) ?? true
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false

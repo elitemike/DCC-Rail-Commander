@@ -57,6 +57,16 @@ export class InstallerState {
     /** ID of the configuration currently loaded in the workspace */
     activeConfigId: string | null = null
 
+    /**
+     * One-shot signal set by Home's loadFromFolder() when it detected a managed
+     * file authored outside EX-Installer (missing the generator header) — the
+     * upcoming workspace bind should treat that normalization as a pending
+     * change so Save surfaces it, rather than only a genuine user edit doing
+     * so. Consumed (and cleared) by workspace.ts's binding() the first time it
+     * runs, so it never leaks into a later switchToConfig()/reload.
+     */
+    pendingMigrationOnLoad = false
+
     reset(): void {
         this.toolchainReady = false
         this.selectedDevice = null
@@ -71,6 +81,7 @@ export class InstallerState {
         this.lastError = null
         this.detectedBoards = []
         this.activeConfigId = null
+        this.pendingMigrationOnLoad = false
         // NOTE: savedConfigurations is intentionally NOT reset — it persists across wizard runs
     }
 }
