@@ -4,6 +4,7 @@ import {
     generateHalDevicesBlock,
     parseHalDevicesFromAutomation,
     computeVpinAllocations,
+    countDistinctVpins,
     findNextFreeVpin,
     findVpinConflicts,
     type HalDeviceInstance,
@@ -219,6 +220,59 @@ describe('VPin registry', () => {
         const source = 'RT DCD-16 Block Sensor: Yard block detector'
         const conflicts = findVpinConflicts(allocations, 164, 16, source, 'device')
         expect(conflicts.map(c => c.source)).toContain('PCA9555: Second board')
+    })
+
+    it('countDistinctVpins de-duplicates an overlapping device range and consumer pins', () => {
+        // Raw building block behind ConfigEditorState.vpinsInUse — counting every
+        // allocation (device ranges included) without dedup would double-count a
+        // consumer sitting inside a device's own range.
+        const board: HalDeviceInstance[] = [device({ boardId: 'pca9685_sh', label: 'Servo board', vpinStart: 164 })] // 164-179
+        const boardTurnouts: Turnout[] = Array.from({ length: 5 }, (_, i) => ({
+            type: 'SERVO',
+            id: i + 1,
+            pin: 164 + i,
+            activeAngle: 400,
+            inactiveAngle: 100,
+            profile: 'Slow',
+            description: `Point ${i + 1}`,
+            comment: '',
+            defaultState: 'CLOSED',
+        }))
+        const allocations = computeVpinAllocations(boardTurnouts, [], [], board)
+        expect(countDistinctVpins(allocations)).toBe(16)
+    })
+
+    it('countDistinctVpins sums non-overlapping allocations normally', () => {
+        const allocations = computeVpinAllocations(turnouts, sensors, signals, halDevices)
+        // 5 distinct consumer pins (turnout 25, sensor 30, signal 40/41/42) + 16-pin device range, none overlapping.
+        expect(countDistinctVpins(allocations)).toBe(5 + 16)
+    })
+
+    it('"VPins assigned" (kind: consumer only) reports actually-wired channels, not a board\'s whole reserved range', () => {
+        // This is what the Accessories tab's "VPins assigned" summary computes
+        // (ConfigEditorState.vpinsInUse): a 16-pin board with only 5 channels
+        // wired to turnouts should report 5, not the board's full 16-pin capacity.
+        const board: HalDeviceInstance[] = [device({ boardId: 'pca9685_sh', label: 'Servo board', vpinStart: 164 })] // 164-179
+        const boardTurnouts: Turnout[] = Array.from({ length: 5 }, (_, i) => ({
+            type: 'SERVO',
+            id: i + 1,
+            pin: 164 + i,
+            activeAngle: 400,
+            inactiveAngle: 100,
+            profile: 'Slow',
+            description: `Point ${i + 1}`,
+            comment: '',
+            defaultState: 'CLOSED',
+        }))
+        const allocations = computeVpinAllocations(boardTurnouts, [], [], board)
+        const assigned = allocations.filter(a => a.kind === 'consumer')
+        expect(countDistinctVpins(assigned)).toBe(5)
+    })
+
+    it('"VPins assigned" reports 0 for a freshly-added board with no channels wired up yet', () => {
+        const allocations = computeVpinAllocations([], [], [], halDevices)
+        const assigned = allocations.filter(a => a.kind === 'consumer')
+        expect(countDistinctVpins(assigned)).toBe(0)
     })
 })
 

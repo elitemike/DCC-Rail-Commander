@@ -233,6 +233,20 @@ export function findVpinConflicts(
 }
 
 /**
+ * Counts distinct VPins covered by `allocations`, not the raw sum of their `count`s — a
+ * turnout/sensor/signal using a channel on a HAL device (the normal case) claims a VPin that's
+ * already counted in that device's own range, so a plain sum double-counts it. See
+ * `computeVpinAllocations`'s `kind` doc.
+ */
+export function countDistinctVpins(allocations: VpinAllocation[]): number {
+    const pins = new Set<number>()
+    for (const a of allocations) {
+        for (let p = a.start; p < a.start + a.count; p++) pins.add(p)
+    }
+    return pins.size
+}
+
+/**
  * Finds the first free VPin at or after `minimum`. Defaults to 100 — DCC-EX's
  * own examples (and RT_DCD_16's manual) reserve 0-99 for physical MCU pins
  * referenced directly by things like SERVO_TURNOUT/PIN_TURNOUT, and start
