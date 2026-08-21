@@ -3,10 +3,11 @@ import { defineConfig } from '@playwright/test'
 /**
  * Playwright configuration for EX-Installer E2E tests.
  *
- * Prerequisites:
- *   1. Build the Electron app:  pnpm build   (or pnpm test:e2e which does it automatically)
- *   2. Run tests:               pnpm test:e2e
- *      or directly:             ./node_modules/.bin/playwright test
+ * Run tests with:  pnpm test:e2e
+ *   or directly:   ./node_modules/.bin/playwright test  (e.g. from the VS Code test runner)
+ *
+ * globalSetup (./tests/e2e/global-setup.ts) rebuilds out/ automatically whenever src/
+ * is newer than the last build, so either entry point always runs against a fresh bundle.
  *
  * The tests launch the Electron app in --mock --skip-startup mode and use
  * a temporary directory for userData so preferences don't bleed between runs.
@@ -14,6 +15,10 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
     testDir: './tests/e2e',
     outputDir: './tests/e2e/test-results',
+    // Ensures out/ is rebuilt when stale, so tests launched from the VS Code test
+    // runner (which doesn't run `pnpm build` first, unlike `pnpm test:e2e`) don't
+    // silently run against an outdated bundle.
+    globalSetup: './tests/e2e/global-setup.ts',
     timeout: 60_000,
     expect: { timeout: 10_000 },
     reporter: [['list'], ['html', { outputFolder: './tests/e2e/playwright-report', open: 'never' }]],
