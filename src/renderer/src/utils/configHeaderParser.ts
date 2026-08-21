@@ -39,6 +39,22 @@ export function normalizeDeviceHeaderTimestamp(text: string): string {
     return text.replace(UPDATED_LINE_RE, '//   Updated:  (unchanged)')
 }
 
+/**
+ * Removes the device header block entirely. Mirrors stripGeneratorHeader()
+ * in myAutomationParser.ts — used by the Preview Changes diff so it shows
+ * only real content, not installer boilerplate.
+ */
+export function stripDeviceHeader(text: string): string {
+    if (!hasDeviceHeader(text)) return text
+    const firstIdx = text.indexOf(DEVICE_HEADER_TAG)
+    const secondIdx = text.indexOf(DEVICE_HEADER_TAG, firstIdx + DEVICE_HEADER_TAG.length)
+    if (secondIdx === -1) return text
+    let endIdx = secondIdx + DEVICE_HEADER_TAG.length
+    if (text.startsWith('\r\n', endIdx)) endIdx += 2
+    else if (text[endIdx] === '\n') endIdx += 1
+    return text.slice(0, firstIdx) + text.slice(endIdx)
+}
+
 /** Builds the device comment block to embed in config.h */
 export function buildDeviceHeader(device: DetectedBoardInfo): string {
     return [
