@@ -18,7 +18,9 @@ export class AutomationEditorCustomElement {
     private readonly installerState = resolve(InstallerState)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
 
-    activeTab: ViewTab = this.editorDefaultView.value
+    activeTab: ViewTab = 'visual'
+    /** Set once the user explicitly clicks Visual/Raw for this file. Until then, attached() re-applies the current default-editor-view preference on every visit — see attached() below. */
+    private _userChoseTab = false
 
     /** Ref to the raw Monaco editor — used to flush pending debounced edits before Save. */
     rawEditor: { flush(): string } | null = null
@@ -31,7 +33,17 @@ export class AutomationEditorCustomElement {
         return this.productId === 'ex_commandstation'
     }
 
+    // Aurelia's if.bind caches and reuses this same component instance across
+    // hide/show cycles — re-apply the current default-editor-view preference on
+    // every visit (not just the first) so a setting change made while this
+    // file's editor already existed still takes effect, as long as the user
+    // hasn't manually picked a tab for it this session (_userChoseTab).
+    attached(): void {
+        if (!this._userChoseTab) this.activeTab = this.editorDefaultView.value
+    }
+
     setTab(tab: ViewTab): void {
+        this._userChoseTab = true
         this.activeTab = tab
     }
 

@@ -30,8 +30,10 @@ function makeEditor() {
         ea,
         toastService: { show: toastShow },
         dialogService: {},
+        editorDefaultView: { value: 'visual' as const },
         splitterObj: null,
         activeTab: 'raw' as const,
+        _userChoseTab: false,
         editBuffer: null,
         editBufferIndex: null,
         rawEditor: null,
@@ -50,7 +52,7 @@ function makeEditor() {
 
 // ── setTab: raw snapshot seeding ─────────────────────────────────────────────
 // rawSnapshot/_rawText are only ever populated as a side effect of setTab('raw') —
-// the constructor routes a 'raw' default-editor-view preference through this same
+// attached() routes a 'raw' default-editor-view preference through this same
 // method (rather than seeding activeTab directly) specifically so the raw Monaco
 // editor doesn't open empty. This covers the seeding logic that guarantee depends on.
 
@@ -65,6 +67,45 @@ describe('RosterEditorCustomElement.setTab', () => {
         expect(editor.rawSnapshot).toBe('ROSTER(42, "Thomas", "LIGHT/HORN")')
         expect(editor._rawText).toBe('ROSTER(42, "Thomas", "LIGHT/HORN")')
         expect(editor.activeTab).toBe('raw')
+    })
+
+    it('marks the tab as a user choice, so a later attached() visit will not override it', () => {
+        const { editor } = makeEditor()
+
+        editor.setTab('visual')
+
+        expect((editor as unknown as { _userChoseTab: boolean })._userChoseTab).toBe(true)
+    })
+})
+
+// ── _applyDefaultViewIfUnset(): re-applies the default-editor-view preference ─
+// Aurelia's if.bind caches and reuses this same component instance across
+// hide/show cycles, so attached() calls this on every visit (not just
+// construction) — see it directly, not via attached() itself, since attached()
+// also touches `document` (deferred Splitter/TreeView setup) which isn't
+// available in this Node-environment test run.
+
+describe('RosterEditorCustomElement._applyDefaultViewIfUnset', () => {
+    it('applies the current default-editor-view preference when the user has not chosen a tab', () => {
+        const { editor, state } = makeEditor()
+        editor.activeTab = 'visual'
+        ;(editor as unknown as { editorDefaultView: { value: string } }).editorDefaultView = { value: 'raw' }
+        ;(state as unknown as { rosterRaw: string }).rosterRaw = 'ROSTER(42, "Thomas", "LIGHT/HORN")'
+
+        ;(editor as unknown as { _applyDefaultViewIfUnset(): void })._applyDefaultViewIfUnset()
+
+        expect(editor.activeTab).toBe('raw')
+        expect(editor.rawSnapshot).toBe('ROSTER(42, "Thomas", "LIGHT/HORN")')
+    })
+
+    it('does not override a tab the user already picked for this file', () => {
+        const { editor } = makeEditor()
+        editor.setTab('visual')
+        ;(editor as unknown as { editorDefaultView: { value: string } }).editorDefaultView = { value: 'raw' }
+
+        ;(editor as unknown as { _applyDefaultViewIfUnset(): void })._applyDefaultViewIfUnset()
+
+        expect(editor.activeTab).toBe('visual')
     })
 })
 
