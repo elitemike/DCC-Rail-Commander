@@ -2,13 +2,23 @@ import { resolve } from 'aurelia'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SensorEntry } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 export class SensorsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     private readonly toastService = resolve(ToastService)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     // Reference set via `component.ref="rawEditor"` in the template
     rawEditor: any = null
+
+    constructor() {
+        // Route through setTab() (rather than seeding activeTab directly) so a
+        // 'raw' default also gets rawSnapshot populated from state — otherwise
+        // the raw Monaco editor would open empty, since that only ever happens
+        // as a side effect of setTab('raw').
+        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
+    }
 
     /**
      * Sensor rows bind straight to `state.sensors[i]` and mutate it live as

@@ -6,6 +6,7 @@ import { InstallerState } from '../../models/installer-state'
 import type { Turnout, ServoTurnout, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
 import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 import type { ServoCalibrationResult } from '../dialogs/servo-calibration-dialog'
 
 type ViewTab = 'visual' | 'raw'
@@ -16,6 +17,7 @@ export class TurnoutEditorCustomElement {
     private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly observerLocator = resolve(IObserverLocator)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
     private splitterObj: Splitter | null = null
     /** Guards the queueTask() below — the component (or its #turnout-splitter, gated behind activeTab === 'visual') can be torn down before the deferred Splitter creation runs, which would otherwise append a live widget into a detached/stale element and leave a broken splitterObj for detaching() to (potentially) throw on. */
     private _detached = false
@@ -33,6 +35,14 @@ export class TurnoutEditorCustomElement {
 
     // ── View tabs ─────────────────────────────────────────────────────────────
     activeTab: ViewTab = 'visual'
+
+    constructor() {
+        // Route through setTab() (rather than seeding activeTab directly) so a
+        // 'raw' default also gets rawSnapshot/_rawText populated from state —
+        // otherwise the raw Monaco editor would open empty, since that only
+        // ever happens as a side effect of setTab('raw').
+        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
+    }
 
     setTab(tab: ViewTab): void {
         if (tab === 'raw' && this.editBuffer !== null) {

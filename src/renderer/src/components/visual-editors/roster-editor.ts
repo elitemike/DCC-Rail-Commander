@@ -13,6 +13,7 @@ import {
     serializeFunction,
 } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 type ViewTab = 'visual' | 'raw'
 
@@ -40,9 +41,18 @@ export class RosterEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
 
     // ── View tabs ─────────────────────────────────────────────────────────────
     activeTab: ViewTab = 'visual'
+
+    constructor() {
+        // Route through setTab() (rather than seeding activeTab directly) so a
+        // 'raw' default also gets rawSnapshot/_rawText populated from state —
+        // otherwise the raw Monaco editor would open empty, since that only
+        // ever happens as a side effect of setTab('raw').
+        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
+    }
 
     setTab(tab: ViewTab): void {
         if (tab === 'raw' && this.editBuffer !== null) {
