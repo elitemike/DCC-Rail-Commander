@@ -19,6 +19,7 @@ import type { DetectedBoardInfo } from '../../../types/ipc'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
+import { buildFileChangeSet } from '../utils/config-file-diff'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -632,6 +633,35 @@ export class Workspace {
         }
         this.configEditorState.clearChanges()
         await this.updateSavedConfig()
+    }
+
+    /**
+     * Opens a diff of every config file that will change on the next Save —
+     * on-disk "before" vs. in-memory "after" content — with a Save action of
+     * its own. Only reachable via the Changes button, which is itself gated
+     * on configEditorState.hasChanges, so there's always a real pending edit
+     * by the time this runs.
+     */
+    async openChangesDialog(): Promise<void> {
+        await this.flushPendingFormEdits()
+        this.configEditorState.syncAll()
+
+        const roots = [
+            ...(this.state.sourceFolder ? [this.state.sourceFolder] : []),
+            ...(this.state.scratchPath ? [this.state.scratchPath] : []),
+        ]
+        const files = await buildFileChangeSet(
+            this.state.configFiles,
+            roots,
+            (p) => this.files.readFile(p),
+            (p) => this.files.exists(p),
+        )
+
+        void this.dialogService.open({
+            component: () =>
+                import('../components/dialogs/file-changes-dialog').then((m) => m.FileChangesDialog).catch(() => null),
+            model: { files, onSave: () => this.saveFiles() },
+        })
     }
 
     private async updateSavedConfig(): Promise<void> {
