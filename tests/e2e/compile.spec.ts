@@ -111,8 +111,12 @@ test.describe('Compile button', () => {
         // read, and on Windows that hop can be measurably delayed by clipboard
         // hooks (DLP/EDR agents, clipboard-history managers) that sit between
         // SetClipboardData and other readers — so poll instead of reading once.
+        // 15s gives headroom for the same full-suite CPU contention documented
+        // in CLAUDE.md (a busy run can stretch this hop well past 5s even though
+        // it resolves near-instantly in an isolated run); poll returns as soon
+        // as the content lands, so this costs nothing on the common case.
         await expect
-            .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()), { timeout: 5_000 })
+            .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()), { timeout: 15_000 })
             .toContain('Compiling for')
         const clipboardText = await electronApp.evaluate(({ clipboard }) => clipboard.readText())
         expect(clipboardText).toContain('✓ Compile successful!')
