@@ -12,17 +12,23 @@ async function makeAnEdit(page: import('@playwright/test').Page) {
 }
 
 async function openChanges(page: import('@playwright/test').Page) {
-    await page.locator('[data-testid="changes-button"]').click()
+    await page.locator('[data-testid="save-button"]').click()
     await page.locator('[data-testid="file-changes-close-button"]').waitFor({ state: 'visible' })
 }
 
-test.describe('Changes dialog', () => {
-    test('the Changes button is hidden with no pending edits and appears after an edit', async ({ workspacePage }) => {
-        await expect(workspacePage.locator('[data-testid="changes-button"]')).not.toBeVisible()
+test.describe('Changes dialog (opened via the Save button)', () => {
+    test('Save is disabled with no pending edits, enabled after an edit, and disabled again once saved', async ({ workspacePage }) => {
+        const saveButton = workspacePage.locator('[data-testid="save-button"]')
+        await expect(saveButton).toBeDisabled()
 
         await makeAnEdit(workspacePage)
+        await expect(saveButton).toBeEnabled()
 
-        await expect(workspacePage.locator('[data-testid="changes-button"]')).toBeVisible()
+        await openChanges(workspacePage)
+        await workspacePage.locator('[data-testid="file-changes-save-button"]').click()
+
+        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
+        await expect(saveButton).toBeDisabled()
     })
 
     test('an edited file is marked changed, auto-selected, and the diff editor renders it; closing without saving leaves the edit pending', async ({ workspacePage }) => {
@@ -48,10 +54,10 @@ test.describe('Changes dialog', () => {
         await workspacePage.locator('[data-testid="file-changes-close-button"]').click()
         await expect(workspacePage.locator('[data-testid="file-changes-list"]')).not.toBeVisible()
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
-        await expect(workspacePage.locator('[data-testid="changes-button"]')).toBeVisible()
+        await expect(workspacePage.locator('[data-testid="save-button"]')).toBeEnabled()
     })
 
-    test('clicking Save inside the dialog writes the files, clears the dirty indicator, and closes the dialog', async ({ workspacePage }) => {
+    test('clicking Save inside the dialog writes the files and clears the dirty indicator', async ({ workspacePage }) => {
         await makeAnEdit(workspacePage)
         await openChanges(workspacePage)
 
@@ -59,17 +65,5 @@ test.describe('Changes dialog', () => {
 
         await expect(workspacePage.locator('[data-testid="file-changes-list"]')).not.toBeVisible()
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
-        await expect(workspacePage.locator('[data-testid="changes-button"]')).not.toBeVisible()
-    })
-
-    test('the toolbar Save button and the dialog Save button behave the same way (regression: timestamp-only diffs must not reappear as changes)', async ({ workspacePage }) => {
-        await makeAnEdit(workspacePage)
-        await workspacePage.locator('[data-testid="save-button"]').click()
-        await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
-
-        // With nothing edited since that Save, the Changes button must not
-        // reappear just because a header timestamp would differ on a
-        // hypothetical future save.
-        await expect(workspacePage.locator('[data-testid="changes-button"]')).not.toBeVisible()
     })
 })

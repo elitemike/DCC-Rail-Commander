@@ -389,8 +389,11 @@ test.describe('Automation Editor — myAutomation.h', () => {
         }
 
         // Hit Save immediately — do NOT wait for Monaco's 300ms debounce.
-        // This is exactly the scenario that used to wipe the edit.
+        // This is exactly the scenario that used to wipe the edit. Save now
+        // opens the Changes dialog for review; click through its own Save
+        // button to complete a real end-to-end write.
         await workspacePage.getByRole('button', { name: 'Save' }).click()
+        await workspacePage.locator('[data-testid="file-changes-save-button"]').click()
 
         // Give the save + any re-render a moment to settle, then verify the
         // content is still present in the editor (not reverted/regenerated
@@ -856,12 +859,15 @@ test.describe('Save button — dirty state indicator', () => {
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
     })
 
-    test('clicking Save clears the dirty indicator', async ({ workspacePage }) => {
+    test('clicking Save opens the Changes dialog, and saving from within it clears the dirty indicator', async ({ workspacePage }) => {
         await openRoutesEditor(workspacePage)
         await workspacePage.locator('routes-editor button[title="Add new route"]').click()
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).toBeVisible()
 
+        // The toolbar Save button now opens the Changes dialog for review
+        // rather than writing to disk directly — see file-changes-preview.spec.ts.
         await workspacePage.locator('[data-testid="save-button"]').click()
+        await workspacePage.locator('[data-testid="file-changes-save-button"]').click()
 
         await expect(workspacePage.locator('[data-testid="save-dirty-indicator"]')).not.toBeVisible()
     })
