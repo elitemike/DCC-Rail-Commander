@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as Blockly from 'blockly/core'
-import { registerExrailBlocks, setWorkspaceDefined } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
+import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
 import type { DefinedObjects } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 
 registerExrailBlocks()
@@ -67,6 +67,28 @@ describe('ExrailIdField (hat block ID field)', () => {
         const warn = vi.spyOn(block, 'setWarningText')
         block.setFieldValue('9', 'ID')
         expect(warn).toHaveBeenCalledWith(null, 'id')
+        workspace.dispose()
+    })
+
+    // Regression: defined.routes/sequences is the project's live list, which includes this very
+    // entry — a route/sequence sitting at its own already-registered id must not warn about
+    // itself just because that id is "in the list" (see setWorkspaceSelfId's own doc comment).
+    it('does not warn when the id matches this entry\'s own registered id', () => {
+        const { block, workspace } = makeHat('ROUTE')
+        setWorkspaceSelfId(workspace, 5)
+        const warn = vi.spyOn(block, 'setWarningText')
+        block.setFieldValue('5', 'ID')
+        expect(warn).toHaveBeenCalledWith(null, 'id')
+        workspace.dispose()
+    })
+
+    it('still warns when the id is changed to collide with a different existing entry', () => {
+        const { block, workspace } = makeHat('ROUTE')
+        setWorkspaceSelfId(workspace, 5)
+        block.setFieldValue('5', 'ID')
+        const warn = vi.spyOn(block, 'setWarningText')
+        block.setFieldValue('7', 'ID')
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('already used'), 'id')
         workspace.dispose()
     })
 })

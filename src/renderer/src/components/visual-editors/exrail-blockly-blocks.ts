@@ -40,6 +40,23 @@ export function getWorkspaceDefined(ws: Blockly.Workspace): DefinedObjects | nul
     return definedByWorkspace.get(ws) ?? null
 }
 
+// Each canvas's own entry is *part of* defined.routes/sequences (it's the project's live
+// route/sequence list, not "every other one"), so a plain "does anything in there have this id"
+// check always matches the entry's own steady-state id. Stashing the id this canvas's entry
+// currently owns (per the host, i.e. `headerId` — see exrail-block-canvas.ts's
+// setWorkspaceSelfId() call sites) lets ExrailIdField's collision check exclude exactly one
+// self match rather than every entry sharing that id, so it still catches a real duplicate
+// (including one pre-existing on the host's own entry).
+const selfIdByWorkspace = new WeakMap<Blockly.Workspace, number>()
+
+export function setWorkspaceSelfId(ws: Blockly.Workspace, id: number): void {
+    selfIdByWorkspace.set(ws, id)
+}
+
+export function getWorkspaceSelfId(ws: Blockly.Workspace): number | undefined {
+    return selfIdByWorkspace.get(ws)
+}
+
 // ── Hat block ID/ALIAS edit notifications ───────────────────────────────────
 // ExrailIdField/ExrailAliasField (below) report a committed edit to the host
 // synchronously, from their own doValueUpdate_ — NOT via the workspace's
@@ -189,7 +206,16 @@ class ExrailIdField extends Blockly.FieldNumber {
         // in myAutomationParser.ts) — a route's id can collide with a sequence's (or vice versa),
         // not just another entry of its own type, so both collections are checked regardless of
         // which one this hat block itself is.
-        const collides = [...(defined.routes ?? []), ...(defined.sequences ?? [])].some((entry) => entry.id === this.getValue())
+        const all = [...(defined.routes ?? []), ...(defined.sequences ?? [])]
+        // defined.routes/sequences is the project's live list, which includes this very entry —
+        // exclude exactly one match against its current (host-committed) id, via
+        // getWorkspaceSelfId(), so a route/sequence sitting at its own unchanged id doesn't
+        // permanently flag itself as colliding with itself. Only one match is dropped (not every
+        // entry sharing that id) so a genuine pre-existing duplicate elsewhere is still caught.
+        const selfId = ws ? getWorkspaceSelfId(ws) : undefined
+        const selfIdx = selfId !== undefined ? all.findIndex((entry) => entry.id === selfId) : -1
+        const others = selfIdx === -1 ? all : [...all.slice(0, selfIdx), ...all.slice(selfIdx + 1)]
+        const collides = others.some((entry) => entry.id === this.getValue())
         block.setWarningText(collides ? `ID ${this.getValue()} is already used by another route, sequence, or automation.` : null, 'id')
     }
 
