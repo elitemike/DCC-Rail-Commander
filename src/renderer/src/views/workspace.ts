@@ -596,6 +596,14 @@ export class Workspace {
             `Are you sure you want to delete "${file.name}"? This cannot be undone.`,
         )
         if (!confirmed) return
+        const deletes: Promise<void>[] = []
+        if (this.state.scratchPath) {
+            deletes.push(this.files.deleteFiles(`${this.state.scratchPath}/${file.name}`))
+        }
+        if (this.state.sourceFolder) {
+            deletes.push(this.files.deleteFiles(`${this.state.sourceFolder}/${file.name}`))
+        }
+        await Promise.all(deletes)
         this.configEditorState.removeCustomFile(file.name)
         // Keep active index in bounds
         if (this.activeFileIndex >= this.state.configFiles.length) {
