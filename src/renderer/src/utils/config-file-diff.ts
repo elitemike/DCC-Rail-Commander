@@ -26,28 +26,32 @@ export async function buildFileChangeSet(
     readFile: (path: string) => Promise<string>,
     exists: (path: string) => Promise<boolean>,
 ): Promise<FileChangeEntry[]> {
-    const entries: FileChangeEntry[] = []
-    for (const f of configFiles) {
-        let before: string | null = null
-        for (const root of roots) {
-            const candidate = `${root}/${f.name}`
-            if (await exists(candidate)) {
-                before = await readFile(candidate)
-                break
+    // Each file's before/after is independent, so resolve them concurrently —
+    // this used to be a single sequential loop (files × roots IPC round-trips
+    // in series), which is the dialog's dominant latency source on a slower
+    // or antivirus-contended disk. Promise.all preserves configFiles' order.
+    return Promise.all(
+        configFiles.map(async (f) => {
+            let before: string | null = null
+            for (const root of roots) {
+                const candidate = `${root}/${f.name}`
+                if (await exists(candidate)) {
+                    before = await readFile(candidate)
+                    break
+                }
             }
-        }
-        // Normalize away dynamic timestamp lines before comparing — they're
-        // rewritten to "now" on every save regardless of whether the user
-        // made a real edit, so an unnormalized comparison would mark nearly
-        // every managed file as changed every time.
-        const normalizedBefore = before === null ? null : normalizeForComparison(before)
-        const normalizedAfter = normalizeForComparison(f.content)
-        entries.push({
-            name: f.name,
-            before: normalizedBefore ?? '',
-            after: normalizedAfter,
-            status: computeFileChangeStatus(normalizedBefore, normalizedAfter),
-        })
-    }
-    return entries
+            // Normalize away dynamic timestamp lines before comparing — they're
+            // rewritten to "now" on every save regardless of whether the user
+            // made a real edit, so an unnormalized comparison would mark nearly
+            // every managed file as changed every time.
+            const normalizedBefore = before === null ? null : normalizeForComparison(before)
+            const normalizedAfter = normalizeForComparison(f.content)
+            return {
+                name: f.name,
+                before: normalizedBefore ?? '',
+                after: normalizedAfter,
+                status: computeFileChangeStatus(normalizedBefore, normalizedAfter),
+            }
+        }),
+    )
 }
