@@ -4,6 +4,8 @@ import { InstallerState } from '../models/installer-state'
 import { PlatformIoService } from '../services/platformio.service'
 import { ConfigService } from '../services/config.service'
 import { PreferencesService } from '../services/preferences.service'
+import { ThemeService, type ThemeMode } from '../services/theme.service'
+import { EditorDefaultViewService, type EditorViewMode } from '../services/editor-default-view.service'
 import type { SavedConfiguration } from '../models/saved-configuration'
 
 /**
@@ -16,6 +18,7 @@ import type { SavedConfiguration } from '../models/saved-configuration'
  */
 type SetupPhase =
     | 'splash'
+    | 'welcome'
     | 'checking'
     | 'seeding'
     | 'toolchain-prompt'
@@ -28,6 +31,8 @@ export class Startup {
     private readonly pio = resolve(PlatformIoService)
     private readonly config = resolve(ConfigService)
     private readonly preferences = resolve(PreferencesService)
+    readonly theme = resolve(ThemeService)
+    readonly editorDefaultView = resolve(EditorDefaultViewService)
 
     phase: SetupPhase = 'splash'
     statusMessage = 'Checking build toolchain...'
@@ -47,6 +52,29 @@ export class Startup {
             this.markReady()
             return
         }
+        if (!(await this.preferences.get<boolean>('hasCompletedOnboarding'))) {
+            this.phase = 'welcome'
+            return
+        }
+        await this.checkAndSetup()
+    }
+
+    // ── First-run welcome ────────────────────────────────────────────────────
+    // Shown once, before the toolchain check, so the choice is made before the
+    // user starts actually using the app rather than buried in a menu they may
+    // never open. Theme/default-view changes here apply immediately via the
+    // same services the Settings dialog uses — there is nothing to "save".
+
+    setTheme(mode: ThemeMode): void {
+        void this.theme.setMode(mode)
+    }
+
+    setDefaultEditorView(mode: EditorViewMode): void {
+        void this.editorDefaultView.setValue(mode)
+    }
+
+    async finishWelcome(): Promise<void> {
+        await this.preferences.set('hasCompletedOnboarding', true)
         await this.checkAndSetup()
     }
 
