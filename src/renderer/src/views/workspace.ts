@@ -19,7 +19,7 @@ import type { DetectedBoardInfo } from '../../../types/ipc'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
-import { buildFileChangeSet } from '../utils/config-file-diff'
+import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -619,6 +619,23 @@ export class Workspace {
         }
     }
 
+    /**
+     * Writes a file only if its on-disk content actually differs from what
+     * we're about to write (ignoring dynamic timestamp lines) — skips the
+     * write for files nothing changed in. This matters both for save latency
+     * (fewer IPC round-trips on a slower or antivirus-contended disk) and for
+     * PlatformIO's incremental build: rewriting a file with identical content
+     * still bumps its mtime, which needlessly invalidates that file's
+     * compilation cache entry on the next build.
+     */
+    private async writeIfChanged(path: string, content: string): Promise<void> {
+        const existing = (await this.files.exists(path)) ? await this.files.readFile(path) : null
+        if (existing !== null && normalizeForComparison(existing) === normalizeForComparison(content)) {
+            return
+        }
+        await this.files.writeFile(path, content)
+    }
+
     async saveFiles(): Promise<void> {
         await this.flushPendingFormEdits()
         // Ensure latest parsed state (roster headers, turnout headers) is written
@@ -631,13 +648,13 @@ export class Workspace {
         const writes: Promise<void>[] = []
         for (const f of this.state.configFiles) {
             if (this.state.scratchPath) {
-                writes.push(this.files.writeFile(`${this.state.scratchPath}/${f.name}`, f.content))
+                writes.push(this.writeIfChanged(`${this.state.scratchPath}/${f.name}`, f.content))
             }
             // When loaded from a folder that lacks a .ino, the internal scratch path
             // is used for compilation but we must also write back to the user's
             // original folder so their changes are persisted there.
             if (this.state.sourceFolder) {
-                writes.push(this.files.writeFile(`${this.state.sourceFolder}/${f.name}`, f.content))
+                writes.push(this.writeIfChanged(`${this.state.sourceFolder}/${f.name}`, f.content))
             }
         }
         await Promise.all(writes)

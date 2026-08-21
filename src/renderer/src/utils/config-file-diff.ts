@@ -4,7 +4,7 @@ import { normalizeDeviceHeaderTimestamp } from './configHeaderParser'
 export type FileChangeStatus = 'new' | 'changed' | 'unchanged'
 
 /** Strips every known dynamic timestamp line so comparisons reflect real edits, not housekeeping. */
-function normalizeForComparison(text: string): string {
+export function normalizeForComparison(text: string): string {
     return normalizeDeviceHeaderTimestamp(normalizeGeneratorTimestamp(text))
 }
 
