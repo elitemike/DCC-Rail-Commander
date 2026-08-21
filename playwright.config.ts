@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 /**
- * Playwright configuration for EX-Installer E2E tests.
+ * Playwright configuration for EX-Commander E2E tests.
  *
  * Prerequisites:
  *   1. Build the Electron app:  pnpm build   (or pnpm test:e2e which does it automatically)

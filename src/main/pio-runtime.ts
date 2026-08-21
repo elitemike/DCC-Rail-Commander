@@ -1,7 +1,7 @@
 /**
  * Locates and prepares the bundled, version-locked build runtime.
  *
- * EX-Installer ships its own CPython and PlatformIO Core rather than
+ * EX-Commander ships its own CPython and PlatformIO Core rather than
  * downloading a toolchain on first launch, so a build is reproducible and works
  * behind a firewall. The only process in the app that is allowed to touch the
  * network is git (cloning the DCC-EX product repos) — every environment built
@@ -33,7 +33,7 @@ export interface ToolchainManifest {
     stamp: string
 }
 
-const STAMP_FILE = '.ex-installer-toolchain'
+const STAMP_FILE = '.ex-commander-toolchain'
 
 /**
  * Root of the bundled resources tree. Packaged builds get it from Electron's
@@ -68,10 +68,10 @@ export function bundledCoreDir(): string {
 
 /**
  * Writable PlatformIO core directory, seeded from the bundled tree on first run.
- * Follows the same `~/ex-installer/...` convention as the repos and prefs dirs.
+ * Follows the same `~/ex-commander/...` convention as the repos and prefs dirs.
  */
 export function coreDir(): string {
-    return join(app.getPath('home'), 'ex-installer', 'platformio')
+    return join(app.getPath('home'), 'ex-commander', 'platformio')
 }
 
 export function platformsDir(): string {

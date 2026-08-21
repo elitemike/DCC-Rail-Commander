@@ -18,7 +18,7 @@
                 // document.body doesn't exist yet this early — only <html> is
                 // touched here. ThemeService.init() reconciles <body>'s
                 // e-dark-mode class (a Syncfusion-only concern) once it runs.
-                if (localStorage.getItem('ex-installer-theme-effective') === 'light') {
+                if (localStorage.getItem('ex-commander-theme-effective') === 'light') {
                     document.documentElement.classList.remove('dark')
                 }
             } catch (e) { /* localStorage unavailable — default to dark, matching the class already on <html> */ }
@@ -27,7 +27,7 @@
 
     <script type="module" src="./src/main.ts"></script>
 
-    <title>EX-Installer</title>
+    <title>EX-Commander</title>
 </head>
 
 <body class="e-dark-mode">

@@ -90,8 +90,8 @@ describe('buildFileChangeSet', () => {
         // let that alone mark the file as changed.
         const before = [
             '// =============================================================================',
-            '// DCCEX-Installer v0.1.0',
-            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// DCCEX-Commander v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Commander — manual edits are preserved',
             '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
             '// Last saved: 2026-08-20T10:00:00.000Z',
             '// =============================================================================',
@@ -114,13 +114,13 @@ describe('buildFileChangeSet', () => {
 
     it('treats config.h as "unchanged" when only the device-header "Updated" timestamp differs', async () => {
         const before = [
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '//   Name:     Arduino Mega 2560',
             '//   Port:     /dev/ttyACM1',
             '//   FQBN:     arduino:avr:mega',
             '//   Protocol: serial',
             '//   Updated:  2026-08-20T10:00:00.000Z',
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD',
         ].join('\n')
         const after = before.replace('2026-08-20T10:00:00.000Z', '2026-08-21T00:03:30.777Z')
@@ -159,8 +159,8 @@ describe('buildFileChangeSet', () => {
     it('strips the generator header from before/after so the diff preview shows only real content', async () => {
         const before = [
             '// =============================================================================',
-            '// DCCEX-Installer v0.1.0',
-            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// DCCEX-Commander v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Commander — manual edits are preserved',
             '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
             '// Last saved: 2026-08-20T10:00:00.000Z',
             '// =============================================================================',
@@ -168,8 +168,8 @@ describe('buildFileChangeSet', () => {
         ].join('\n')
         const after = [
             '// =============================================================================',
-            '// DCCEX-Installer v0.1.0',
-            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// DCCEX-Commander v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Commander — manual edits are preserved',
             '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
             '// Last saved: 2026-08-21T00:03:30.777Z',
             '// =============================================================================',
@@ -193,23 +193,23 @@ describe('buildFileChangeSet', () => {
 
     it('strips the device header from config.h before/after in the diff preview', async () => {
         const before = [
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '//   Name:     Arduino Mega 2560',
             '//   Port:     /dev/ttyACM1',
             '//   FQBN:     arduino:avr:mega',
             '//   Protocol: serial',
             '//   Updated:  2026-08-20T10:00:00.000Z',
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD',
         ].join('\n')
         const after = [
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '//   Name:     Arduino Mega 2560',
             '//   Port:     /dev/ttyACM1',
             '//   FQBN:     arduino:avr:mega',
             '//   Protocol: serial',
             '//   Updated:  2026-08-21T00:03:30.777Z',
-            '// ==== DCCEX-Installer Device Configuration ====',
+            '// ==== DCCEX-Commander Device Configuration ====',
             '#define MAIN_DRIVER_MOTOR_SHIELD MOTOR_SHIELD_STANDARD',
         ].join('\n')
 
@@ -229,14 +229,14 @@ describe('buildFileChangeSet', () => {
         // the diff pane itself shows no highlighted lines for this file.
         const before = [
             '// =============================================================================',
-            '// DCCEX-Installer v0.1.0',
-            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// DCCEX-Commander v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Commander — manual edits are preserved',
             '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
             '// Last saved: 2026-08-20T10:00:00.000Z',
             '// =============================================================================',
             'ROSTER(3, "Thomas", "LIGHT/HORN")',
         ].join('\n')
-        const after = before.replace('DCCEX-Installer v0.1.0', 'DCCEX-Installer v0.2.0')
+        const after = before.replace('DCCEX-Commander v0.1.0', 'DCCEX-Commander v0.2.0')
 
         const exists = vi.fn(async () => true)
         const readFile = vi.fn(async () => before)

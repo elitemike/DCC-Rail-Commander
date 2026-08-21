@@ -19,7 +19,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Please provide the version of EX-Installer in use.
+      description: Please provide the version of EX-Commander in use.
     validations:
       required: true
 
@@ -39,7 +39,7 @@ body:
       label: Steps to reproduce the bug
       description: Please provide the steps to reproduce the behaviour.
       placeholder: |
-        1. Run EX-Installer.
+        1. Run EX-Commander.
         2. Select an Arduino device.
         3. Select Latest Production version.
         4. Specify the EX8874 motor shield, leave display and WiFi disabled.
