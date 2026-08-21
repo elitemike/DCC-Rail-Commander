@@ -40,6 +40,26 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
     return { editor, state, toastShow }
 }
 
+// ── setTab: raw snapshot seeding ─────────────────────────────────────────────
+// rawSnapshot is only ever populated as a side effect of setTab('raw') — the
+// constructor routes a 'raw' default-editor-view preference through this same
+// method (rather than seeding activeTab directly) specifically so the raw
+// Monaco editor doesn't open empty. This covers the seeding logic that
+// guarantee depends on.
+
+describe('SensorsEditorCustomElement.setTab', () => {
+    it('seeds rawSnapshot from state.sensorsRaw when switching to raw', () => {
+        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        editor.activeTab = 'visual'
+        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = 'SENSOR(10, 5)'
+
+        editor.setTab('raw')
+
+        expect(editor.rawSnapshot).toBe('SENSOR(10, 5)')
+        expect(editor.activeTab).toBe('raw')
+    })
+})
+
 // ── updateSensor: alias follows an ID rename ─────────────────────────────────
 
 describe('SensorsEditorCustomElement.updateSensor', () => {

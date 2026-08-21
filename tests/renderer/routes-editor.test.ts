@@ -43,6 +43,26 @@ function makeEditor(routes: { id: number; description?: string; body?: string }[
     return { editor, state, toastShow }
 }
 
+// ── setTab: raw snapshot seeding ─────────────────────────────────────────────
+// rawSnapshot is only ever populated as a side effect of setTab('raw') — the
+// constructor routes a 'raw' default-editor-view preference through this same
+// method (rather than seeding activeTab directly) specifically so the raw
+// Monaco editor doesn't open empty. This covers the seeding logic that
+// guarantee depends on.
+
+describe('RoutesEditorCustomElement.setTab', () => {
+    it('seeds rawSnapshot from state.routesRaw when switching to raw', () => {
+        const { editor, state } = makeEditor([{ id: 7, description: 'Main to Yard' }])
+        editor.activeTab = 'visual'
+        ;(state as unknown as { routesRaw: string }).routesRaw = 'ROUTE(7, "Main to Yard")\nDONE'
+
+        editor.setTab('raw')
+
+        expect(editor.rawSnapshot).toBe('ROUTE(7, "Main to Yard")\nDONE')
+        expect(editor.activeTab).toBe('raw')
+    })
+})
+
 // ── rowRawFilename / onRowRawChange (per-row Raw Monaco editor) ────────────────
 
 describe('RoutesEditorCustomElement.rowRawFilename', () => {

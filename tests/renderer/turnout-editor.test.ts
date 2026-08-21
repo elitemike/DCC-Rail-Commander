@@ -37,6 +37,25 @@ function makeEditor() {
 const VALID_TURNOUT = 'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")'
 const VALID_TURNOUT_2 = 'SERVO_TURNOUT(201, 26, 410, 205, Fast, "Yard Entry")'
 
+// ── setTab: raw snapshot seeding ─────────────────────────────────────────────
+// rawSnapshot/_rawText are only ever populated as a side effect of setTab('raw') —
+// the constructor routes a 'raw' default-editor-view preference through this same
+// method (rather than seeding activeTab directly) specifically so the raw Monaco
+// editor doesn't open empty. This covers the seeding logic that guarantee depends on.
+
+describe('TurnoutEditorCustomElement.setTab', () => {
+    it('seeds rawSnapshot and _rawText from state.turnoutsRaw when switching to raw', () => {
+        const { editor, state } = makeEditor()
+        ;(state as unknown as { turnoutsRaw: string }).turnoutsRaw = VALID_TURNOUT
+
+        editor.setTab('raw')
+
+        expect(editor.rawSnapshot).toBe(VALID_TURNOUT)
+        expect(editor._rawText).toBe(VALID_TURNOUT)
+        expect(editor.activeTab).toBe('raw')
+    })
+})
+
 // ── _processRawLeave: toast publishing ───────────────────────────────────────
 
 describe('TurnoutEditorCustomElement._processRawLeave', () => {
