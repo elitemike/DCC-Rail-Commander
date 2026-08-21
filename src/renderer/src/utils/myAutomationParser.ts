@@ -1018,6 +1018,23 @@ export function normalizeGeneratorTimestamp(text: string): string {
     return text.replace(LAST_SAVED_LINE_RE, '// Last saved: (unchanged)')
 }
 
+/**
+ * Removes the generator header block entirely. Used by the Preview Changes
+ * diff so it shows only real content, not installer boilerplate that changes
+ * on every save (and sometimes on every version bump).
+ */
+export function stripGeneratorHeader(text: string): string {
+    if (!hasGeneratorHeader(text)) return text
+    const firstIdx = text.indexOf(HEADER_BAR)
+    if (firstIdx === -1) return text
+    const secondIdx = text.indexOf(HEADER_BAR, firstIdx + HEADER_BAR.length)
+    if (secondIdx === -1) return text
+    let endIdx = secondIdx + HEADER_BAR.length
+    if (text.startsWith('\r\n', endIdx)) endIdx += 2
+    else if (text[endIdx] === '\n') endIdx += 1
+    return text.slice(0, firstIdx) + text.slice(endIdx)
+}
+
 // ─── Demo data ───────────────────────────────────────────────────────────────
 
 export function loadDemoRoster(): Roster[] {

@@ -155,4 +155,101 @@ describe('buildFileChangeSet', () => {
 
         expect(result[0].status).toBe('changed')
     })
+
+    it('strips the generator header from before/after so the diff preview shows only real content', async () => {
+        const before = [
+            '// =============================================================================',
+            '// DCCEX-Installer v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
+            '// Last saved: 2026-08-20T10:00:00.000Z',
+            '// =============================================================================',
+            'ROSTER(3, "Thomas", "LIGHT/HORN")',
+        ].join('\n')
+        const after = [
+            '// =============================================================================',
+            '// DCCEX-Installer v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
+            '// Last saved: 2026-08-21T00:03:30.777Z',
+            '// =============================================================================',
+            'ROSTER(3, "Thomas", "LIGHT/HORN/BELL")',
+        ].join('\n')
+
+        const exists = vi.fn(async () => true)
+        const readFile = vi.fn(async () => before)
+
+        const result = await buildFileChangeSet(
+            [{ name: 'myRoster.h', content: after }],
+            ['/root'],
+            readFile,
+            exists,
+        )
+
+        expect(result[0].before).toBe('ROSTER(3, "Thomas", "LIGHT/HORN")')
+        expect(result[0].after).toBe('ROSTER(3, "Thomas", "LIGHT/HORN/BELL")')
+        expect(result[0].status).toBe('changed')
+    })
+
+    it('strips the device header from config.h before/after in the diff preview', async () => {
+        const before = [
+            '// ==== DCCEX-Installer Device Configuration ====',
+            '//   Name:     Arduino Mega 2560',
+            '//   Port:     /dev/ttyACM1',
+            '//   FQBN:     arduino:avr:mega',
+            '//   Protocol: serial',
+            '//   Updated:  2026-08-20T10:00:00.000Z',
+            '// ==== DCCEX-Installer Device Configuration ====',
+            '#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD',
+        ].join('\n')
+        const after = [
+            '// ==== DCCEX-Installer Device Configuration ====',
+            '//   Name:     Arduino Mega 2560',
+            '//   Port:     /dev/ttyACM1',
+            '//   FQBN:     arduino:avr:mega',
+            '//   Protocol: serial',
+            '//   Updated:  2026-08-21T00:03:30.777Z',
+            '// ==== DCCEX-Installer Device Configuration ====',
+            '#define MAIN_DRIVER_MOTOR_SHIELD MOTOR_SHIELD_STANDARD',
+        ].join('\n')
+
+        const exists = vi.fn(async () => true)
+        const readFile = vi.fn(async () => before)
+
+        const result = await buildFileChangeSet([{ name: 'config.h', content: after }], ['/root'], readFile, exists)
+
+        expect(result[0].before).toBe('#define MAIN_DRIVER_MOTOR_SHIELD STANDARD_MOTOR_SHIELD')
+        expect(result[0].after).toBe('#define MAIN_DRIVER_MOTOR_SHIELD MOTOR_SHIELD_STANDARD')
+        expect(result[0].status).toBe('changed')
+    })
+
+    it('leaves a header-only version bump visible in the diff pane as an empty (unhighlighted) change', async () => {
+        // Status still reflects the header change (comparison isn't header-stripped),
+        // but with nothing else different, the stripped before/after are identical —
+        // the diff pane itself shows no highlighted lines for this file.
+        const before = [
+            '// =============================================================================',
+            '// DCCEX-Installer v0.1.0',
+            '// This file (myRoster.h) is managed by EX-Installer — manual edits are preserved',
+            '// but may be reformatted on the next save. See https://dcc-ex.com for docs.',
+            '// Last saved: 2026-08-20T10:00:00.000Z',
+            '// =============================================================================',
+            'ROSTER(3, "Thomas", "LIGHT/HORN")',
+        ].join('\n')
+        const after = before.replace('DCCEX-Installer v0.1.0', 'DCCEX-Installer v0.2.0')
+
+        const exists = vi.fn(async () => true)
+        const readFile = vi.fn(async () => before)
+
+        const result = await buildFileChangeSet(
+            [{ name: 'myRoster.h', content: after }],
+            ['/root'],
+            readFile,
+            exists,
+        )
+
+        expect(result[0].status).toBe('changed')
+        expect(result[0].before).toBe(result[0].after)
+        expect(result[0].before).toBe('ROSTER(3, "Thomas", "LIGHT/HORN")')
+    })
 })

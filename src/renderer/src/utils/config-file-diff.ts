@@ -1,11 +1,22 @@
-import { normalizeGeneratorTimestamp } from './myAutomationParser'
-import { normalizeDeviceHeaderTimestamp } from './configHeaderParser'
+import { normalizeGeneratorTimestamp, stripGeneratorHeader } from './myAutomationParser'
+import { normalizeDeviceHeaderTimestamp, stripDeviceHeader } from './configHeaderParser'
 
 export type FileChangeStatus = 'new' | 'changed' | 'unchanged'
 
 /** Strips every known dynamic timestamp line so comparisons reflect real edits, not housekeeping. */
 export function normalizeForComparison(text: string): string {
     return normalizeDeviceHeaderTimestamp(normalizeGeneratorTimestamp(text))
+}
+
+/**
+ * Removes installer-managed header blocks so the Preview Changes diff shows
+ * only content the user actually wrote. Applied only to what's displayed —
+ * change status is still computed from normalizeForComparison(), so a
+ * header-only change (e.g. a version bump) still surfaces the file as
+ * changed even though its diff pane then shows no highlighted lines.
+ */
+function stripGeneratedHeadersForPreview(text: string): string {
+    return stripDeviceHeader(stripGeneratorHeader(text))
 }
 
 export interface FileChangeEntry {
@@ -48,8 +59,8 @@ export async function buildFileChangeSet(
             const normalizedAfter = normalizeForComparison(f.content)
             return {
                 name: f.name,
-                before: normalizedBefore ?? '',
-                after: normalizedAfter,
+                before: normalizedBefore === null ? '' : stripGeneratedHeadersForPreview(normalizedBefore),
+                after: stripGeneratedHeadersForPreview(normalizedAfter),
                 status: computeFileChangeStatus(normalizedBefore, normalizedAfter),
             }
         }),
