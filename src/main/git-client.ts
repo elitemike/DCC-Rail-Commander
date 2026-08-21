@@ -10,7 +10,7 @@ import simpleGit, { SimpleGit } from 'simple-git'
 function describeGitError(err: Error): string {
     const code = (err as NodeJS.ErrnoException).code
     if (code === 'ENOENT' || /spawn git ENOENT/i.test(err.message)) {
-        return 'Git was not found on your system PATH. Install Git for Windows (https://git-scm.com/download/win) and restart EX-Installer.'
+        return 'Git was not found on your system PATH. Install Git for Windows (https://git-scm.com/download/win) and restart EX-Commander.'
     }
     if (/ENOTFOUND|ETIMEDOUT|ECONNREFUSED|Could not resolve host/i.test(err.message)) {
         return `Could not reach the remote repository — check your internet connection or proxy settings.\n${err.message}`
@@ -28,7 +28,7 @@ export class GitService {
 
     /** Base directory for cloned repos */
     get reposDir(): string {
-        const dir = join(app.getPath('home'), 'ex-installer', 'repos')
+        const dir = join(app.getPath('home'), 'ex-commander', 'repos')
         return dir
     }
 

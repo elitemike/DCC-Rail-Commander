@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-EX-Installer is an Electron + Aurelia 2 rewrite of a legacy Python/Tkinter installer for DCC-EX Arduino
+EX-Commander is an Electron + Aurelia 2 rewrite of a legacy Python/Tkinter installer for DCC-EX Arduino
 products (EX-CommandStation, EX-IOExpander, EX-Turntable). The old Python app lives in `.old_ex_installer/`
 and `tests/unit/*.py` / `requirements.txt` are leftovers from it — **do not edit or run those**; all active
 development is TypeScript under `src/` with tests under `tests/main/`, `tests/renderer/`, `tests/e2e/`.
@@ -109,7 +109,7 @@ See `TOOLCHAIN.md` for the full picture (build-time fetch vs. runtime seed, on-d
 debugging a corrupted seed); the summary below is just the pointers you need day to day.
 
 - `src/main/pio-runtime.ts` — resolves the bundled runtime (`resources/python`, `resources/pio/site-packages`,
-  `resources/pio-core`, `resources/pio-libs`), seeds the writable core dir at `~/ex-installer/platformio` once
+  `resources/pio-core`, `resources/pio-libs`), seeds the writable core dir at `~/ex-commander/platformio` once
   per build (guarded by the manifest `stamp`), and builds `pioEnv()`. That environment points all HTTP at
   `http://127.0.0.1:9`, so if PlatformIO ever decides it wants to download a package the build fails loudly
   instead of quietly pulling an unpinned toolchain — do not remove that fuse. `seedRuntime()`'s copies are

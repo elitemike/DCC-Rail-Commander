@@ -1,5 +1,5 @@
 """
-EX-Installer Python helper scripts.
+EX-Commander Python helper scripts.
 
 Scripts placed here are bundled under  <resources>/python/  at build time
 (see electron-builder config in package.json) and invoked from the Electron

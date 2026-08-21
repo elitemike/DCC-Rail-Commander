@@ -39,9 +39,9 @@ beforeEach(() => {
 // ── reposDir ──────────────────────────────────────────────────────────────────
 
 describe('reposDir', () => {
-    it('is under ex-installer/repos', () => {
+    it('is under ex-commander/repos', () => {
         const svc = makeService()
-        expect(svc.reposDir).toContain('ex-installer')
+        expect(svc.reposDir).toContain('ex-commander')
         expect(svc.reposDir).toContain('repos')
     })
 })

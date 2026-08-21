@@ -11,7 +11,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this template to request support or assistance with EX-Installer.
+        Use this template to request support or assistance with EX-Commander.
   
   - type: input
     id: version

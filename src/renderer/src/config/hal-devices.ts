@@ -4,7 +4,7 @@
  * the cross-device VPin registry.
  *
  * Round-tripping: DCC-EX's `HAL(chip, vpin, pinCount, address)` macro has no
- * room for EX-Installer-only metadata (a stable instance id, a user-editable
+ * room for EX-Commander-only metadata (a stable instance id, a user-editable
  * friendly name, which catalog board produced it — e.g. PCA9555+16 pins could
  * be either RT DCD-16 or RT PCA9555). Each device therefore gets a leading
  * `// HAL(board=..., label="...")` comment immediately above its real `HAL(...)`

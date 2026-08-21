@@ -1,15 +1,29 @@
-# EX-Installer
+# EX-Commander
 
-EX-Installer is an Electron + Aurelia 2 cross-platform installer for the various Arduino based DCC-EX products.
+EX-Commander is an Electron + Aurelia 2 cross-platform installer for the various Arduino based DCC-EX products.
 
 This repository is an active rewrite of the original Python/Tkinter EX-Installer. The old app's source lives
 in `.old_ex_installer/` for reference only; all active development happens under `src/`.
 
-Binaries will be made available to allow EX-Installer to be run on:
+Binaries will be made available to allow EX-Commander to be run on:
 
 - Windows 10/11
 - Linux graphical environments
 - macOS
+
+## Features
+
+- **Fully offline build backend** — a bundled Python interpreter and PlatformIO Core compile firmware with no
+  runtime downloads; an HTTP fuse makes any unexpected package fetch fail loudly instead of silently
+  succeeding online (see `TOOLCHAIN.md`).
+- **Multi-board isolation** — each physical board gets its own scratch directory and PlatformIO build
+  environment, keyed by board type and serial number, so multiple connected boards never share build state.
+- **Mock mode for development** — `pnpm dev:mock` fakes USB/serial device discovery and firmware upload so you
+  can exercise the full wizard and workspace without real hardware attached; compiling is always real.
+- **Bundled AVR/ESP32 toolchains**, with STM32 (and other) boards supported via an in-app toolchain-pack
+  import.
+- **Cross-platform packaging** — `pnpm package`/`pnpm release` produce a Windows NSIS installer, a Linux
+  AppImage/deb, or a macOS dmg from the same codebase.
 
 ## Getting started
 
@@ -32,6 +46,9 @@ Binaries will be made available to allow EX-Installer to be run on:
   retry.
 
 ### Install and run
+
+> **Note:** this repo is still hosted at `DCC-EX/EX-Installer` on GitHub pending a repository rename; the
+> clone URL below will need updating once that rename happens.
 
 ```shell
 git clone https://github.com/DCC-EX/EX-Installer.git
@@ -73,21 +90,21 @@ network access once if the bundled Python/PlatformIO toolchain hasn't been fetch
 
 ## What's in this repository?
 
-This repository includes all source code of EX-Installer, along with related documentation and screen captures of the initial design ideas.
+This repository includes all source code of EX-Commander, along with related documentation and screen captures of the initial design ideas.
 
-The binaries are kept in the /dist directory of the repository, and will also be hosted on the [DCC-EX website](https://dcc-ex.com).
+The binaries are produced in the `release/` directory when building locally (see "Building binaries" below), and will also be hosted on the [DCC-EX website](https://dcc-ex.com).
 
 ### EX-Installer-Configs repository
 
-In addition to this EX-Installer repository, there is a separate repository [EX-Installer-Configs](https://github.com/DCC-EX/EX-Installer-Configs) which contains various configuration information that EX-Installer relies on.
+In addition to this repository, there is a separate repository [EX-Installer-Configs](https://github.com/DCC-EX/EX-Installer-Configs) which contains various configuration information that EX-Commander relies on.
 
-This enables product and device configuration information to be updated without necessarily needing to build a new release of EX-Installer binaries.
+This enables product and device configuration information to be updated without necessarily needing to build a new release of EX-Commander binaries.
 
 ## Operating principles and modules
 
-EX-Installer operates within the confines of the user's home directory and temp directory only, with no files or folders outside of these directories being touched.
+EX-Commander operates within the confines of the user's home directory and temp directory only, with no files or folders outside of these directories being touched.
 
-In Windows, this will typically be `C:\Users\<username>\ex-installer`, and in Linux or macOS `/home/<username>/ex-installer`.
+In Windows, this will typically be `C:\Users\<username>\ex-commander`, and in Linux or macOS `/home/<username>/ex-commander`.
 
 The general operating process of the installer is:
 
@@ -98,7 +115,7 @@ The general operating process of the installer is:
 
 ## Supported products
 
-EX-Installer configures and installs the following Arduino based DCC-EX products:
+EX-Commander configures and installs the following Arduino based DCC-EX products:
 
 - EX-CommandStation
 - EX-IOExpander

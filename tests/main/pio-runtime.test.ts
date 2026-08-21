@@ -103,10 +103,10 @@ describe('resource paths', () => {
         }
     })
 
-    it('keeps the writable core dir under the ex-installer home directory', () => {
+    it('keeps the writable core dir under the ex-commander home directory', () => {
         const dir = coreDir().replace(/\\/g, '/')
         expect(dir).toContain('/mock/home')
-        expect(dir).toContain('ex-installer')
+        expect(dir).toContain('ex-commander')
         expect(dir).toContain('platformio')
     })
 
@@ -180,7 +180,7 @@ describe('seedRuntime()', () => {
     it('copies each bundled platform and package into the core dir', async () => {
         mockReaddir.mockResolvedValue(['atmelavr', 'espressif32'])
         // Bundled sources exist; nothing is present in the destination yet.
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-installer/platformio/'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-commander/platformio/'))
 
         const result = await seedRuntime()
 
@@ -197,7 +197,7 @@ describe('seedRuntime()', () => {
     it('writes the stamp so the next launch skips seeding', async () => {
         await seedRuntime()
         expect(mockWriteFile).toHaveBeenCalledWith(
-            expect.stringContaining('.ex-installer-toolchain'),
+            expect.stringContaining('.ex-commander-toolchain'),
             'stamp-abc123',
             'utf-8',
         )
@@ -212,7 +212,7 @@ describe('seedRuntime()', () => {
 
     it('reports progress per package so the UI can show what it is doing', async () => {
         mockReaddir.mockResolvedValue(['toolchain-atmelavr'])
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-installer/platformio/'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-commander/platformio/'))
         const messages: string[] = []
         await seedRuntime((m) => messages.push(m))
         expect(messages.some((m) => m.includes('toolchain-atmelavr'))).toBe(true)
@@ -229,7 +229,7 @@ describe('seedRuntime()', () => {
 
     it('surfaces copy failures instead of claiming success', async () => {
         mockReaddir.mockResolvedValue(['atmelavr'])
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-installer/platformio/'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-commander/platformio/'))
         mockCp.mockRejectedValueOnce(new Error('EACCES: permission denied'))
         const result = await seedRuntime()
         expect(result.success).toBe(false)
@@ -250,13 +250,13 @@ describe('seedRuntime()', () => {
         let targetCheckCount = 0
         mockExistsSync.mockImplementation((p: unknown) => {
             const s = String(p).replace(/\\/g, '/')
-            if (s.includes('/ex-installer/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
+            if (s.includes('/ex-commander/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
                 targetCheckCount++
                 // First check (before copying) sees nothing installed yet; the
                 // second (after our rename fails) sees the winner's result.
                 return targetCheckCount > 1
             }
-            return !s.includes('/ex-installer/platformio/')
+            return !s.includes('/ex-commander/platformio/')
         })
         mockRename.mockRejectedValueOnce(new Error('ENOTEMPTY: lost the rename race'))
 
@@ -268,7 +268,7 @@ describe('seedRuntime()', () => {
 
     it('still fails when the rename is lost and no winner actually installed the entry', async () => {
         mockReaddir.mockResolvedValue(['atmelavr'])
-        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-installer/platformio/'))
+        mockExistsSync.mockImplementation((p: unknown) => !String(p).replace(/\\/g, '/').includes('/ex-commander/platformio/'))
         mockRename.mockRejectedValueOnce(new Error('EACCES: permission denied'))
 
         const result = await seedRuntime()
@@ -282,10 +282,10 @@ describe('seedRuntime()', () => {
         let installed = false
         mockExistsSync.mockImplementation((p: unknown) => {
             const s = String(p).replace(/\\/g, '/')
-            if (s.includes('/ex-installer/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
+            if (s.includes('/ex-commander/platformio/') && s.endsWith('atmelavr') && !s.includes('.tmp-')) {
                 return installed
             }
-            return !s.includes('/ex-installer/platformio/')
+            return !s.includes('/ex-commander/platformio/')
         })
         mockRename.mockImplementation(async () => {
             if (installed) throw new Error('ENOTEMPTY: someone else got there first')
