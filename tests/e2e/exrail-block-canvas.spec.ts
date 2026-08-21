@@ -508,4 +508,22 @@ test.describe('EXRAIL block canvas', () => {
         const rawVisible = await page.getByTestId('row-body-monaco').isVisible().catch(() => false)
         expect(canvasVisible || rawVisible).toBe(true)
     })
+
+    test('regression: a newly added route does not warn about colliding with its own assigned id', async ({ workspacePage: page }) => {
+        // defined.routes (exrail-blockly-blocks.ts's ExrailIdField) is the project's live route
+        // list, which includes this very route — so a naive "does anything in there have this
+        // id" check always matches the entry's own id. MOCK_ROUTES_H's sole route already sits at
+        // id 1, which happens to equal ExrailIdField's own JSON-default value, so
+        // _applyHeaderFields() never calls setFieldValue for it and never exercises the bug —
+        // a freshly added route (assigned id 2) is required to actually trigger it.
+        await openRoutesEditor(page)
+        await page.locator('routes-editor button[title="Add new route"]').click()
+        await page.locator('routes-editor nav[aria-label="Routes"] a', { hasText: 'New Route' }).click()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        // The hat block's ID field reactively picks up the new route's real id (2) — wait for
+        // that catch-up to actually land before asserting no warning icon appeared, since a
+        // check made too early would trivially "pass" whether or not the bug is present.
+        await expect(page.locator('.blocklyEditableField[aria-label="Edit number: 2"]')).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.blocklyWarningIcon')).toHaveCount(0)
+    })
 })

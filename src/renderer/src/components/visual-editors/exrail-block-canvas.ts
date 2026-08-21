@@ -4,7 +4,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { canonicalRefValue, parseBody, compileBody } from './exrail-block-compiler'
 import type { DefinedObjects, ParsedGraph } from './exrail-block-compiler'
-import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceHatCallbacks, withHatCallbacksSuppressed } from './exrail-blockly-blocks'
+import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceHatCallbacks, setWorkspaceSelfId, withHatCallbacksSuppressed } from './exrail-blockly-blocks'
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
 import { buildCategoryTree, firstLeafPath, flatToolboxForPath } from './exrail-blockly-toolbox'
 import type { PaletteCategoryNode } from './exrail-blockly-toolbox'
@@ -329,6 +329,7 @@ export class ExrailBlockCanvasCustomElement {
             // instant _applyHeaderFields() below hasn't corrected it yet.
             withHatCallbacksSuppressed(workspace, () => {
                 buildWorkspaceFromGraph(workspace, graph, BLOCK_REGISTRY)
+                setWorkspaceSelfId(workspace, this.headerId)
                 this._applyHeaderFields()
             })
         } finally {
@@ -345,7 +346,10 @@ export class ExrailBlockCanvasCustomElement {
      *  doValueUpdate_ in exrail-blockly-blocks.ts for why programmatic sets must never reach
      *  onIdChange/onAliasChange. */
     headerIdChanged(): void {
-        if (this.workspace) withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
+        if (this.workspace) {
+            setWorkspaceSelfId(this.workspace, this.headerId)
+            withHatCallbacksSuppressed(this.workspace, () => this._applyHeaderFields())
+        }
         this._refreshOutput()
     }
 
