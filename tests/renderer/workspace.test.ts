@@ -552,3 +552,59 @@ describe('Workspace.upload connection handling', () => {
         expect(closePortFn).not.toHaveBeenCalled()
     })
 })
+
+// ── removeCustomFile() ────────────────────────────────────────────────────────
+
+describe('Workspace.removeCustomFile', () => {
+    function makeRemovableWorkspace(sourceFolder: string | null, confirmed = true) {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.state.configFiles = [{ name: 'config.h', content: '' }, { name: 'myFile.h', content: 'x' }]
+        workspace.state.scratchPath = '/scratch'
+        workspace.state.sourceFolder = sourceFolder
+        workspace.activeFileIndex = 1
+        const deleteFilesFn = vi.fn().mockResolvedValue(undefined)
+        Object.assign(workspace.files, { deleteFiles: deleteFilesFn })
+        const removeCustomFileFn = vi.fn()
+        Object.assign(workspace.configEditorState, {
+            isCustomFile: vi.fn().mockReturnValue(true),
+            removeCustomFile: removeCustomFileFn,
+        })
+        Object.assign(workspace, {
+            dialogService: {
+                open: vi.fn().mockResolvedValue({
+                    dialog: { closed: Promise.resolve({ status: confirmed ? 'ok' : 'cancel' }) },
+                }),
+            },
+        })
+        return { workspace, deleteFilesFn, removeCustomFileFn, preferencesSetFn }
+    }
+
+    it('deletes the file from the scratch dir on disk', async () => {
+        const { workspace, deleteFilesFn, removeCustomFileFn } = makeRemovableWorkspace(null)
+
+        await workspace.removeCustomFile(1, new Event('click'))
+
+        expect(deleteFilesFn).toHaveBeenCalledWith('/scratch/myFile.h')
+        expect(deleteFilesFn).toHaveBeenCalledTimes(1)
+        expect(removeCustomFileFn).toHaveBeenCalledWith('myFile.h')
+    })
+
+    it('also deletes from sourceFolder when the config was loaded from a folder without a .ino', async () => {
+        const { workspace, deleteFilesFn } = makeRemovableWorkspace('/source')
+
+        await workspace.removeCustomFile(1, new Event('click'))
+
+        expect(deleteFilesFn).toHaveBeenCalledWith('/scratch/myFile.h')
+        expect(deleteFilesFn).toHaveBeenCalledWith('/source/myFile.h')
+        expect(deleteFilesFn).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not touch disk when the user cancels the confirmation', async () => {
+        const { workspace, deleteFilesFn, removeCustomFileFn } = makeRemovableWorkspace(null, false)
+
+        await workspace.removeCustomFile(1, new Event('click'))
+
+        expect(deleteFilesFn).not.toHaveBeenCalled()
+        expect(removeCustomFileFn).not.toHaveBeenCalled()
+    })
+})
