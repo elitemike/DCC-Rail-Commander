@@ -26,6 +26,19 @@ export function hasDeviceHeader(text: string): boolean {
     return text.includes(DEVICE_HEADER_TAG)
 }
 
+const UPDATED_LINE_RE = /^\/\/[ \t]*Updated:[ \t]*.*$/m
+
+/**
+ * Replaces the dynamic "Updated" timestamp line with a static placeholder.
+ * Mirrors normalizeGeneratorTimestamp() in myAutomationParser.ts — this line
+ * is rewritten to "now" whenever the device header gets (re)injected, so a
+ * raw content comparison (e.g. the Preview Changes diff) needs to ignore it
+ * to avoid treating config.h as changed on every save.
+ */
+export function normalizeDeviceHeaderTimestamp(text: string): string {
+    return text.replace(UPDATED_LINE_RE, '//   Updated:  (unchanged)')
+}
+
 /** Builds the device comment block to embed in config.h */
 export function buildDeviceHeader(device: DetectedBoardInfo): string {
     return [

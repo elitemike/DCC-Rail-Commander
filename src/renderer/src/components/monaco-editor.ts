@@ -13,7 +13,7 @@ import { getSharedConfigEditorState, setSharedConfigEditorState } from '../utils
 import { ThemeService } from '../services/theme.service'
 
 /** Defines both editor themes once — cheap and idempotent, so it's fine to call from every attach() rather than tracking whether it already ran. */
-function defineEditorThemes(): void {
+export function defineEditorThemes(): void {
     // Based on vs-dark/vs with explicit squiggle colors — see the long
     // comment at the dccex-dark definition below for why these are needed.
     monaco.editor.defineTheme('dccex-dark', {

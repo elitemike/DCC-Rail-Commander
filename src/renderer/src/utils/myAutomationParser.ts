@@ -1005,6 +1005,19 @@ export function buildGeneratorHeader(filename: string, appVersion: string): stri
     ].join('\n')
 }
 
+const LAST_SAVED_LINE_RE = /^\/\/ Last saved: .*$/m
+
+/**
+ * Replaces the dynamic "Last saved" timestamp line with a static placeholder.
+ * The timestamp is rewritten to "now" on every syncAll() regardless of
+ * whether the user changed anything, so a raw content comparison (e.g. the
+ * Preview Changes diff) would otherwise treat every managed file as changed
+ * on every save. Normalizing it out lets comparisons reflect real edits.
+ */
+export function normalizeGeneratorTimestamp(text: string): string {
+    return text.replace(LAST_SAVED_LINE_RE, '// Last saved: (unchanged)')
+}
+
 // ─── Demo data ───────────────────────────────────────────────────────────────
 
 export function loadDemoRoster(): Roster[] {
