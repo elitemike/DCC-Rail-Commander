@@ -3,6 +3,7 @@ import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { AliasEntry, AliasTargetType } from '../../utils/myAutomationParser'
 import { inferAliasTypes } from '../../utils/myAutomationParser'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
     { text: 'Roster', value: 'Roster' },
@@ -14,10 +15,19 @@ const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
 
 export class AliasesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
     errorMessage = ''
     private lastValidAliases: AliasEntry[] = []
+
+    constructor() {
+        // Route through setTab() (rather than seeding activeTab directly) so a
+        // 'raw' default also gets rawSnapshot populated from state — otherwise
+        // the raw Monaco editor would open empty, since that only ever happens
+        // as a side effect of setTab('raw').
+        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
+    }
 
     readonly aliasTypeOptions = ALIAS_TYPE_OPTIONS
 

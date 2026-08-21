@@ -6,12 +6,14 @@ import { parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
 import { ToastService } from '../../services/toast.service'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 type RowTab = 'blocks' | 'text'
 
 export class RoutesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     private readonly toastService = resolve(ToastService)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across route selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
@@ -27,6 +29,14 @@ export class RoutesEditorCustomElement {
     private rowTab: Record<number, RowTab> = {}
 
     selectedId: number | null = null
+
+    constructor() {
+        // Route through setTab() (rather than seeding activeTab directly) so a
+        // 'raw' default also gets rawSnapshot populated from state — otherwise
+        // the raw Monaco editor would open empty, since that only ever happens
+        // as a side effect of setTab('raw').
+        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
+    }
 
     get defined(): DefinedObjects {
         return {

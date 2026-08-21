@@ -3,6 +3,7 @@ import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialo
 import { CheckBox } from '@syncfusion/ej2-buttons'
 import { ThemeService, type ThemeMode } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
+import { EditorDefaultViewService, type EditorViewMode } from '../../services/editor-default-view.service'
 
 export interface SettingsDialogModel {
     autoConnect: boolean
@@ -25,6 +26,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly $dialog = resolve(IDialogController)
     readonly theme = resolve(ThemeService)
     readonly blocklySounds = resolve(BlocklySoundsService)
+    readonly editorDefaultView = resolve(EditorDefaultViewService)
 
     private model!: SettingsDialogModel
 
@@ -101,6 +103,11 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     /** Applies (and persists) the theme immediately — ThemeService is the source of truth, so there's no local mirrored field to keep in sync. */
     setTheme(mode: ThemeMode): void {
         void this.theme.setMode(mode)
+    }
+
+    /** Applies (and persists) the default editor view immediately — EditorDefaultViewService is the source of truth, same as theme above. */
+    setDefaultEditorView(mode: EditorViewMode): void {
+        void this.editorDefaultView.setValue(mode)
     }
 
     close(): void {

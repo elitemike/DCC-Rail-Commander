@@ -1,6 +1,7 @@
 import { resolve } from 'aurelia'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
+import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 type ViewTab = 'visual' | 'raw'
 
@@ -15,8 +16,9 @@ type ViewTab = 'visual' | 'raw'
 export class AutomationEditorCustomElement {
     private readonly state = resolve(ConfigEditorState)
     private readonly installerState = resolve(InstallerState)
+    private readonly editorDefaultView = resolve(EditorDefaultViewService)
 
-    activeTab: ViewTab = 'visual'
+    activeTab: ViewTab = this.editorDefaultView.value
 
     /** Ref to the raw Monaco editor — used to flush pending debounced edits before Save. */
     rawEditor: { flush(): string } | null = null
