@@ -548,6 +548,23 @@ export class RosterEditorCustomElement {
     onCommentBlur(): void { this.commitBuffer() }
     onAliasBlur(): void { this.commitBuffer() }
 
+    /**
+     * Marks the Save button dirty as soon as the alias field's live value
+     * diverges from what's actually committed — not just on blur. Without
+     * this, clicking Save right after typing (without tabbing away first)
+     * finds the button still disabled: it's the click itself that would
+     * normally flush the buffer via commitBuffer(), but a disabled button
+     * never receives the click in the first place.
+     */
+    onAliasInput(): void {
+        if (this.editBuffer === null || this.editBufferIndex === null) return
+        const existing = this.state.roster[this.editBufferIndex]
+        const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress, 'Roster') : ''
+        if (this.aliasInput.trim() !== existingAliasName) {
+            this.state.hasChanges = true
+        }
+    }
+
     // ── Add / remove loco entries ─────────────────────────────────────────────
     addEntry(): void {
         if (this.editBuffer !== null) this.commitBuffer()
