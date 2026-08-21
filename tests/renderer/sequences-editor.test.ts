@@ -43,6 +43,26 @@ function makeEditor(sequences: { id: number; description?: string; body?: string
     return { editor, state, toastShow }
 }
 
+// ── setTab: raw snapshot seeding ─────────────────────────────────────────────
+// rawSnapshot is only ever populated as a side effect of setTab('raw') — the
+// constructor routes a 'raw' default-editor-view preference through this same
+// method (rather than seeding activeTab directly) specifically so the raw
+// Monaco editor doesn't open empty. This covers the seeding logic that
+// guarantee depends on.
+
+describe('SequencesEditorCustomElement.setTab', () => {
+    it('seeds rawSnapshot from state.sequencesRaw when switching to raw', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        editor.activeTab = 'visual'
+        ;(state as unknown as { sequencesRaw: string }).sequencesRaw = 'SEQUENCE(1)\nDONE'
+
+        editor.setTab('raw')
+
+        expect(editor.rawSnapshot).toBe('SEQUENCE(1)\nDONE')
+        expect(editor.activeTab).toBe('raw')
+    })
+})
+
 // ── makeAliasChangeHandler ────────────────────────────────────────────────────
 
 describe('SequencesEditorCustomElement.makeAliasChangeHandler', () => {

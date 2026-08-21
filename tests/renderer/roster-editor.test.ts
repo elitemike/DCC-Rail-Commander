@@ -48,6 +48,26 @@ function makeEditor() {
     return { editor, state, eaPublish, toastShow }
 }
 
+// ── setTab: raw snapshot seeding ─────────────────────────────────────────────
+// rawSnapshot/_rawText are only ever populated as a side effect of setTab('raw') —
+// the constructor routes a 'raw' default-editor-view preference through this same
+// method (rather than seeding activeTab directly) specifically so the raw Monaco
+// editor doesn't open empty. This covers the seeding logic that guarantee depends on.
+
+describe('RosterEditorCustomElement.setTab', () => {
+    it('seeds rawSnapshot and _rawText from state.rosterRaw when switching to raw', () => {
+        const { editor, state } = makeEditor()
+        editor.activeTab = 'visual'
+        ;(state as unknown as { rosterRaw: string }).rosterRaw = 'ROSTER(42, "Thomas", "LIGHT/HORN")'
+
+        editor.setTab('raw')
+
+        expect(editor.rawSnapshot).toBe('ROSTER(42, "Thomas", "LIGHT/HORN")')
+        expect(editor._rawText).toBe('ROSTER(42, "Thomas", "LIGHT/HORN")')
+        expect(editor.activeTab).toBe('raw')
+    })
+})
+
 // ── _processRawLeave: toast publishing ────────────────────────────────────────
 
 describe('RosterEditorCustomElement._processRawLeave', () => {
