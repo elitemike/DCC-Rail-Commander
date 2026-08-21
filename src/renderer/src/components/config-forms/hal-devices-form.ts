@@ -58,7 +58,7 @@ export class HalDevicesFormCustomElement {
     }
 
     get vpinsInUse(): number {
-        return this.editorState.vpinAllocations.reduce((sum, a) => sum + a.count, 0)
+        return this.editorState.vpinsInUse
     }
 
     get nextFreeVpin(): number {

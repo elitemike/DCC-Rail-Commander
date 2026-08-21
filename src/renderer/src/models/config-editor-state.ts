@@ -44,6 +44,7 @@ import {
 import {
     parseHalDevicesFromAutomation,
     computeVpinAllocations,
+    countDistinctVpins,
     findNextFreeVpin,
     findVpinConflicts as findVpinConflictsInAllocations,
     type HalDeviceInstance,
@@ -704,6 +705,17 @@ export class ConfigEditorState {
     /** First free VPin at/after 100 (0-99 conventionally reserved for physical MCU pins). */
     get nextFreeVpin(): number {
         return findNextFreeVpin(this.vpinAllocations)
+    }
+
+    /**
+     * Count of distinct VPins actually claimed by a turnout, sensor, or signal — deliberately
+     * excludes `kind: 'device'` allocations, which are a HAL board's whole *reserved* range
+     * whether or not each channel has anything wired to it yet (that range is already shown per
+     * device row as "Uses VPins X-Y"; counting it again here would report unused board capacity
+     * as if it were in use).
+     */
+    get vpinsInUse(): number {
+        return countDistinctVpins(this.vpinAllocations.filter(a => a.kind === 'consumer'))
     }
 
     /** Allocations overlapping the given range, excluding one by source (e.g. the row being edited). */
