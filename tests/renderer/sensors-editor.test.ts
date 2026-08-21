@@ -31,7 +31,9 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
     Object.assign(editor, {
         state,
         toastService: { show: toastShow },
+        editorDefaultView: { value: 'visual' as const },
         activeTab: 'visual' as const,
+        _userChoseTab: false,
         rawEditor: null,
         rawSnapshot: '',
         _idBeforeEdit: new Map<number, number>(),
@@ -41,8 +43,8 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
 }
 
 // ── setTab: raw snapshot seeding ─────────────────────────────────────────────
-// rawSnapshot is only ever populated as a side effect of setTab('raw') — the
-// constructor routes a 'raw' default-editor-view preference through this same
+// rawSnapshot is only ever populated as a side effect of setTab('raw') —
+// attached() routes a 'raw' default-editor-view preference through this same
 // method (rather than seeding activeTab directly) specifically so the raw
 // Monaco editor doesn't open empty. This covers the seeding logic that
 // guarantee depends on.
@@ -57,6 +59,43 @@ describe('SensorsEditorCustomElement.setTab', () => {
 
         expect(editor.rawSnapshot).toBe('SENSOR(10, 5)')
         expect(editor.activeTab).toBe('raw')
+    })
+
+    it('marks the tab as a user choice, so a later attached() visit will not override it', () => {
+        const { editor } = makeEditor([])
+
+        editor.setTab('visual')
+
+        expect((editor as unknown as { _userChoseTab: boolean })._userChoseTab).toBe(true)
+    })
+})
+
+// ── _applyDefaultViewIfUnset(): re-applies the default-editor-view preference ─
+// Aurelia's if.bind caches and reuses this same component instance across
+// hide/show cycles, so attached() calls this on every visit (not just
+// construction).
+
+describe('SensorsEditorCustomElement._applyDefaultViewIfUnset', () => {
+    it('applies the current default-editor-view preference when the user has not chosen a tab', () => {
+        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        editor.activeTab = 'visual'
+        ;(editor as unknown as { editorDefaultView: { value: string } }).editorDefaultView = { value: 'raw' }
+        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = 'SENSOR(10, 5)'
+
+        ;(editor as unknown as { _applyDefaultViewIfUnset(): void })._applyDefaultViewIfUnset()
+
+        expect(editor.activeTab).toBe('raw')
+        expect(editor.rawSnapshot).toBe('SENSOR(10, 5)')
+    })
+
+    it('does not override a tab the user already picked for this file', () => {
+        const { editor } = makeEditor([])
+        editor.setTab('visual')
+        ;(editor as unknown as { editorDefaultView: { value: string } }).editorDefaultView = { value: 'raw' }
+
+        ;(editor as unknown as { _applyDefaultViewIfUnset(): void })._applyDefaultViewIfUnset()
+
+        expect(editor.activeTab).toBe('visual')
     })
 })
 

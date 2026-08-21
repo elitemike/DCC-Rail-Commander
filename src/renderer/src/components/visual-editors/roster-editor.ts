@@ -45,16 +45,21 @@ export class RosterEditorCustomElement {
 
     // ── View tabs ─────────────────────────────────────────────────────────────
     activeTab: ViewTab = 'visual'
-
-    constructor() {
-        // Route through setTab() (rather than seeding activeTab directly) so a
-        // 'raw' default also gets rawSnapshot/_rawText populated from state —
-        // otherwise the raw Monaco editor would open empty, since that only
-        // ever happens as a side effect of setTab('raw').
-        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
-    }
+    /** Set once the user explicitly clicks Visual/Raw for this file. Until then, attached() re-applies the current default-editor-view preference on every visit — see attached() below. */
+    private _userChoseTab = false
 
     setTab(tab: ViewTab): void {
+        this._userChoseTab = true
+        this._applyTab(tab)
+    }
+
+    /** Applies the current default-editor-view preference, unless the user has already picked a tab for this file this session. Called from attached() on every visit — see there for why. */
+    private _applyDefaultViewIfUnset(): void {
+        if (!this._userChoseTab) this._applyTab(this.editorDefaultView.value)
+    }
+
+    /** setTab()'s actual work, factored out so attached() can (re)apply the default-editor-view preference without marking it as a user choice. */
+    private _applyTab(tab: ViewTab): void {
         if (tab === 'raw' && this.editBuffer !== null) {
             this.commitBuffer()
         }
@@ -91,9 +96,14 @@ export class RosterEditorCustomElement {
 
     attached(): void {
         // Aurelia's if.bind caches and reuses this same component instance across
-        // hide/show cycles by default — reset the guard set by the previous
-        // detaching() or the queued widget creation below would skip itself
-        // forever after the first time this editor is left and revisited.
+        // hide/show cycles — re-apply the current default-editor-view preference on
+        // every visit (not just the first) so a setting change made while this
+        // file's editor already existed still takes effect, as long as the user
+        // hasn't manually picked a tab for it this session.
+        this._applyDefaultViewIfUnset()
+        // Reset the guard set by the previous detaching() — or the queued widget
+        // creation below would skip itself forever after the first time this
+        // editor is left and revisited.
         this._detached = false
         // Refresh alias display in case aliases changed while this editor was inactive
         if (this.editBuffer !== null) {

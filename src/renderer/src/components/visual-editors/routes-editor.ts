@@ -15,6 +15,8 @@ export class RoutesEditorCustomElement {
     private readonly toastService = resolve(ToastService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
+    /** Set once the user explicitly clicks Visual/Raw for this file. Until then, attached() re-applies the current default-editor-view preference on every visit — see attached() below. */
+    private _userChoseTab = false
     rawEditor: any = null
     /** Ref to the mounted exrail-block-canvas — reused across route selections (see its reload() doc comment), so a selection change must explicitly push the new body into it. */
     blockCanvas: { reload(body: string): void; refreshSize(): void } | null = null
@@ -29,14 +31,6 @@ export class RoutesEditorCustomElement {
     private rowTab: Record<number, RowTab> = {}
 
     selectedId: number | null = null
-
-    constructor() {
-        // Route through setTab() (rather than seeding activeTab directly) so a
-        // 'raw' default also gets rawSnapshot populated from state — otherwise
-        // the raw Monaco editor would open empty, since that only ever happens
-        // as a side effect of setTab('raw').
-        if (this.editorDefaultView.value === 'raw') this.setTab('raw')
-    }
 
     get defined(): DefinedObjects {
         return {
@@ -159,6 +153,12 @@ export class RoutesEditorCustomElement {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
     attached(): void {
+        // Aurelia's if.bind caches and reuses this same component instance across
+        // hide/show cycles — re-apply the current default-editor-view preference on
+        // every visit (not just the first) so a setting change made while this
+        // file's editor already existed still takes effect, as long as the user
+        // hasn't manually picked a tab for it this session (_userChoseTab).
+        this._applyDefaultViewIfUnset()
         this._detached = false
         if (this.selectedId === null && this.state.routes.length > 0) {
             this.selectedId = this.state.routes[0].id
@@ -196,6 +196,17 @@ export class RoutesEditorCustomElement {
     }
 
     setTab(t: 'visual' | 'raw') {
+        this._userChoseTab = true
+        this._applyTab(t)
+    }
+
+    /** Applies the current default-editor-view preference, unless the user has already picked a tab for this file this session. Called from attached() on every visit — see there for why. */
+    private _applyDefaultViewIfUnset(): void {
+        if (!this._userChoseTab) this._applyTab(this.editorDefaultView.value)
+    }
+
+    /** setTab()'s actual work, factored out so attached() can (re)apply the default-editor-view preference without marking it as a user choice. */
+    private _applyTab(t: 'visual' | 'raw') {
         if (t === 'raw') this.rawSnapshot = this.state.routesRaw
         this.activeTab = t
         if (t === 'raw') setTimeout(() => { try { this.rawEditor?.editor?.layout?.() } catch { } }, 50)
