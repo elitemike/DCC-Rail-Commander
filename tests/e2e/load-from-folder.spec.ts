@@ -10,7 +10,7 @@
 
 import { test as base, expect, _electron as electron } from '@playwright/test'
 import type { Page, ElectronApplication } from '@playwright/test'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'fs'
 import { basename, join, resolve } from 'path'
 import { tmpdir } from 'os'
 
@@ -20,6 +20,7 @@ const { ELECTRON_RUN_AS_NODE: _ern, ...ELECTRON_ENV } = process.env
 import { buildGeneratorHeader } from '../../src/renderer/src/utils/myAutomationParser'
 import { buildDeviceHeader } from '../../src/renderer/src/utils/configHeaderParser'
 import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
+import { cleanupDir } from './fixtures'
 
 // ── Mock file content ─────────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ const test = base.extend<LoadFolderFixtures>({
         const { app, testDataDir } = await launchBareApp()
         await use(app)
         await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
+        cleanupDir(testDataDir)
     },
 
     homePage: async ({ electronApp }, use) => {
@@ -158,7 +159,7 @@ const test = base.extend<LoadFolderFixtures>({
     sourceFolder: async ({ }, use) => {
         const dir = mkdtempSync(join(tmpdir(), 'ex-source-'))
         await use(dir)
-        rmSync(dir, { recursive: true, force: true })
+        cleanupDir(dir)
     },
 })
 
@@ -832,6 +833,17 @@ test.describe('Load from Folder — internal sketch path setup', () => {
             // Workspace should load successfully
             await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
 
+            // binding() fires a fire-and-forget loadVersions(), which shells out to a
+            // real `git pull`/`git tag` with cwd = repoPath (inside reposDir) — see
+            // workspace.ts. It's deliberately not awaited so it can't block the view
+            // from rendering, but that leaves it racing this test's own cleanup: on a
+            // machine where process teardown/handle release is slow (e.g. an EDR agent
+            // hooking every new process), rmSync(reposDir) below could run while git.exe
+            // still has that directory as its current working directory, which Windows
+            // refuses to delete (EPERM). Wait for the "Loading…" indicator tied to
+            // versionBusy to clear so the subprocess has fully exited first.
+            await expect(homePage.getByText('Loading…')).not.toBeVisible({ timeout: 10_000 })
+
             // An internal _build/<id>/CommandStation-EX directory should have been created
             const buildDir = join(reposDir, '_build')
             expect(existsSync(buildDir)).toBe(true)
@@ -850,7 +862,7 @@ test.describe('Load from Folder — internal sketch path setup', () => {
             const savedConfig = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
             expect(savedConfig).toContain('#define MAIN_DRIVER_MOTOR_SHIELD')
         } finally {
-            rmSync(reposDir, { recursive: true, force: true })
+            cleanupDir(reposDir)
         }
     })
 

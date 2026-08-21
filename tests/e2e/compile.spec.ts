@@ -106,8 +106,15 @@ test.describe('Compile button', () => {
         // requires a 'clipboard-read' permission grant that Electron doesn't hand
         // out by default, so it can silently resolve empty even though the app's
         // own writeText() (which needs no such grant) already succeeded.
+        //
+        // The write itself crosses renderer → OS clipboard → this out-of-process
+        // read, and on Windows that hop can be measurably delayed by clipboard
+        // hooks (DLP/EDR agents, clipboard-history managers) that sit between
+        // SetClipboardData and other readers — so poll instead of reading once.
+        await expect
+            .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()), { timeout: 5_000 })
+            .toContain('Compiling for')
         const clipboardText = await electronApp.evaluate(({ clipboard }) => clipboard.readText())
-        expect(clipboardText).toContain('Compiling for')
         expect(clipboardText).toContain('✓ Compile successful!')
     })
 

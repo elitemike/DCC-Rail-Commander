@@ -22,6 +22,17 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 
+/**
+ * Windows can briefly hold a file handle open after Electron/PlatformIO subprocess
+ * exit (antivirus/EDR real-time scanning, search indexing, delayed file-watch
+ * flush), which turns a plain rmSync into an EPERM/EBUSY failure that has nothing
+ * to do with test correctness. maxRetries/retryDelay are Node's built-in retry
+ * for exactly this class of transient Windows error — see fs.rmSync docs.
+ */
+export function cleanupDir(dir: string): void {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+}
+
 // Strip ELECTRON_RUN_AS_NODE from the env passed to each Electron launch.
 // When this var is set (e.g. by the Claude Code shell), Electron runs as Node.js
 // and rejects Playwright's --remote-debugging-port=0 flag with "bad option".
@@ -383,7 +394,7 @@ export const test = base.extend<WorkspaceFixtures>({
         const { app, testDataDir } = await launchApp()
         await use(app)
         await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
+        cleanupDir(testDataDir)
     },
 
     workspacePage: async ({ electronApp }, use) => {
@@ -396,7 +407,7 @@ export const test = base.extend<WorkspaceFixtures>({
         const { app, testDataDir } = await launchCsb1StackedApp()
         await use(app)
         await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
+        cleanupDir(testDataDir)
     },
 
     csb1StackedPage: async ({ csb1StackedApp }, use) => {
@@ -409,7 +420,7 @@ export const test = base.extend<WorkspaceFixtures>({
         const { app, testDataDir } = await launchIOExpanderApp()
         await use(app)
         await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
+        cleanupDir(testDataDir)
     },
 
     ioExpanderPage: async ({ ioExpanderApp }, use) => {
@@ -422,7 +433,7 @@ export const test = base.extend<WorkspaceFixtures>({
         const { app, testDataDir } = await launchRosterGroupedApp()
         await use(app)
         await app.close()
-        rmSync(testDataDir, { recursive: true, force: true })
+        cleanupDir(testDataDir)
     },
 
     rosterGroupedPage: async ({ rosterGroupedApp }, use) => {

@@ -624,17 +624,23 @@ export class Workspace {
         // Ensure latest parsed state (roster headers, turnout headers) is written
         // back into configFiles before we write to disk.
         this.configEditorState.syncAll()
+        // Every file write is independent, so run them concurrently rather than
+        // one sequential IPC round-trip at a time — on a slower or antivirus-
+        // contended disk the serial version could take long enough that the
+        // dirty indicator visibly lagged behind the save actually completing.
+        const writes: Promise<void>[] = []
         for (const f of this.state.configFiles) {
             if (this.state.scratchPath) {
-                await this.files.writeFile(`${this.state.scratchPath}/${f.name}`, f.content)
+                writes.push(this.files.writeFile(`${this.state.scratchPath}/${f.name}`, f.content))
             }
             // When loaded from a folder that lacks a .ino, the internal scratch path
             // is used for compilation but we must also write back to the user's
             // original folder so their changes are persisted there.
             if (this.state.sourceFolder) {
-                await this.files.writeFile(`${this.state.sourceFolder}/${f.name}`, f.content)
+                writes.push(this.files.writeFile(`${this.state.sourceFolder}/${f.name}`, f.content))
             }
         }
+        await Promise.all(writes)
         this.configEditorState.clearChanges()
         await this.updateSavedConfig()
     }
