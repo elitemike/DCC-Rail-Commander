@@ -247,9 +247,44 @@
                     </div>
                 </div>
 
-                <div repeat.for="file of state.configFiles" click.trigger="setActiveFile($index)"
+                <!-- Device Settings — tree parent (General + WiFi / Accessories / Startup) -->
+                <div click.trigger="toggleDeviceSettings()"
+                    class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5">
+                    <svg class="w-3 h-3 shrink-0 transition-transform" class.bind="deviceSettingsExpanded ? 'rotate-90' : ''"
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span class="flex-1">Device Settings</span>
+                </div>
+                <div if.bind="deviceSettingsExpanded" class="flex flex-col pl-4">
+                    <div click.trigger="selectGeneralWifi()" data-testid="nav-general-wifi"
+                        class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
+                        class.bind="activeSection === 'config' && activeFileIndex === generalWifiFileIndex
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
+                        <span class="truncate">General + WiFi</span>
+                    </div>
+                    <div click.trigger="selectAccessoriesSection()" data-testid="nav-accessories"
+                        class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
+                        class.bind="activeSection === 'accessories'
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
+                        <span class="truncate">Accessories</span>
+                    </div>
+                    <div click.trigger="selectStartup()" data-testid="nav-startup"
+                        class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
+                        class.bind="activeSection === 'config' && activeFileIndex === startupFileIndex
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
+                        <span class="truncate">Startup</span>
+                    </div>
+                </div>
+
+                <div repeat.for="file of state.configFiles"
+                    if.bind="file.name !== 'config.h' && file.name !== 'myConfig.h' && file.name !== 'myStartup.h'"
+                    click.trigger="setActiveFile($index)"
                     class="group flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
-                    class.bind="activeFileIndex === $index
+                    class.bind="activeSection === 'config' && activeFileIndex === $index
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
                     <svg class="w-3.5 h-3.5 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -272,7 +307,10 @@
             <div if.bind="activeSection === 'throttle' && showThrottleSection" class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
                 <throttle-panel class="flex flex-col flex-1"></throttle-panel>
             </div>
-            <div if.bind="!(activeSection === 'throttle' && showThrottleSection)" class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
+            <div if.bind="activeSection === 'accessories'" class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
+                <accessories-editor component.ref="accessoriesPanel" class="flex flex-col flex-1"></accessories-editor>
+            </div>
+            <div if.bind="!(activeSection === 'throttle' && showThrottleSection) && activeSection !== 'accessories'" class="flex flex-col flex-1 overflow-hidden" style="min-height:0;">
                 <file-editor-panel component.ref="filePanel" active-file-index.bind="activeFileIndex"
                     class="flex flex-col flex-1"></file-editor-panel>
             </div>

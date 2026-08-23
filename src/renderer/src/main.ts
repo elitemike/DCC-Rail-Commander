@@ -32,6 +32,8 @@ import { RosterEditorCustomElement } from './components/visual-editors/roster-ed
 import { TurnoutEditorCustomElement } from './components/visual-editors/turnout-editor'
 import { ConfigHEditorCustomElement } from './components/visual-editors/config-h-editor'
 import { AutomationEditorCustomElement } from './components/visual-editors/automation-editor'
+import { StartupEditorCustomElement } from './components/visual-editors/startup-editor'
+import { AccessoriesEditorCustomElement } from './components/visual-editors/accessories-editor'
 import { FileEditorPanelCustomElement } from './components/visual-editors/file-editor-panel'
 import { CompileProgressCustomElement } from './components/compile-progress'
 import { CompileOutputTerminalCustomElement } from './components/compile-output-terminal'
@@ -46,6 +48,7 @@ import { ExrailBlockCanvasCustomElement } from './components/visual-editors/exra
 import { SerialMonitorCustomElement } from './components/serial-monitor'
 import { CommandstationConfigFormCustomElement } from './components/config-forms/commandstation-config-form'
 import { TrackManagerFormCustomElement } from './components/config-forms/track-manager-form'
+import { TurnoutDefaultsSummaryCustomElement } from './components/config-forms/turnout-defaults-summary'
 import { HalDevicesFormCustomElement } from './components/config-forms/hal-devices-form'
 import { IOExpanderConfigFormCustomElement } from './components/config-forms/ioexpander-config-form'
 import { ThrottlePanelCustomElement } from './components/throttle/throttle-panel'
@@ -98,6 +101,8 @@ new Aurelia()
         TurnoutEditorCustomElement,
         ConfigHEditorCustomElement,
         AutomationEditorCustomElement,
+        StartupEditorCustomElement,
+        AccessoriesEditorCustomElement,
         FileEditorPanelCustomElement,
         SensorsEditorCustomElement,
         SignalsEditorCustomElement,
@@ -110,6 +115,7 @@ new Aurelia()
         SerialMonitorCustomElement,
         CommandstationConfigFormCustomElement,
         TrackManagerFormCustomElement,
+        TurnoutDefaultsSummaryCustomElement,
         HalDevicesFormCustomElement,
         IOExpanderConfigFormCustomElement,
         ThrottlePanelCustomElement,

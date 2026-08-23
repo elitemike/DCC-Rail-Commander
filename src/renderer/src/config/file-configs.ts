@@ -497,7 +497,7 @@ const EXRAIL_BODY_COMPLETIONS: CompletionSnippet[] = [
             title: 'HAL',
             description: 'Declares a HAL device — an I2C GPIO/servo expander or similar accessory board — starting at the given VPin. Behind an I2C multiplexer, replace the address with `{I2CMux_n, SubBus_n, address}`.',
             example: 'HAL(PCA9555, 164, 16, 0x20)\nHAL(PCA9555, 180, 16, {I2CMux_1, SubBus_2, 0x20})',
-            note: 'The Accessories tab on Device Settings manages this for supported boards — hand-edit here only for devices outside that catalog.',
+            note: 'The Accessories row under Device Settings manages this for supported boards — hand-edit here only for devices outside that catalog.',
         },
     },
     {
@@ -554,7 +554,7 @@ const EXRAIL_BLOCK_COMPLETIONS: CompletionSnippet[] = [
 export const FILE_CONFIGS: Record<string, FileConfig> = {
 
     'config.h': {
-        friendlyName: 'Device Settings',
+        friendlyName: 'General + WiFi',
         completions: [],
     },
 
@@ -679,6 +679,14 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
     'myAutomation.h': {
         friendlyName: 'Automation',
         completions: [...EXRAIL_BLOCK_COMPLETIONS, ...EXRAIL_BODY_COMPLETIONS],
+    },
+
+    'myStartup.h': {
+        friendlyName: 'Startup',
+        // Body-only completions (THROW/CLOSE/POWERON/SETLOCO/etc.) — no block
+        // starters like ROUTE/SEQUENCE/AUTOMATION, since this file only ever
+        // contains AUTOSTART...DONE blocks, never those.
+        completions: [...EXRAIL_BODY_COMPLETIONS],
     },
 }
 

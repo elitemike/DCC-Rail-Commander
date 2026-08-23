@@ -28,7 +28,9 @@ test.describe('Compile button', () => {
     })
 
     test('Device Settings no longer shows a version field', async ({ workspacePage }) => {
-        await workspacePage.getByText('Device Settings', { exact: true }).first().click()
+        // "Device Settings" is a tree parent (expanded by default) — its
+        // "General + WiFi" child row is the one that opens config-h-editor.
+        await workspacePage.getByText('General + WiFi', { exact: true }).first().click()
         await expect(workspacePage.locator('config-h-editor')).toBeVisible()
 
         await expect(workspacePage.locator('commandstation-config-form').getByText('Version', { exact: true })).not.toBeVisible()

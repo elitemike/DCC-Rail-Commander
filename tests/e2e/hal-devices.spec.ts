@@ -13,21 +13,19 @@
 
 import { test, expect } from './fixtures'
 
-async function openDeviceSettings(page: import('@playwright/test').Page) {
-    await page.getByText('Device Settings', { exact: true }).first().click()
-    await expect(page.locator('config-h-editor')).toBeVisible()
-}
-
+// "Accessories" is a Device Settings tree child row (expanded by default —
+// see workspace.ts's deviceSettingsExpanded), reachable directly without
+// visiting General + WiFi first.
 async function openAccessoriesTab(page: import('@playwright/test').Page) {
-    await page.locator('commandstation-config-form').getByRole('button', { name: 'Accessories' }).click()
+    await page.getByText('Accessories', { exact: true }).first().click()
     await expect(page.locator('hal-devices-form')).toBeVisible()
 }
 
+// automation-editor is always-raw now (no Visual/Raw tab bar) — HAL Devices
+// content still physically lands in myAutomation.h's managed block.
 async function openAutomationRaw(page: import('@playwright/test').Page) {
     await page.getByText('Automation', { exact: true }).first().click()
     await expect(page.locator('automation-editor')).toBeVisible()
-    await page.waitForTimeout(300)
-    await page.locator('automation-editor').getByRole('button', { name: 'Raw' }).click()
     await expect(page.locator('automation-editor div.monaco-editor')).toBeVisible()
     await page.waitForTimeout(300)
 }
@@ -36,7 +34,6 @@ test.describe('Accessories — HAL Devices', () => {
     test('adding a multiplexer and a block sensor behind it generates the correct HAL() lines', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
 
         // Add the multiplexer first, set its address to 0x71 (avoids the
@@ -102,7 +99,6 @@ test.describe('Accessories — free-entry I2C address field', () => {
     test('accepts a hex address, generates it in the HAL() line, and reverts an out-of-range entry', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         const deviceRow = await addPca9685(page)
 
@@ -118,7 +114,6 @@ test.describe('Accessories — free-entry I2C address field', () => {
         await expect(page.locator('automation-editor div.monaco-editor')).toContainText('HAL(PCA9685, 100, 16, 0x41)')
 
         // Out-of-range entry (PCA9685 range is 0x40-0x7f) is rejected and reverts to the last valid value.
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         const deviceRowAgain = page.locator('hal-devices-form [data-board-id="pca9685_sh"]')
         const addressFieldAgain = deviceRowAgain.locator('[data-field="address"]')
@@ -132,7 +127,6 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
     test('a turnout using a HAL board\'s own channel does not trigger a false VPin overlap warning', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         const deviceRow = await addPca9685(page)
         await expect(deviceRow.locator('[data-field="vpinStart"]')).toHaveValue('100')
@@ -142,7 +136,6 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
 
         // Back on Accessories, the board's own row must show no conflict warning —
         // the new turnout is legitimately consuming one of its own channels.
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         await expect(
             page.locator('hal-devices-form [data-board-id="pca9685_sh"]', { hasText: 'VPin range overlaps' }),
@@ -152,7 +145,6 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
     test('a turnout on a HAL board channel shows the board (not Direct MCU pin) as soon as it is added', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         await addPca9685(page)
 
@@ -168,7 +160,6 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
     test('switching to another turnout and back still shows the board on the pin picker', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         await addPca9685(page)
 

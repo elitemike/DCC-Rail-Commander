@@ -34,12 +34,14 @@ async function switchToVisual(page: import('@playwright/test').Page) {
     await expect(page.locator('nav[aria-label="Turnouts"]')).toBeVisible()
 }
 
-async function openAutomationEditor(page: import('@playwright/test').Page) {
-    await page.getByText('Automation', { exact: true }).first().click()
-    // automation-editor defaults to its Visual (TrackManager) tab; the Raw
-    // Monaco view only mounts after switching tabs.
-    await page.getByRole('button', { name: 'Raw' }).click()
-    await expect(page.locator('file-editor-panel div.monaco-editor')).toBeVisible()
+// Turnout defaultState's generated AUTOSTART THROW block now lives in
+// myStartup.h (see startup-editor), not myAutomation.h.
+async function openStartupRawEditor(page: import('@playwright/test').Page) {
+    await page.getByText('Startup', { exact: true }).first().click()
+    await expect(page.locator('startup-editor')).toBeVisible()
+    await page.waitForTimeout(300)
+    await page.locator('startup-editor').getByRole('button', { name: 'Raw' }).click()
+    await expect(page.locator('startup-editor div.monaco-editor')).toBeVisible()
     await page.waitForTimeout(400)
 }
 
@@ -140,7 +142,7 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('SERVO_TURNOUT(')
     })
 
-    test('setting default state to THROWN generates AUTOSTART THROW in myAutomation.h', async ({ workspacePage: page }) => {
+    test('setting default state to THROWN generates AUTOSTART THROW in myStartup.h', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
@@ -149,13 +151,13 @@ test.describe('Turnout Editor', () => {
             .locator('label', { hasText: /Default\s+State/i }).locator('..').locator('select')
         await defaultStateSelect.selectOption('THROWN')
 
-        await openAutomationEditor(page)
+        await openStartupRawEditor(page)
 
-        await expect(page.locator('file-editor-panel div.monaco-editor')).toContainText('AUTOSTART')
-        await expect(page.locator('file-editor-panel div.monaco-editor')).toContainText('THROW(200)')
+        await expect(page.locator('startup-editor div.monaco-editor')).toContainText('AUTOSTART')
+        await expect(page.locator('startup-editor div.monaco-editor')).toContainText('THROW(200)')
     })
 
-    test('setting default state back to CLOSED removes THROW from myAutomation.h', async ({ workspacePage: page }) => {
+    test('setting default state back to CLOSED removes THROW from myStartup.h', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
@@ -165,9 +167,9 @@ test.describe('Turnout Editor', () => {
         await defaultStateSelect.selectOption('THROWN')
         await defaultStateSelect.selectOption('CLOSED')
 
-        await openAutomationEditor(page)
+        await openStartupRawEditor(page)
 
-        await expect(page.locator('file-editor-panel div.monaco-editor')).not.toContainText('THROW(200)')
+        await expect(page.locator('startup-editor div.monaco-editor')).not.toContainText('THROW(200)')
     })
 
     test('removing entry via visual disappears from raw tab', async ({ workspacePage: page }) => {
