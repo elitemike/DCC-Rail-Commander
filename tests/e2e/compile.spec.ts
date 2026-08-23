@@ -38,7 +38,7 @@ test.describe('Compile button', () => {
 
     test('compiling with the version selector present still succeeds', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
     })
 
     test('clicking Compile shows Compiling... then ✓ Success and a success toast', async ({ workspacePage }) => {
@@ -47,7 +47,7 @@ test.describe('Compile button', () => {
         await expect(workspacePage.getByRole('button', { name: 'Compiling...' })).toBeVisible()
         await expect(workspacePage.getByRole('button', { name: 'Compiling...' })).toBeDisabled()
 
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
         await expect(workspacePage.getByRole('button', { name: 'Compile' })).toBeEnabled()
 
         await expect(workspacePage.locator('.e-toast-success')).toBeVisible({ timeout: 5_000 })
@@ -62,8 +62,8 @@ test.describe('Compile button', () => {
         await expect(workspacePage.locator('compile-progress')).toBeVisible()
         await expect(workspacePage.locator('.rr-wrapper')).toBeVisible()
 
-        // Wait for mock compile to finish
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        // Wait for the real compile to finish
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         // If.bind removes the element from the DOM when isCompiling returns to false
         await expect(workspacePage.locator('compile-progress')).not.toBeVisible()
@@ -72,7 +72,7 @@ test.describe('Compile button', () => {
 
     test('compile output panel shows log text', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         // xterm's accessibility tree only renders the current scroll viewport, not the
         // full buffer — a real compile streams far more lines than the terminal can show
@@ -86,7 +86,7 @@ test.describe('Compile button', () => {
 
     test('Clear button removes the compile output panel content', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         await workspacePage.getByRole('button', { name: /Clear/ }).click()
 
@@ -98,7 +98,7 @@ test.describe('Compile button', () => {
 
     test('Copy button copies the compile output to the clipboard', async ({ workspacePage, electronApp }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         await workspacePage.locator('button[title="Copy output to clipboard"]').click()
         await expect(workspacePage.locator('.e-toast-success').last()).toContainText('Copied', { timeout: 5_000 })
@@ -126,20 +126,20 @@ test.describe('Compile button', () => {
 
     test('Save button is visible and enabled next to Copy and Clear', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         await expect(workspacePage.locator('button[title="Save output to a file"]')).toBeEnabled()
     })
 
     test('a second compile after clearing also succeeds', async ({ workspacePage }) => {
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
 
         await workspacePage.getByRole('button', { name: /Clear/ }).click()
         await expect(workspacePage.getByText('✓ Success')).not.toBeVisible()
 
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
     })
 
     test('compile succeeds with invalid lines present in roster raw', async ({ workspacePage }) => {
@@ -155,7 +155,7 @@ test.describe('Compile button', () => {
         await workspacePage.waitForTimeout(300)
 
         await workspacePage.getByRole('button', { name: 'Compile' }).click()
-        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 10_000 })
+        await expect(workspacePage.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
     })
 })
 
