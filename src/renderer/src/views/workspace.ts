@@ -76,6 +76,10 @@ export class Workspace {
         return this.state.configFiles.findIndex(f => f.name === 'myStartup.h')
     }
 
+    get automationFileIndex(): number {
+        return this.state.configFiles.findIndex(f => f.name === 'myAutomation.h')
+    }
+
     selectGeneralWifi(): void {
         const idx = this.generalWifiFileIndex
         if (idx !== -1) this.setActiveFile(idx)
@@ -89,6 +93,13 @@ export class Workspace {
     selectStartup(): void {
         this.configEditorState.ensureStartupFileExists()
         const idx = this.startupFileIndex
+        if (idx !== -1) this.setActiveFile(idx)
+    }
+
+    /** "Advanced" — myAutomation.h. Not labeled "Automation": that name collides
+     *  with EXRAIL's own AUTOMATION() blocks (a different, user-visible concept). */
+    selectAdvanced(): void {
+        const idx = this.automationFileIndex
         if (idx !== -1) this.setActiveFile(idx)
     }
 

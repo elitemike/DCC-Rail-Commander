@@ -189,14 +189,21 @@ Two singletons (Aurelia DI, resolved via `resolve(...)`) hold nearly all cross-v
 ### Device Settings nav (left sidebar tree)
 
 "Device Settings" is a tree parent in `workspace.html`'s left nav (defaults expanded —
-`workspace.ts`'s `deviceSettingsExpanded`), with three children: **General + WiFi** (`config.h`/`myConfig.h`,
+`workspace.ts`'s `deviceSettingsExpanded`), with four children: **General + WiFi** (`config.h`/`myConfig.h`,
 via `config-h-editor`), **Accessories** (HAL devices — `accessories-editor`, Visual = `hal-devices-form`, Raw =
 just the HAL Devices block slice via `generatedHalDevicesContent`/`syncHalDevices()`, not the whole
-`myAutomation.h` file), and **Startup** (`myStartup.h`, via `startup-editor`). General + WiFi and Startup are
-real `configFiles` entries and route through `activeFileIndex` + `file-editor-panel`'s filename-keyed dispatch
-like any other file; Accessories has no `configFiles` entry of its own (it's a slice of `myAutomation.h`) and is
-mounted directly in `workspace.html` via a third `activeSection === 'accessories'` branch, sibling to
-`file-editor-panel` — see `workspace.ts`'s `selectGeneralWifi()`/`selectAccessoriesSection()`/`selectStartup()`.
+`myAutomation.h` file), **Startup** (`myStartup.h`, via `startup-editor`), and **Advanced** (`myAutomation.h`,
+via `automation-editor`, always-raw). General + WiFi, Startup, and Advanced are real `configFiles` entries and
+route through `activeFileIndex` + `file-editor-panel`'s filename-keyed dispatch like any other file; Accessories
+has no `configFiles` entry of its own (it's a slice of `myAutomation.h`) and is mounted directly in
+`workspace.html` via a third `activeSection === 'accessories'` branch, sibling to `file-editor-panel` — see
+`workspace.ts`'s `selectGeneralWifi()`/`selectAccessoriesSection()`/`selectStartup()`/`selectAdvanced()`.
+**Advanced is deliberately not labeled "Automation"** (`file-configs.ts`'s `friendlyName` for `myAutomation.h`
+is `'Advanced'`, not `'Automation'`) — that name would collide with EXRAIL's own `AUTOMATION()` blocks, a
+different, user-facing concept. `automation-editor.html` also carries an inline note that this file just links
+the other config files together and shouldn't normally be hand-edited; custom EXRAIL code belongs in a new,
+purpose-named file instead (created via the Configuration list's + button), which gets `#include`d automatically
+— see `automationPreview` in `config-editor-state.ts`.
 
 ### Syncfusion controls
 

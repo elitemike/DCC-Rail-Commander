@@ -968,6 +968,16 @@ export class ConfigEditorState {
                 this.generatedTurnoutDefaultsContent = legacyTurnoutDefaults
                 startupContent = this.startupPreview
                 files.push({ name: 'myStartup.h', content: startupContent })
+                // preservedAutomationContent (set above, from the original
+                // automationContent) is already stripped of these blocks, but
+                // the myAutomation.h entry's stored content isn't rewritten
+                // until the next full sync — without this, the Advanced editor
+                // would keep showing the pre-split file (still containing the
+                // AUTOSTART blocks verbatim) side by side with the new Startup
+                // editor showing the same blocks, until something else (e.g. a
+                // Save) triggers _ensureAutomationFile().
+                const af = files.find(f => f.name === 'myAutomation.h')
+                if (af) af.content = this.automationPreview
                 migrated = true
             }
         }

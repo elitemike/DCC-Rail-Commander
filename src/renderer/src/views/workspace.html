@@ -278,10 +278,18 @@
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
                         <span class="truncate">Startup</span>
                     </div>
+                    <div click.trigger="selectAdvanced()" data-testid="nav-advanced"
+                        title="myAutomation.h — links your other config files together"
+                        class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
+                        class.bind="activeSection === 'config' && activeFileIndex === automationFileIndex
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
+                        <span class="truncate">Advanced</span>
+                    </div>
                 </div>
 
                 <div repeat.for="file of state.configFiles"
-                    if.bind="file.name !== 'config.h' && file.name !== 'myConfig.h' && file.name !== 'myStartup.h'"
+                    if.bind="file.name !== 'config.h' && file.name !== 'myConfig.h' && file.name !== 'myStartup.h' && file.name !== 'myAutomation.h'"
                     click.trigger="setActiveFile($index)"
                     class="group flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
                     class.bind="activeSection === 'config' && activeFileIndex === $index

@@ -42,9 +42,13 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
         generatedTrackManagerContent: '',
         generatedTurnoutDefaultsContent: '',
         generatedHalDevicesContent: '',
+        preservedAutomationContent: '',
         _syncGeneratedTurnoutDefaultsContent: vi.fn(),
+        isCustomFile: ConfigEditorState.prototype.isCustomFile,
     }
     Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
+    Object.defineProperty(state, 'automationPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'automationPreview')!)
+    Object.defineProperty(state, 'customFileNames', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'customFileNames')!)
     return state
 }
 
@@ -107,6 +111,18 @@ describe('ConfigEditorState — myStartup.h', () => {
         expect((state as any).preservedAutomationContent).toContain(customCode)
         expect((state as any).preservedAutomationContent).not.toContain('SET_TRACK')
         expect((state as any).preservedAutomationContent).not.toContain('THROW(5)')
+
+        // Regression: the myAutomation.h *file entry itself* (what the Advanced
+        // raw editor actually displays) must be rewritten immediately too — not
+        // just the in-memory preservedAutomationContent — otherwise the editor
+        // keeps showing the pre-split AUTOSTART blocks verbatim right alongside
+        // the new Startup editor showing the same blocks, until some unrelated
+        // action (a Save, or editing another form) happens to trigger a resync.
+        const automationFile = state.installerState.configFiles.find(f => f.name === 'myAutomation.h')
+        expect(automationFile!.content).toContain(customCode)
+        expect(automationFile!.content).not.toContain('SET_TRACK')
+        expect(automationFile!.content).not.toContain('THROW(5)')
+        expect(automationFile!.content).toContain('#include "myStartup.h"')
 
         // The split must be visible/reviewable in the next Save diff.
         expect((state as any).hasChanges).toBe(true)

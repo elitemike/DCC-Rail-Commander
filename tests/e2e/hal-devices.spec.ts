@@ -22,9 +22,11 @@ async function openAccessoriesTab(page: import('@playwright/test').Page) {
 }
 
 // automation-editor is always-raw now (no Visual/Raw tab bar) — HAL Devices
-// content still physically lands in myAutomation.h's managed block.
+// content still physically lands in myAutomation.h's managed block. It's the
+// "Advanced" row under Device Settings — not labeled "Automation", which
+// would collide with EXRAIL's own AUTOMATION() blocks.
 async function openAutomationRaw(page: import('@playwright/test').Page) {
-    await page.getByText('Automation', { exact: true }).first().click()
+    await page.getByText('Advanced', { exact: true }).first().click()
     await expect(page.locator('automation-editor')).toBeVisible()
     await expect(page.locator('automation-editor div.monaco-editor')).toBeVisible()
     await page.waitForTimeout(300)

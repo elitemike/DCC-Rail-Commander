@@ -677,7 +677,10 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
     },
 
     'myAutomation.h': {
-        friendlyName: 'Automation',
+        // Not "Automation" — that name collides with EXRAIL's own AUTOMATION()
+        // blocks. This file just links the other config files together; see
+        // the Device Settings > Advanced row.
+        friendlyName: 'Advanced',
         completions: [...EXRAIL_BLOCK_COMPLETIONS, ...EXRAIL_BODY_COMPLETIONS],
     },
 
