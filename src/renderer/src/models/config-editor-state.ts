@@ -142,6 +142,28 @@ export function extractAutomationCustomContent(content: string): string {
 }
 
 /**
+ * Recovers a pre-tag legacy TrackManager AUTOSTART block — a bare
+ * AUTOSTART...DONE block with no MANAGED_TRACK_MANAGER_TAG wrapper, from
+ * before the tag system existed — so genuinely old projects still migrate
+ * their track config into myStartup.h instead of losing it. Mirrors the
+ * detection predicate in extractAutomationCustomContent()'s legacy-strip
+ * regex above: only matches if every non-blank/non-comment line is a pure
+ * TrackManager command.
+ */
+function extractLegacyUntaggedTrackManagerBlock(content: string): string {
+    const match = content.match(/AUTOSTART\s*\n([\s\S]*?)\nDONE\s*/)
+    if (!match) return ''
+    const bodyLines = match[1].split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.startsWith('//'))
+    if (bodyLines.length === 0) return ''
+    const isLegacyTrackManager = bodyLines.every(l =>
+        /^SET_TRACK\([A-D],/.test(l) || /^SET_POWER\([A-D],/.test(l) || l === 'POWERON',
+    )
+    return isLegacyTrackManager ? ['AUTOSTART', ...bodyLines, 'DONE'].join('\n') : ''
+}
+
+/**
  * Extracts the literal body of a managed block (e.g. the TrackManager
  * AUTOSTART/DONE block) from myAutomation.h content, stripping the two fixed
  * boilerplate comment lines that `automationPreview` re-adds itself. Returns
@@ -723,13 +745,13 @@ export class ConfigEditorState {
         return findVpinConflictsInAllocations(this.vpinAllocations, start, count, excludeSource, onlyKind)
     }
 
-    // ── Generated track manager AUTOSTART section ────────────────────────────
+    // ── Generated track manager AUTOSTART section (lives in myStartup.h) ─────
     generatedTrackManagerContent = ''
 
-    // ── Generated turnout defaults AUTOSTART section ─────────────────────────
+    // ── Generated turnout defaults AUTOSTART section (lives in myStartup.h) ──
     generatedTurnoutDefaultsContent = ''
 
-    /** Names of the four built-in managed files — never auto-included */
+    /** Names of the built-in managed files — never auto-included */
     private static readonly BUILTIN = new Set([
         'config.h',
         'myRoster.h',
@@ -740,6 +762,7 @@ export class ConfigEditorState {
         'mySequences.h',
         'myAliases.h',
         'myAutomation.h',
+        'myStartup.h',
     ])
 
     /** Returns true if this filename was created by the user (not a built-in) */
@@ -754,11 +777,44 @@ export class ConfigEditorState {
             .filter(n => this.isCustomFile(n))
     }
 
+    // ── Generated myStartup.h preview ────────────────────────────────────────
+    /**
+     * myStartup.h holds the TrackManager (track power/mode) and Turnout
+     * Defaults managed blocks — content that was previously part of
+     * myAutomation.h. It has no free-form/preserved section of its own: a
+     * direct raw edit to it is only re-absorbed via _syncToInstallerState()'s
+     * re-extraction (see the ordering-invariant note on that method), exactly
+     * mirroring how myAutomation.h's own preserved content works.
+     */
+    get startupPreview(): string {
+        const sections: string[] = []
+
+        if (this.generatedTrackManagerContent.trim()) {
+            sections.push(MANAGED_TRACK_MANAGER_TAG)
+            sections.push('// This TrackManager block is managed by EX-Commander.')
+            sections.push('// Do not edit inside this block manually.')
+            sections.push(this.generatedTrackManagerContent.trim())
+            sections.push(MANAGED_TRACK_MANAGER_TAG)
+        }
+
+        if (this.generatedTurnoutDefaultsContent.trim()) {
+            if (sections.length > 0) sections.push('')
+            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
+            sections.push('// This turnout-defaults block is managed by EX-Commander.')
+            sections.push('// Do not edit inside this block manually.')
+            sections.push(this.generatedTurnoutDefaultsContent.trim())
+            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
+        }
+
+        return sections.join('\n')
+    }
+
     // ── Generated myAutomation.h preview ─────────────────────────────────────
     get automationPreview(): string {
         const includes: string[] = []
         if (this.roster.length > 0) includes.push('#include "myRoster.h"')
         if (this.turnouts.length > 0) includes.push('#include "myTurnouts.h"')
+        if (this.startupPreview.trim()) includes.push('#include "myStartup.h"')
         // Built-in managed files (besides roster/turnouts) should be included
         // when they contain any non-comment user content.
         const hasUserContent = (name: string): boolean => {
@@ -791,24 +847,6 @@ export class ConfigEditorState {
             sections.push('// Do not edit inside this block manually.')
             sections.push(this.generatedHalDevicesContent.trim())
             sections.push(MANAGED_HAL_DEVICES_TAG)
-        }
-
-        if (this.generatedTrackManagerContent.trim()) {
-            if (sections.length > 0) sections.push('')
-            sections.push(MANAGED_TRACK_MANAGER_TAG)
-            sections.push('// This TrackManager block is managed by EX-Commander.')
-            sections.push('// Do not edit inside this block manually.')
-            sections.push(this.generatedTrackManagerContent.trim())
-            sections.push(MANAGED_TRACK_MANAGER_TAG)
-        }
-
-        if (this.generatedTurnoutDefaultsContent.trim()) {
-            if (sections.length > 0) sections.push('')
-            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
-            sections.push('// This turnout-defaults block is managed by EX-Commander.')
-            sections.push('// Do not edit inside this block manually.')
-            sections.push(this.generatedTurnoutDefaultsContent.trim())
-            sections.push(MANAGED_TURNOUT_DEFAULTS_TAG)
         }
 
         if (this.preservedAutomationContent.trim()) {
@@ -859,8 +897,10 @@ export class ConfigEditorState {
         this.preservedAutomationContent = ''
         this.generatedHalDevicesContent = ''
         this.generatedTrackManagerContent = ''
+        this.generatedTurnoutDefaultsContent = ''
 
         let automationContent = ''
+        let startupContent = ''
         let aliasesContent: string | null = null
         for (const f of files) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
@@ -887,13 +927,17 @@ export class ConfigEditorState {
                 // Strip managed includes block; preserve the user's custom code
                 // so it survives every subsequent auto-regeneration.
                 this.preservedAutomationContent = extractAutomationCustomContent(f.content)
-                // Rehydrate the TrackManager managed-block state from the file
-                // itself — otherwise it stays empty until the TrackManager form
-                // is visited, and the block would be dropped on next save.
-                this.generatedTrackManagerContent = extractManagedBlockBody(f.content, MANAGED_TRACK_MANAGER_TAG)
                 // Rehydrate the HAL Devices managed-block state the same way —
-                // otherwise it stays empty until the Accessories tab is visited.
+                // otherwise it stays empty until the Accessories row is visited.
                 this.generatedHalDevicesContent = extractManagedBlockBody(f.content, MANAGED_HAL_DEVICES_TAG)
+            } else if (f.name === 'myStartup.h') {
+                startupContent = f.content
+                // Rehydrate the TrackManager / Turnout Defaults managed-block
+                // state from the file itself — otherwise it stays empty until
+                // the Startup row is visited, and the blocks would be dropped
+                // on next save.
+                this.generatedTrackManagerContent = extractManagedBlockBody(f.content, MANAGED_TRACK_MANAGER_TAG)
+                this.generatedTurnoutDefaultsContent = extractManagedBlockBody(f.content, MANAGED_TURNOUT_DEFAULTS_TAG)
             }
         }
 
@@ -901,8 +945,35 @@ export class ConfigEditorState {
             this.aliases = this.normalizeAliasesLenient(parseAliasesFromFile(aliasesContent))
         }
 
-        if (automationContent) {
-            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(automationContent)
+        // ── Legacy migration: myAutomation.h still has TrackManager/Turnout-
+        // Defaults managed blocks (pre-myStartup.h format) and no myStartup.h
+        // exists yet. Move that content into a new myStartup.h entry so it
+        // isn't silently dropped by automationPreview's next regeneration
+        // (which no longer emits those blocks into myAutomation.h). Flags
+        // hasChanges so the split is visible in the next Save's diff.
+        let migrated = false
+        if (!files.some(f => f.name === 'myStartup.h') && automationContent) {
+            // Tagged form (post-MANAGED_TRACK_MANAGER_TAG, pre-myStartup.h) falls
+            // back to the untagged pre-tag legacy form (a bare AUTOSTART block of
+            // only SET_TRACK/SET_POWER/POWERON commands — see
+            // extractAutomationCustomContent()'s own legacy-strip predicate above,
+            // which this mirrors) so genuinely old projects still migrate their
+            // track config into myStartup.h instead of losing it silently.
+            const legacyTrackManager =
+                extractManagedBlockBody(automationContent, MANAGED_TRACK_MANAGER_TAG) ||
+                extractLegacyUntaggedTrackManagerBlock(automationContent)
+            const legacyTurnoutDefaults = extractManagedBlockBody(automationContent, MANAGED_TURNOUT_DEFAULTS_TAG)
+            if (legacyTrackManager || legacyTurnoutDefaults) {
+                this.generatedTrackManagerContent = legacyTrackManager
+                this.generatedTurnoutDefaultsContent = legacyTurnoutDefaults
+                startupContent = this.startupPreview
+                files.push({ name: 'myStartup.h', content: startupContent })
+                migrated = true
+            }
+        }
+
+        if (startupContent) {
+            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(startupContent)
             if (defaultThrownIds.size > 0) {
                 this.turnouts = this.turnouts.map(t => ({
                     ...t,
@@ -912,7 +983,7 @@ export class ConfigEditorState {
         }
 
         this._syncGeneratedTurnoutDefaultsContent()
-        this.hasChanges = false
+        this.hasChanges = migrated
         // Ensure myRoster.h + myTurnouts.h always appear in the file list
         // so their visual editors are reachable from the sidebar.
         const names = files.map(f => f.name)
@@ -944,18 +1015,32 @@ export class ConfigEditorState {
 
     // ── Write back to InstallerState.configFiles ──────────────────────────────
     private _syncToInstallerState(): void {
-        // Rehydrate the TrackManager block from whatever is currently in the
-        // raw editor *before* regenerating — this is the only path a direct
-        // Monaco edit to that block can take to survive a save. Only done
-        // here (not in _ensureAutomationFile) because syncTrackManager() —
-        // the TrackManager form's own write path — calls _ensureAutomationFile
-        // immediately after setting generatedTrackManagerContent itself; doing
-        // the af.content extraction there would clobber that fresh value with
-        // the stale pre-update content.
+        // Rehydrate the HAL Devices / TrackManager blocks from whatever is
+        // currently in their raw editors *before* regenerating — this is the
+        // only path a direct Monaco edit to those blocks can take to survive
+        // a save. Only done here (not in _ensureAutomationFile/
+        // _ensureStartupFile) because syncHalDevices()/syncTrackManager() —
+        // the two forms' own write paths — call _ensureAutomationFile()/
+        // _ensureStartupFile() immediately after setting their field
+        // themselves; doing the re-extraction there would clobber that fresh
+        // value with the stale pre-update content.
+        //
+        // generatedTurnoutDefaultsContent is deliberately NOT re-derived here
+        // (unlike TrackManager/HAL) — it has no independent write path of its
+        // own to protect. It's purely generated from turnouts[].defaultState
+        // by _syncGeneratedTurnoutDefaultsContent(), which every turnout
+        // mutator (updateTurnoutEntry/addTurnoutEntry/removeTurnoutEntry/
+        // setTurnoutsFromRaw) calls immediately before calling this method —
+        // re-deriving it here from the *stale* on-disk myStartup.h would
+        // clobber that fresh value right back to the pre-mutation content,
+        // silently undoing the very change this call is meant to persist.
         const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
         if (automationFile) {
-            this.generatedTrackManagerContent = extractManagedBlockBody(automationFile.content, MANAGED_TRACK_MANAGER_TAG)
             this.generatedHalDevicesContent = extractManagedBlockBody(automationFile.content, MANAGED_HAL_DEVICES_TAG)
+        }
+        const startupFile = this.installerState.configFiles.find(f => f.name === 'myStartup.h')
+        if (startupFile) {
+            this.generatedTrackManagerContent = extractManagedBlockBody(startupFile.content, MANAGED_TRACK_MANAGER_TAG)
         }
         for (const f of this.installerState.configFiles) {
             if (f.name === 'config.h' || f.name === 'myConfig.h') {
@@ -975,11 +1060,14 @@ export class ConfigEditorState {
             } else if (f.name === 'myAliases.h') {
                 f.content = this.aliasesRaw
             }
-            // myAutomation.h is handled by _ensureAutomationFile below,
-            // which first re-extracts user edits from the current editor content.
+            // myAutomation.h / myStartup.h are handled by _ensureAutomationFile /
+            // _ensureStartupFile below, which first re-extracts user edits from
+            // the current editor content where applicable.
         }
-        // Ensure myAutomation.h exists in configFiles if any managed content present
+        // Ensure myAutomation.h / myStartup.h exist in configFiles if any
+        // managed content is present.
         this._ensureAutomationFile()
+        this._ensureStartupFile()
     }
 
     private _ensureAutomationFile(): void {
@@ -1005,6 +1093,48 @@ export class ConfigEditorState {
             // so that direct Monaco edits survive the next auto-regeneration.
             this.preservedAutomationContent = extractAutomationCustomContent(af.content)
             af.content = this.automationPreview
+        }
+    }
+
+    /**
+     * Sibling of _ensureAutomationFile() for myStartup.h. Unlike myAutomation.h,
+     * myStartup.h has no free-form/preserved section of its own, so there is no
+     * re-extraction step here — a direct raw edit is only re-absorbed via
+     * _syncToInstallerState()'s re-derivation (see the ordering-invariant note
+     * there), exactly mirroring how _ensureAutomationFile() itself never
+     * re-extracts (only _syncToInstallerState() does).
+     */
+    private _ensureStartupFile(): void {
+        const files = this.installerState.configFiles
+        const hasStartup = files.some(f => f.name === 'myStartup.h')
+        const needsIt =
+            this.generatedTrackManagerContent.trim().length > 0 ||
+            this.generatedTurnoutDefaultsContent.trim().length > 0
+        if (!hasStartup && needsIt) {
+            files.push({ name: 'myStartup.h', content: this.startupPreview })
+        } else if (hasStartup) {
+            const sf = files.find(f => f.name === 'myStartup.h')!
+            sf.content = this.startupPreview
+        }
+    }
+
+    /**
+     * Force-creates an empty myStartup.h entry if one doesn't exist yet, so
+     * the nav's "Startup" row is reachable/editable even before any
+     * TrackManager or Turnout-Defaults content has been generated. Distinct
+     * from _ensureStartupFile(), which is purely content-driven and never
+     * creates an empty file.
+     */
+    ensureStartupFileExists(): void {
+        const files = this.installerState.configFiles
+        if (!files.some(f => f.name === 'myStartup.h')) {
+            const automationIdx = files.findIndex(f => f.name === 'myAutomation.h')
+            const entry = { name: 'myStartup.h', content: this.startupPreview }
+            if (automationIdx !== -1) {
+                files.splice(automationIdx, 0, entry)
+            } else {
+                files.push(entry)
+            }
         }
     }
 
@@ -1050,11 +1180,11 @@ export class ConfigEditorState {
     syncTrackManager(trackManagerContent: string): void {
         // Normalize legacy generator output: drop file header line if present.
         const normalized = trackManagerContent
-            .replace(/^\/\/\s*myAutomation\.h\s*-\s*Generated by EX-Commander\s*\n?/m, '')
+            .replace(/^\/\/\s*myStartup\.h\s*-\s*Generated by EX-Commander\s*\n?/m, '')
             .trim()
         this.generatedTrackManagerContent = normalized
         this.hasChanges = true
-        this._ensureAutomationFile()
+        this._ensureStartupFile()
     }
 
     private _syncGeneratedTurnoutDefaultsContent(): void {

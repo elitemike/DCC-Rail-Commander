@@ -151,21 +151,52 @@ Two singletons (Aurelia DI, resolved via `resolve(...)`) hold nearly all cross-v
   state; `syncAll()` (called by `workspace.saveFiles()` before writing to disk) serializes structured state back
   into `InstallerState.configFiles`.
 
-  `myAutomation.h` is special: most of it is regenerated from other state (`#include` block from which files
-  have content, turnout-defaults `AUTOSTART` block from turnout `defaultState`), but the TrackManager block has
-  no other source of truth than the file itself — see `extractManagedBlockBody()` / `MANAGED_TRACK_MANAGER_TAG`.
+  `myAutomation.h`'s role is deliberately narrow: it's the file that links other files together, plus the HAL
+  Devices block. It's regenerated from other state (`#include` block from which files have content, the
+  `MANAGED_HAL_DEVICES_TAG` block from `generatedHalDevicesContent`) plus whatever free-form custom EXRAIL code
+  the user typed directly (`preservedAutomationContent`). Track power/mode and turnout defaults live in a
+  separate generated file, **`myStartup.h`** (included from `myAutomation.h`'s `#include` block when non-empty):
+  the `MANAGED_TRACK_MANAGER_TAG` block has no other source of truth than the file itself, while the
+  `MANAGED_TURNOUT_DEFAULTS_TAG` block is purely derived from turnout `defaultState` on every turnout mutation
+  (`_syncGeneratedTurnoutDefaultsContent()`) — see `extractManagedBlockBody()` in `config-editor-state.ts`.
+  Loading an old project whose `myAutomation.h` still has these blocks in the pre-split format migrates them
+  into a new `myStartup.h` on load (see the migration block in `loadFromInstallerState()`).
+
   Whenever changing regeneration logic here, be careful about *where* raw-editor content gets re-absorbed into
-  state: it must happen in `_syncToInstallerState()` (the save path), not inside `_ensureAutomationFile()`, which
-  is also called synchronously by the TrackManager form's own write path (`syncTrackManager()`) and would
-  otherwise clobber the value the form just set with stale on-disk content.
+  state: TrackManager/HAL re-extraction from the *current* on-disk file must happen only in
+  `_syncToInstallerState()` (the save path), never inside `_ensureAutomationFile()`/`_ensureStartupFile()`, which
+  are also called synchronously by their own write paths (`syncTrackManager()`/`syncHalDevices()`) and would
+  otherwise clobber the value the form just set with stale on-disk content. Turnout defaults are the odd one out
+  here — they're *never* re-derived inside `_syncToInstallerState()`, since `_syncGeneratedTurnoutDefaultsContent()`
+  (called by every turnout mutator immediately before `_syncToInstallerState()`) is their only write path; re-deriving
+  them from stale file content there would silently undo the mutation that's still in flight.
 
 - Each config file has a matching visual editor under `components/visual-editors/` (e.g. `roster-editor`,
-  `turnout-editor`, `sensors-editor`) with a Visual/Raw toggle. The Raw side is a Monaco editor; because Monaco
-  debounces `onDidChangeContent` (~300ms) before pushing into Aurelia's two-way binding, any raw editor that
-  needs its latest content flushed before a save/tab-switch must expose `component.ref` + an explicit `flush()`
-  call (see `file-editor-panel.ts` and `workspace.ts`'s `flushPendingFormEdits()`) — don't rely on blur alone.
+  `turnout-editor`, `sensors-editor`, `startup-editor`) with a Visual/Raw toggle. The Raw side is a Monaco editor;
+  because Monaco debounces `onDidChangeContent` (~300ms) before pushing into Aurelia's two-way binding, any raw
+  editor that needs its latest content flushed before a save/tab-switch must expose `component.ref` + an explicit
+  `flush()` call (see `file-editor-panel.ts` and `workspace.ts`'s `flushPendingFormEdits()`) — don't rely on blur
+  alone. `automation-editor` (`myAutomation.h`) is the one exception: it's always-raw now, since nothing
+  structured is left in that file to justify a Visual tab.
 - Product-specific config forms live in `components/config-forms/` (`commandstation-config-form`,
-  `ioexpander-config-form`) and read/write `ConfigEditorState` directly.
+  `ioexpander-config-form`, `track-manager-form`, `turnout-defaults-summary`, `hal-devices-form`) and read/write
+  `ConfigEditorState` directly.
+- **Any custom element that needs to fill its flex parent's height** (so height cascades down to a nested
+  Monaco editor or scrollable form) must be added to the explicit tag-name allowlist in `styles.css` (the
+  "Custom element host sizing" rule) — Aurelia renders custom elements as `display: inline` by default, which
+  silently collapses Monaco's container to zero height with no error, only a visibly broken/empty editor.
+
+### Device Settings nav (left sidebar tree)
+
+"Device Settings" is a tree parent in `workspace.html`'s left nav (defaults expanded —
+`workspace.ts`'s `deviceSettingsExpanded`), with three children: **General + WiFi** (`config.h`/`myConfig.h`,
+via `config-h-editor`), **Accessories** (HAL devices — `accessories-editor`, Visual = `hal-devices-form`, Raw =
+just the HAL Devices block slice via `generatedHalDevicesContent`/`syncHalDevices()`, not the whole
+`myAutomation.h` file), and **Startup** (`myStartup.h`, via `startup-editor`). General + WiFi and Startup are
+real `configFiles` entries and route through `activeFileIndex` + `file-editor-panel`'s filename-keyed dispatch
+like any other file; Accessories has no `configFiles` entry of its own (it's a slice of `myAutomation.h`) and is
+mounted directly in `workspace.html` via a third `activeSection === 'accessories'` branch, sibling to
+`file-editor-panel` — see `workspace.ts`'s `selectGeneralWifi()`/`selectAccessoriesSection()`/`selectStartup()`.
 
 ### Syncfusion controls
 

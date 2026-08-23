@@ -26,7 +26,7 @@ export interface ExrailSymbolSuggestion {
     sortText: string
 }
 
-const EXRAIL_FILENAMES = new Set(['myAutomation.h', 'myRoutes.h', 'mySequences.h'])
+const EXRAIL_FILENAMES = new Set(['myAutomation.h', 'myStartup.h', 'myRoutes.h', 'mySequences.h'])
 
 /** Every EXRAIL command whose arguments reference a configured object (turnout/sensor/route/sequence/roster). */
 export const EXRAIL_REFERENCE_COMMANDS = [

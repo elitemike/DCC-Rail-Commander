@@ -15,13 +15,13 @@ import { RadioButton } from '@syncfusion/ej2-buttons'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 
 /**
- * track-manager-form — the Visual pane of the Automation editor for
+ * track-manager-form — the Visual pane of the Startup editor for
  * EX-CommandStation. Generates the managed TrackManager block inside
- * myAutomation.h (see MANAGED_TRACK_MANAGER_TAG in config-editor-state.ts).
+ * myStartup.h (see MANAGED_TRACK_MANAGER_TAG in config-editor-state.ts).
  *
  * Moved out of commandstation-config-form: TrackManager doesn't configure
- * config.h device hardware, it configures myAutomation.h's AUTOSTART block,
- * so it belongs alongside Automation rather than Device Settings.
+ * config.h device hardware, it configures myStartup.h's AUTOSTART block,
+ * so it belongs under its own Startup row rather than General + WiFi.
  *
  * Whether a stacked motor shield is present is read-only here — it's derived
  * from the motor driver selected on the Device Settings (config.h) side, not
@@ -127,17 +127,17 @@ export class TrackManagerFormCustomElement {
 
     binding(): void {
         Object.assign(this.opts, parseCommandStationConfig(this.editorState.configHContent))
-        // Load track manager settings (modes/power/loco IDs) from myAutomation.h
+        // Load track manager settings (modes/power/loco IDs) from myStartup.h
         // if present. hasStackedMotorShield is NOT taken from here — it's
         // derived purely from the motor driver parsed above.
-        const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
-        if (automationFile != null) {
-            const trackManagerOpts = parseMyAutomationTrackManager(automationFile.content)
+        const startupFile = this.installerState.configFiles.find(f => f.name === 'myStartup.h')
+        if (startupFile != null) {
+            const trackManagerOpts = parseMyAutomationTrackManager(startupFile.content)
             delete trackManagerOpts.hasStackedMotorShield
             Object.assign(this.opts, trackManagerOpts)
         }
         // The motor driver may have changed on the Device Settings side since
-        // myAutomation.h was last generated — reconcile Track C/D content now.
+        // myStartup.h was last generated — reconcile Track C/D content now.
         this.syncAutomationContent()
     }
 
@@ -193,9 +193,9 @@ export class TrackManagerFormCustomElement {
         // reflects the motor driver from the loaded `config.h`.
         try {
             Object.assign(this.opts, parseCommandStationConfig(this.editorState.configHContent))
-            const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
-            if (automationFile != null) {
-                const trackManagerOpts = parseMyAutomationTrackManager(automationFile.content)
+            const startupFile = this.installerState.configFiles.find(f => f.name === 'myStartup.h')
+            if (startupFile != null) {
+                const trackManagerOpts = parseMyAutomationTrackManager(startupFile.content)
                 delete trackManagerOpts.hasStackedMotorShield
                 Object.assign(this.opts, trackManagerOpts)
             }
@@ -593,7 +593,7 @@ export class TrackManagerFormCustomElement {
     }
 
     /**
-     * Regenerate myAutomation.h's TrackManager block from the current opts.
+     * Regenerate myStartup.h's TrackManager block from the current opts.
      * Called on every field edit AND on bind/reload, since hasStackedMotorShield
      * can change on the Device Settings side without this form being mounted —
      * without this, switching motor drivers there would leave stale Track C/D

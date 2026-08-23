@@ -16,9 +16,14 @@
             <turnout-editor></turnout-editor>
         </div>
 
-        <!-- myAutomation.h → automation-editor (Visual TrackManager / Raw) -->
+        <!-- myAutomation.h → automation-editor (Raw only) -->
         <div if.bind="currentView === 'automation'" class="flex flex-col flex-1 overflow-hidden">
             <automation-editor component.ref="automationEditorEl"></automation-editor>
+        </div>
+
+        <!-- myStartup.h → startup-editor (Visual TrackManager + Turnout Defaults / Raw) -->
+        <div if.bind="currentView === 'startup'" class="flex flex-col flex-1 overflow-hidden">
+            <startup-editor component.ref="startupEditorEl"></startup-editor>
         </div>
 
         <!-- mySensors.h → sensors-editor -->

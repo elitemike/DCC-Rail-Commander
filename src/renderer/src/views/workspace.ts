@@ -41,10 +41,11 @@ export class Workspace {
     // ── Active config file being edited ─────────────────────────────────────
     activeFileIndex = 0
     filePanel?: FileEditorPanelCustomElement
+    accessoriesPanel?: { flushPending(): void }
     compileTerminal?: CompileOutputTerminalCustomElement
 
-    // ── Left-nav section (Throttle vs Configuration) ──────────────────────────
-    activeSection: 'throttle' | 'config' = 'config'
+    // ── Left-nav section (Throttle vs Configuration vs Accessories) ──────────
+    activeSection: 'throttle' | 'config' | 'accessories' = 'config'
 
     /** Throttle is only reachable while the selected device is live at its port. */
     get showThrottleSection(): boolean {
@@ -58,6 +59,45 @@ export class Workspace {
             if (!ok) return
         }
         this.activeSection = 'throttle'
+    }
+
+    // ── Device Settings tree (General + WiFi / Accessories / Startup) ────────
+    deviceSettingsExpanded = true
+
+    toggleDeviceSettings(): void {
+        this.deviceSettingsExpanded = !this.deviceSettingsExpanded
+    }
+
+    get generalWifiFileIndex(): number {
+        return this.state.configFiles.findIndex(f => f.name === 'config.h' || f.name === 'myConfig.h')
+    }
+
+    get startupFileIndex(): number {
+        return this.state.configFiles.findIndex(f => f.name === 'myStartup.h')
+    }
+
+    selectGeneralWifi(): void {
+        const idx = this.generalWifiFileIndex
+        if (idx !== -1) this.setActiveFile(idx)
+    }
+
+    selectAccessoriesSection(): void {
+        this.activeFile && this.syncContent()
+        this.activeSection = 'accessories'
+    }
+
+    selectStartup(): void {
+        this.configEditorState.ensureStartupFileExists()
+        const idx = this.startupFileIndex
+        if (idx !== -1) this.setActiveFile(idx)
+    }
+
+    /** Cross-file navigation, e.g. the Startup row's "Edit in Turnouts" link. */
+    private navigateFileHandler = (e: Event): void => {
+        const filename = (e as CustomEvent<{ filename: string }>).detail?.filename
+        if (!filename) return
+        const idx = this.state.configFiles.findIndex(f => f.name === filename)
+        if (idx !== -1) this.setActiveFile(idx)
     }
 
     readonly friendlyName = friendlyName
@@ -422,9 +462,20 @@ export class Workspace {
         this._unsubUsbClosed = window.usb?.onClosed(({ path }) => {
             if (path === this.state.selectedDevice?.port) this.portConnected = false
         }) ?? null
+
+        try {
+            window.addEventListener('exinst:navigate-file', this.navigateFileHandler as EventListener)
+        } catch {
+            // noop in non-browser contexts
+        }
     }
 
     detaching(): void {
+        try {
+            window.removeEventListener('exinst:navigate-file', this.navigateFileHandler as EventListener)
+        } catch {
+            // noop
+        }
         this.splitterObj?.destroy()
         this.splitterObj = null
         this.sfVersion?.destroy()
@@ -566,6 +617,7 @@ export class Workspace {
             'mySequences.h',
             'myAliases.h',
             'myAutomation.h',
+            'myStartup.h',
         ]
         if (reserved.includes(name)) {
             this.newFileError = `"${name}" is a reserved file name.`
@@ -822,11 +874,12 @@ export class Workspace {
             await Promise.resolve()
             await new Promise<void>(resolve => setTimeout(resolve, 0))
         }
-        // Monaco's raw editors (myAutomation.h, generic custom files) debounce
-        // content → binding updates by 300ms and don't respond to blur, so a
-        // Save right after typing can otherwise be overwritten with stale
-        // pre-edit content.
+        // Monaco's raw editors (myAutomation.h, myStartup.h, Accessories, generic
+        // custom files) debounce content → binding updates by 300ms and don't
+        // respond to blur, so a Save right after typing can otherwise be
+        // overwritten with stale pre-edit content.
         this.filePanel?.flushPending()
+        this.accessoriesPanel?.flushPending()
     }
 
     async compile(): Promise<void> {

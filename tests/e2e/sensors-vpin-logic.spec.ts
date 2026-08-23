@@ -78,13 +78,10 @@ test.describe('Sensors VPin logic', () => {
 
 // ── Tests: <vpin-picker> HAL board/channel mode ──────────────────────────────
 
-async function openDeviceSettings(page: import('@playwright/test').Page) {
-    await page.getByText('Device Settings', { exact: true }).first().click()
-    await expect(page.locator('config-h-editor')).toBeVisible()
-}
-
+// "Accessories" is a Device Settings tree child row (expanded by default),
+// reachable directly without visiting General + WiFi first.
 async function openAccessoriesTab(page: import('@playwright/test').Page) {
-    await page.locator('commandstation-config-form').getByRole('button', { name: 'Accessories' }).click()
+    await page.getByText('Accessories', { exact: true }).first().click()
     await expect(page.locator('hal-devices-form')).toBeVisible()
 }
 
@@ -101,7 +98,6 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
     test('picking a HAL board + channel for a sensor computes its VPin, not a raw number', async ({ csb1StackedPage }) => {
         const page = csb1StackedPage
 
-        await openDeviceSettings(page)
         await openAccessoriesTab(page)
         const deviceRow = await addPca9685(page)
         await expect(deviceRow.locator('[data-field="vpinStart"]')).toHaveValue('100')

@@ -295,7 +295,9 @@ test.describe('Load from Folder — device header present in config.h', () => {
         // Force the config.h Raw view to actually load its (stale) cached content
         // before rescanning, same as a real session where the user has already
         // looked at/edited other fields — this is what made configHContent stale.
-        await homePage.getByText('Device Settings', { exact: true }).first().click()
+        // "Device Settings" is a tree parent (expanded by default) — its
+        // "General + WiFi" child row is the one that opens config-h-editor.
+        await homePage.getByText('General + WiFi', { exact: true }).first().click()
 
         // Now a *different* board answers on a new port for the manual rescan.
         const rescannedDevice: DetectedBoardInfo = { ...MOCK_DEVICE, port: '/dev/ttyACM9' }

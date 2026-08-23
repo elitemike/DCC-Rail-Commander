@@ -13,7 +13,7 @@ import { TextBox, NumericTextBox } from '@syncfusion/ej2-inputs'
 import { CheckBox, RadioButton, Button } from '@syncfusion/ej2-buttons'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 
-type ConfigTab = 'general' | 'wifi' | 'accessories'
+type ConfigTab = 'general' | 'wifi'
 
 const FALLBACK_DRIVERS_GENERIC = [
     'STANDARD_MOTOR_SHIELD',
@@ -404,13 +404,13 @@ export class CommandstationConfigFormCustomElement {
         this.editorState.configHContent = generateCommandStationConfig(this.opts)
         this.editorState.syncConfigH()
 
-        // Keep myAutomation.h's TrackManager block (Track C/D) in sync with the
-        // motor driver here — the Automation tab's TrackManager form is a
+        // Keep myStartup.h's TrackManager block (Track C/D) in sync with the
+        // motor driver here — the Startup row's TrackManager form is a
         // separate, independently-mounted component and won't otherwise learn
         // that the driver (and therefore hasStackedMotorShield) changed.
-        const automationFile = this.installerState.configFiles.find(f => f.name === 'myAutomation.h')
+        const startupFile = this.installerState.configFiles.find(f => f.name === 'myStartup.h')
         this.editorState.syncTrackManager(
-            reconcileTrackManagerContent(this.editorState.configHContent, automationFile?.content ?? ''),
+            reconcileTrackManagerContent(this.editorState.configHContent, startupFile?.content ?? ''),
         )
     }
 
