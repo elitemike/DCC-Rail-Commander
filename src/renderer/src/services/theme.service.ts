@@ -7,7 +7,7 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type EffectiveTheme = 'light' | 'dark'
 
 /** Read synchronously by index.html's inline bootstrap script to avoid a flash of the wrong theme on cold start — see that file. */
-export const THEME_STORAGE_KEY = 'ex-commander-theme-effective'
+export const THEME_STORAGE_KEY = 'dcc-rail-commander-theme-effective'
 
 const EJ2_LINK_ID = 'ej2-theme-stylesheet'
 

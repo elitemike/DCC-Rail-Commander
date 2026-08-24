@@ -48,9 +48,9 @@ beforeEach(() => {
 // ── baseDir ───────────────────────────────────────────────────────────────────
 
 describe('baseDir', () => {
-    it('includes ex-commander segment', () => {
+    it('includes dcc-rail-commander segment', () => {
         const svc = makeService()
-        expect(svc.baseDir).toContain('ex-commander')
+        expect(svc.baseDir).toContain('dcc-rail-commander')
     })
 
     it('is under the mocked home directory', () => {

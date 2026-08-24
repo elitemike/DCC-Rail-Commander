@@ -71,7 +71,7 @@ class JsonStore {
     }
 }
 
-const store = new JsonStore('ex-commander-preferences')
+const store = new JsonStore('dcc-rail-commander-preferences')
 
 export class PreferencesService {
     get(key: string): unknown {

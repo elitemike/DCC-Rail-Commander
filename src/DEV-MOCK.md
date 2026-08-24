@@ -1,4 +1,4 @@
-# EX-Commander — Dev Mock Mode
+# DCC-Rail-Commander — Dev Mock Mode
 
 Mock mode lets you run the full UI wizard and workspace without a physical Arduino connected. It does everything for real — real git clones, real compilation via the bundled PlatformIO toolchain — what's faked is USB device scanning and, separately, firmware upload (flashing a physical device), since mock mode never has real hardware to write to.
 
