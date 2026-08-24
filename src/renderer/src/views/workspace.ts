@@ -17,7 +17,7 @@ import { productDetails, sortVersionsDescending, pickLatestVersion } from '../mo
 import type { SavedConfiguration } from '../models/saved-configuration'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDevicePort } from '../utils/configHeaderParser'
-import { copyProductSourceFiles } from '../utils/product-source-files'
+import { copyProductSourceFiles, isExampleConfigFile, collectExampleConfigFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
 import { Splitter } from '@syncfusion/ej2-layouts'
@@ -108,6 +108,23 @@ export class Workspace {
         const filename = (e as CustomEvent<{ filename: string }>).detail?.filename
         if (!filename) return
         const idx = this.state.configFiles.findIndex(f => f.name === filename)
+        if (idx !== -1) this.setActiveFile(idx)
+    }
+
+    // ── Examples tree (repo-shipped example config files) ────────────────────
+    examplesExpanded = false
+    readonly isExampleConfigFile = isExampleConfigFile
+
+    get exampleConfigFiles(): Array<{ name: string; content: string }> {
+        return this.state.configFiles.filter(f => isExampleConfigFile(f.name))
+    }
+
+    toggleExamples(): void {
+        this.examplesExpanded = !this.examplesExpanded
+    }
+
+    selectExampleFile(name: string): void {
+        const idx = this.state.configFiles.findIndex(f => f.name === name)
         if (idx !== -1) this.setActiveFile(idx)
     }
 
@@ -822,6 +839,14 @@ export class Workspace {
         }
 
         await copyProductSourceFiles(this.files, product, repoPath, scratchPath)
+
+        // The new version's example config files may differ from the old one's —
+        // add any new ones and refresh the content of ones already tracked.
+        for (const ex of await collectExampleConfigFiles(this.files, scratchPath)) {
+            const existing = this.state.configFiles.find((f) => f.name === ex.name)
+            if (existing) existing.content = ex.content
+            else this.state.configFiles.push(ex)
+        }
 
         savedConfig.version = selectedVersion
         await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
