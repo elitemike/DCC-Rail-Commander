@@ -15,6 +15,7 @@ import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import { buildScratchPath } from '../utils/board-key'
+import { isProductUserFile, isExampleConfigFile, collectExampleConfigFiles } from '../utils/product-source-files'
 
 /** File extensions we care about when scanning a loaded folder. */
 const HEADER_EXTENSIONS = ['.h']
@@ -221,6 +222,17 @@ export class Home {
 
         console.debug('[loadFromFolder] resolveSketchPath ->', { scratchPath, repoPath, productKey, sourceFolder })
 
+        // The repo's shipped example config files (myAutomation.example.h, etc.)
+        // may have just been copied into scratchPath by resolveSketchPath — track
+        // them too so they render (grouped under Examples) instead of sitting on
+        // disk with no editor entry.
+        if (repoPath) {
+            const examples = await collectExampleConfigFiles(this.files, scratchPath)
+            for (const ex of examples) {
+                if (!configFiles.some((f) => f.name === ex.name)) configFiles.push(ex)
+            }
+        }
+
         // If the device header was injected or the port was reconciled, write
         // config.h back to the original folder on disk immediately.  This ensures
         // refreshConfigFilesFromDisk (called when the workspace binds) reads the
@@ -385,14 +397,18 @@ export class Home {
                     try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
                     await this.files.mkdir(scratchPath)
 
-                    // Selectively copy source files from the repo (no examples / templates,
-                    // no user-managed config files — those are overlaid separately).
+                    // Selectively copy source files from the repo (no templates, no
+                    // user-managed config files — those are overlaid separately).
+                    // Example config files (myAutomation.example.h, etc.) are copied
+                    // even though their names also match the user-owned pattern —
+                    // see isExampleConfigFile / collectExampleConfigFiles.
                     const allowedExts = ['.ino', '.cpp', '.h']
                     const allowedSubDirs = ['src', 'libraries']
-                    const isSourceFile = (name: string): boolean =>
-                        !name.endsWith('.example') &&
-                        !name.endsWith('.template') &&
-                        allowedExts.some((ext) => name.endsWith(ext))
+                    const isSourceFile = (name: string): boolean => {
+                        if (name.endsWith('.template')) return false
+                        if (allowedExts.some((ext) => name.endsWith(ext))) return true
+                        return isExampleConfigFile(name)
+                    }
 
                     const copySourceDir = async (srcDir: string, destDir: string): Promise<void> => {
                         const dirEntries = await this.files.listDir(srcDir)
@@ -400,7 +416,11 @@ export class Home {
                             if (allowedSubDirs.includes(entry)) {
                                 await this.files.mkdir(`${destDir}/${entry}`)
                                 await copySourceDir(`${srcDir}/${entry}`, `${destDir}/${entry}`)
-                            } else if (isSourceFile(entry) && !configSet.has(entry)) {
+                            } else if (
+                                isSourceFile(entry) &&
+                                !configSet.has(entry) &&
+                                (isExampleConfigFile(entry) || !isProductUserFile(product, entry))
+                            ) {
                                 await this.files.copyFiles(`${srcDir}/${entry}`, `${destDir}/${entry}`)
                             }
                         }

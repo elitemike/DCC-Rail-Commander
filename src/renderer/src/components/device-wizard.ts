@@ -14,7 +14,7 @@ import { productDetails, sortVersionsDescending, pickLatestVersion } from '../mo
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
-import { isProductUserFile, copyProductSourceFiles } from '../utils/product-source-files'
+import { isProductUserFile, copyProductSourceFiles, collectExampleConfigFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildScratchPath, findReusableConfig } from '../utils/board-key'
 
@@ -181,7 +181,17 @@ export class DeviceWizard {
             const repoExists = await this.files.exists(`${repoPath}/.git`)
 
             if (repoExists) {
+                // A prior setup may have left this repo checked out to a version tag
+                // (detached HEAD), which makes `git pull` fail with "not currently on a
+                // branch". Return to the default branch first so pull always has
+                // something to fast-forward.
                 this.versionStatus = 'Pulling latest changes...'
+                const branchCheckout = await this.git.checkout(repoPath, product.defaultBranch)
+                if (!branchCheckout.success) {
+                    throw new Error(
+                        branchCheckout.error ?? `Failed to switch to ${product.defaultBranch} for ${product.productName}.`
+                    )
+                }
                 const result = await this.git.pull(repoPath)
                 if (!result.success) {
                     throw new Error(result.error ?? `Failed to pull latest changes for ${product.productName}.`)
@@ -369,6 +379,14 @@ export class DeviceWizard {
                     console.debug('[device-wizard] restoring user file to scratch:', `${scratchPath}/${name}`)
                     await this.files.writeFile(`${scratchPath}/${name}`, content)
                 }
+            }
+
+            // The repo's shipped example config files (myAutomation.example.h, etc.)
+            // were just copied into scratchPath by copyProductSourceFiles — track
+            // them too so they render (grouped under Examples) instead of sitting
+            // on disk with no editor entry.
+            for (const ex of await collectExampleConfigFiles(this.files, scratchPath)) {
+                if (!configFiles.some((f) => f.name === ex.name)) configFiles.push(ex)
             }
 
             // ── Update state ─────────────────────────────────────────────────
