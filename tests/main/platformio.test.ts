@@ -251,7 +251,7 @@ describe('compile()', () => {
         await svc.compile('/my/sketch', MEGA)
         const options = mockSpawn.mock.calls[0][2]
         expect(options.env.HTTPS_PROXY).toBe('http://127.0.0.1:9')
-        expect(options.env.PLATFORMIO_CORE_DIR).toContain('ex-commander')
+        expect(options.env.PLATFORMIO_CORE_DIR).toContain('dcc-rail-commander')
         expect(options.env.PYTHONPATH).toContain('site-packages')
     })
 

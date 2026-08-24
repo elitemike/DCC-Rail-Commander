@@ -1,7 +1,7 @@
 /**
  * Locates and prepares the bundled, version-locked build runtime.
  *
- * EX-Commander ships its own CPython and PlatformIO Core rather than
+ * DCC-Rail-Commander ships its own CPython and PlatformIO Core rather than
  * downloading a toolchain on first launch, so a build is reproducible and works
  * behind a firewall. The only process in the app that is allowed to touch the
  * network is git (cloning the DCC-EX product repos) — every environment built
@@ -33,7 +33,7 @@ export interface ToolchainManifest {
     stamp: string
 }
 
-const STAMP_FILE = '.ex-commander-toolchain'
+const STAMP_FILE = '.dcc-rail-commander-toolchain'
 
 /**
  * Root of the bundled resources tree. Packaged builds get it from Electron's
@@ -68,10 +68,10 @@ export function bundledCoreDir(): string {
 
 /**
  * Writable PlatformIO core directory, seeded from the bundled tree on first run.
- * Follows the same `~/ex-commander/...` convention as the repos and prefs dirs.
+ * Follows the same `~/dcc-rail-commander/...` convention as the repos and prefs dirs.
  */
 export function coreDir(): string {
-    return join(app.getPath('home'), 'ex-commander', 'platformio')
+    return join(app.getPath('home'), 'dcc-rail-commander', 'platformio')
 }
 
 export function platformsDir(): string {

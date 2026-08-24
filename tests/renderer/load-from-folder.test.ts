@@ -83,9 +83,9 @@ describe('getGeneratorVersion', () => {
 // ── buildGeneratorHeader ──────────────────────────────────────────────────────
 
 describe('buildGeneratorHeader', () => {
-    it('contains the DCCEX-Commander version marker', () => {
+    it('contains the DCC-Rail-Commander version marker', () => {
         const header = buildGeneratorHeader('myRoster.h', '0.1.0')
-        expect(header).toContain('DCCEX-Commander v0.1.0')
+        expect(header).toContain('DCC-Rail-Commander v0.1.0')
     })
 
     it('contains the filename', () => {
@@ -301,7 +301,7 @@ describe('injectDeviceHeader', () => {
         const second = injectDeviceHeader(first, updated)
 
         // Only one occurrence of the tag
-        const tagCount = (second.match(/DCCEX-Commander Device Configuration/g) ?? []).length
+        const tagCount = (second.match(/DCC-Rail-Commander Device Configuration/g) ?? []).length
         expect(tagCount).toBe(2)  // opening + closing — one block
 
         // New values present, old port not present
@@ -394,8 +394,8 @@ describe('MANAGED_INCLUDES_TAG', () => {
         expect(MANAGED_INCLUDES_TAG.trimStart()).toMatch(/^\/\//)
     })
 
-    it('references EX-Commander', () => {
-        expect(MANAGED_INCLUDES_TAG).toContain('EX-Commander')
+    it('references DCC-Rail-Commander', () => {
+        expect(MANAGED_INCLUDES_TAG).toContain('DCC-Rail-Commander')
     })
 })
 
@@ -409,7 +409,7 @@ describe('extractAutomationCustomContent', () => {
     it('returns empty string when file contains only the managed block', () => {
         const block = [
             MANAGED_INCLUDES_TAG,
-            '// These #includes are managed by EX-Commander.',
+            '// These #includes are managed by DCC-Rail-Commander.',
             '// Do not remove them — they are required for the installer to function correctly.',
             '#include "myRoster.h"',
             '#include "myTurnouts.h"',
@@ -467,7 +467,7 @@ describe('extractAutomationCustomContent', () => {
         // Build what automationPreview would emit
         const preview = [
             MANAGED_INCLUDES_TAG,
-            '// These #includes are managed by EX-Commander.',
+            '// These #includes are managed by DCC-Rail-Commander.',
             '// Do not remove them — they are required for the installer to function correctly.',
             '#include "myRoster.h"',
             '#include "myTurnouts.h"',
@@ -501,7 +501,7 @@ describe('extractAutomationCustomContent', () => {
     it('strips the managed TrackManager block entirely', () => {
         const block = [
             MANAGED_TRACK_MANAGER_TAG,
-            '// This TrackManager block is managed by EX-Commander.',
+            '// This TrackManager block is managed by DCC-Rail-Commander.',
             'AUTOSTART',
             '  SET_TRACK(A,MAIN)',
             'DONE',
@@ -555,7 +555,7 @@ describe('extractAutomationCustomContent', () => {
         const custom = 'SEQUENCE(100)\nDONE'
         const input = [
             MANAGED_TURNOUT_DEFAULTS_TAG,
-            '// This turnout-defaults block is managed by EX-Commander.',
+            '// This turnout-defaults block is managed by DCC-Rail-Commander.',
             'AUTOSTART',
             '  THROW(200)',
             'DONE',

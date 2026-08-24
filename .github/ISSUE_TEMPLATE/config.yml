@@ -6,7 +6,7 @@ blank_issues_enabled: false
 contact_links:
   - name: DCC-EX Discord server
     url: https://discord.gg/y2sB4Fp
-    about: For the best support experience, join our Discord server
+    about: For questions about DCC-EX products themselves (not this installer), join the official DCC-EX Discord server
   - name: DCC-EX Contact and Support page
     url: https://dcc-ex.com/support/index.html
-    about: For other support options, refer to our Contact & Support page
+    about: For other DCC-EX product support options, refer to the official DCC-EX Contact & Support page

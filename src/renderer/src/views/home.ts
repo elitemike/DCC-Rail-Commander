@@ -286,7 +286,7 @@ export class Home {
         if (needsMigration) {
             this.toastService.show({
                 title: 'Files Imported',
-                content: 'Some files were not created by EX-Commander. Review them in the editor — invalid lines will be highlighted.',
+                content: 'Some files were not created by DCC-Rail-Commander. Review them in the editor — invalid lines will be highlighted.',
                 cssClass: 'e-toast-warning',
             })
         }

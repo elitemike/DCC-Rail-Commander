@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 /**
- * Playwright configuration for EX-Commander E2E tests.
+ * Playwright configuration for DCC-Rail-Commander E2E tests.
  *
  * Run tests with:  pnpm test:e2e
  *   or directly:   ./node_modules/.bin/playwright test  (e.g. from the VS Code test runner)

@@ -546,7 +546,7 @@ export class Workspace {
             }
 
             // Ensure config.h on disk always has the device header block. If it
-            // was missing (e.g. the user's file predates EX-Commander or was
+            // was missing (e.g. the user's file predates DCC-Rail-Commander or was
             // edited externally), inject it now and persist back to every root so
             // all copies stay in sync.
             if (f.name === 'config.h' && diskPath && !hasDeviceHeader(f.content)) {
