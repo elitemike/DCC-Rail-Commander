@@ -23,6 +23,7 @@ export type BlockParamKind =
     | 'signalRef'
     | 'rosterRef'
     | 'routeOrSequenceRef'
+    | 'trackRef'
     | 'number'
     | 'string'
 
@@ -36,12 +37,25 @@ export interface BlockParamDef {
 /** Object collections the registry's `isAvailable()` filters palette blocks against. */
 export interface DefinedObjects extends ExrailCompletionData {
     signals: SignalEntry[]
+    /**
+     * Track ids (e.g. 'A', 'B') currently available on the board — always A/B, plus C/D only
+     * when a stacked motor shield is configured (see ConfigEditorState.hasStackedMotorShield).
+     * Optional, like the other ObjectIdCollections fields, since a caller with no track concept
+     * (e.g. a non-CommandStation product) simply omits it.
+     */
+    tracks?: RefOption[]
 }
 
 export interface BlockTypeDef {
     id: string // 'THROW', 'IF', 'DONE', ... — must be the exact-case EXRAIL command name
     shape: BlockShape
     label: string
+    /**
+     * Longer hover tooltip text (Blockly's block-level `tooltip` JSON field, distinct from the
+     * short `label` shown on the block face) — the DCC-EX command-reference's one-line
+     * description for this command. Falls back to `label` when omitted (see jsonFor()).
+     */
+    description?: string
     color: string
     /**
      * Palette sidebar placement, e.g. 'Turnouts' or 'Locomotives/Driving' (slash-separated for a
@@ -67,6 +81,21 @@ export interface BlockTypeDef {
 export interface RefOption {
     value: string | number
     label: string
+}
+
+/**
+ * The track ids actually available on the current board — A/B always exist; C/D only when a
+ * stacked motor shield is configured (ConfigEditorState.hasStackedMotorShield). Shared by
+ * routes-editor.ts/sequences-editor.ts's `defined` getters so trackRef params (AFTEROVERLOAD)
+ * only ever offer a track the board can really have.
+ */
+export function definedTracksFor(hasStackedMotorShield: boolean): RefOption[] {
+    const tracks: RefOption[] = [
+        { value: 'A', label: 'Track A' },
+        { value: 'B', label: 'Track B' },
+    ]
+    if (hasStackedMotorShield) tracks.push({ value: 'C', label: 'Track C' }, { value: 'D', label: 'Track D' })
+    return tracks
 }
 
 /** Which AliasEntry.aliasType(s) an object reference kind is addressable by — signalRef has none (not a valid AliasTargetType). */
@@ -113,6 +142,9 @@ export function optionsForRefKind(
             break
         case 'signalRef':
             options = defined.signals.map((s) => ({ value: s.red, label: s.description ? `${s.description} (${s.red})` : `Signal ${s.red}` }))
+            break
+        case 'trackRef':
+            options = defined.tracks ?? []
             break
         default:
             return []
@@ -233,7 +265,7 @@ function stripQuotes(value: string): string {
 }
 
 /** Every param kind that refers to another object by numeric ID *or* an ALIAS(name) identifier. */
-export const REF_KINDS = new Set<BlockParamKind>(['turnoutRef', 'sensorRef', 'signalRef', 'rosterRef', 'routeOrSequenceRef'])
+export const REF_KINDS = new Set<BlockParamKind>(['turnoutRef', 'sensorRef', 'signalRef', 'rosterRef', 'routeOrSequenceRef', 'trackRef'])
 
 /** A ref arg is either a raw numeric ID or an ALIAS(name) identifier — e.g. THROW(mysidingpoint). Number()-coercing the latter produces NaN. */
 export function isPlainInt(s: string): boolean {

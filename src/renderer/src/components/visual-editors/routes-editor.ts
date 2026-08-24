@@ -2,7 +2,7 @@ import { queueTask, resolve } from 'aurelia'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { RouteEntry } from '../../utils/myAutomationParser'
-import { parseBody } from './exrail-block-compiler'
+import { definedTracksFor, parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
 import { ToastService } from '../../services/toast.service'
@@ -41,6 +41,7 @@ export class RoutesEditorCustomElement {
             routes: this.state.routes,
             sequences: this.state.sequences,
             aliases: this.state.aliases,
+            tracks: definedTracksFor(this.state.hasStackedMotorShield),
         }
     }
 

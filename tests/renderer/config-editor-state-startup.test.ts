@@ -49,6 +49,7 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
     Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
     Object.defineProperty(state, 'automationPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'automationPreview')!)
     Object.defineProperty(state, 'customFileNames', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'customFileNames')!)
+    Object.defineProperty(state, 'hasStackedMotorShield', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'hasStackedMotorShield')!)
     return state
 }
 
@@ -65,6 +66,20 @@ describe('ConfigEditorState — myStartup.h', () => {
         expect((state as any).generatedTrackManagerContent).toBe(TRACK_MANAGER_BODY)
         expect((state as any).hasChanges).toBe(false)
         expect(state.installerState.configFiles.filter(f => f.name === 'myStartup.h')).toHaveLength(1)
+    })
+
+    it('hasStackedMotorShield reflects config.h MOTOR_SHIELD_TYPE — false by default, true for EXCSB1_WITH_EX8874', () => {
+        const singleShieldState = makeState([
+            { name: 'config.h', content: '#define MOTOR_SHIELD_TYPE STANDARD_MOTOR_SHIELD\n' },
+        ])
+        ConfigEditorState.prototype.loadFromInstallerState.call(singleShieldState as any)
+        expect((singleShieldState as any).hasStackedMotorShield).toBe(false)
+
+        const stackedShieldState = makeState([
+            { name: 'config.h', content: '#define MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874\n' },
+        ])
+        ConfigEditorState.prototype.loadFromInstallerState.call(stackedShieldState as any)
+        expect((stackedShieldState as any).hasStackedMotorShield).toBe(true)
     })
 
     it('leaves TrackManager/TurnoutDefaults empty when there is nothing to migrate and no myStartup.h', () => {

@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { parseBody, compileBody, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
+import { definedTracksFor, parseBody, compileBody, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 import { BLOCK_REGISTRY } from '../../src/renderer/src/components/visual-editors/exrail-block-registry'
+
+describe('definedTracksFor', () => {
+    it('offers only A/B without a stacked motor shield', () => {
+        expect(definedTracksFor(false).map((t) => t.value)).toEqual(['A', 'B'])
+    })
+
+    it('offers A/B/C/D with a stacked motor shield', () => {
+        expect(definedTracksFor(true).map((t) => t.value)).toEqual(['A', 'B', 'C', 'D'])
+    })
+})
 
 function parseOk(body: string, kind: 'route' | 'sequence' = 'route'): ParsedGraph {
     const result = parseBody(body, kind, BLOCK_REGISTRY)
@@ -17,6 +27,24 @@ describe('parseBody / compileBody round-trip', () => {
 
     it('round-trips TOGGLE_TURNOUT', () => {
         const body = 'TOGGLE_TURNOUT(200)\nDELAY(500)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips DELAYMINS', () => {
+        const body = 'DELAYMINS(5)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips AFTER', () => {
+        const body = 'AFTER(100, 500)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips AFTEROVERLOAD', () => {
+        const body = 'AFTEROVERLOAD(A)'
         const graph = parseOk(body)
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
     })

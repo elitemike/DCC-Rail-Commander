@@ -28,8 +28,8 @@ const POPULATED: DefinedObjects = {
 describe('BLOCK_REGISTRY isAvailable gating', () => {
     const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
 
-    it('always allows ROUTE, SEQUENCE, DELAY, DONE regardless of defined objects', () => {
-        for (const id of ['ROUTE', 'SEQUENCE', 'DELAY', 'DONE']) {
+    it('always allows ROUTE, SEQUENCE, DELAY, DELAYMINS, DONE regardless of defined objects', () => {
+        for (const id of ['ROUTE', 'SEQUENCE', 'DELAY', 'DELAYMINS', 'DONE']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(true)
         }
     })
@@ -48,11 +48,16 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         }
     })
 
-    it('gates IF/IFNOT on sensors existing', () => {
-        for (const id of ['IF', 'IFNOT']) {
+    it('gates IF/IFNOT/AFTER on sensors existing', () => {
+        for (const id of ['IF', 'IFNOT', 'AFTER']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(false)
             expect(byId.get(id)!.isAvailable(POPULATED)).toBe(true)
         }
+    })
+
+    it('gates AFTEROVERLOAD on tracks being defined', () => {
+        expect(byId.get('AFTEROVERLOAD')!.isAvailable(EMPTY)).toBe(false)
+        expect(byId.get('AFTEROVERLOAD')!.isAvailable({ ...EMPTY, tracks: [{ value: 'A', label: 'Track A' }] })).toBe(true)
     })
 
     it('gates FOLLOW on a route or sequence existing', () => {

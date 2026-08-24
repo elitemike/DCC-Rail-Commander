@@ -1,6 +1,7 @@
 import { observable, resolve } from 'aurelia'
 import { InstallerState } from './installer-state'
 import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
+import { STACKED_MOTOR_DRIVER } from '../config/commandstation'
 import {
     serializeRosterToFile,
     serializeTurnoutToFile,
@@ -206,6 +207,19 @@ export class ConfigEditorState {
 
     // ── config.h ─────────────────────────────────────────────────────────────
     configHContent = ''
+
+    /**
+     * Whether config.h currently selects the stacked (dual) motor shield — the same
+     * MOTOR_SHIELD_TYPE check track-manager-form.ts's own hasStackedMotorShield uses, re-derived
+     * here from the raw file content rather than that form's local `opts` state so track
+     * availability (see exrail-block-registry.ts's AFTEROVERLOAD block) stays correct even when
+     * the Startup editor/TrackManager form isn't mounted. Tracks A/B always exist; C/D only exist
+     * when this is true (see commandstation.ts's generateMyAutomation()).
+     */
+    get hasStackedMotorShield(): boolean {
+        const match = this.configHContent.match(/^#define\s+MOTOR_SHIELD_TYPE\s+(\S+)$/m)
+        return (match?.[1] ?? '').toUpperCase() === STACKED_MOTOR_DRIVER
+    }
 
     // ── Unsaved-changes tracking ──────────────────────────────────────────────
     hasChanges = false
