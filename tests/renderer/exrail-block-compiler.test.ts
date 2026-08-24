@@ -37,6 +37,12 @@ describe('parseBody / compileBody round-trip', () => {
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
     })
 
+    it('round-trips AT', () => {
+        const body = 'AT(100)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
     it('round-trips AFTER', () => {
         const body = 'AFTER(100, 500)'
         const graph = parseOk(body)

@@ -267,6 +267,18 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         emit: (p) => `IFNOT(${p.sensorId})`,
     },
     {
+        id: 'AT',
+        shape: 'stack',
+        label: 'Wait for sensor active',
+        description: 'Wait until a sensor becomes active.',
+        color: '#8e44ad',
+        category: 'Sensors',
+        params: [{ name: 'sensorId', label: 'Sensor', kind: 'sensorRef' }],
+        isAvailable: hasSensors,
+        emit: (p) => `AT(${p.sensorId})`,
+        helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#atvpin',
+    },
+    {
         id: 'AFTER',
         shape: 'stack',
         label: 'Wait for sensor pulse',

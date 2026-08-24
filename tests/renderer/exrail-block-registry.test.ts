@@ -48,8 +48,8 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         }
     })
 
-    it('gates IF/IFNOT/AFTER on sensors existing', () => {
-        for (const id of ['IF', 'IFNOT', 'AFTER']) {
+    it('gates IF/IFNOT/AT/AFTER on sensors existing', () => {
+        for (const id of ['IF', 'IFNOT', 'AT', 'AFTER']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(false)
             expect(byId.get(id)!.isAvailable(POPULATED)).toBe(true)
         }
