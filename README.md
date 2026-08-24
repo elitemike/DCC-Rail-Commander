@@ -118,8 +118,8 @@ The general operating process of the installer is:
 EX-Commander configures and installs the following Arduino based DCC-EX products:
 
 - EX-CommandStation
-- EX-IOExpander
-- EX-Turntable
+- EX-IOExpander *(not yet tested)*
+- EX-Turntable *(not yet tested)*
 
 ## Versioning
 
