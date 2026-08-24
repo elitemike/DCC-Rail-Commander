@@ -138,11 +138,38 @@ class ExrailRefField extends Blockly.FieldDropdown {
     override getOptions(_useCache?: boolean): Array<[string, string]> {
         const ws = this.getSourceBlock()?.workspace
         const defined = ws ? getWorkspaceDefined(ws) : null
-        if (!defined) return [['(no objects defined)', '']]
+        if (!defined) {
+            // Toolbox flyout preview blocks render in the flyout's own workspace, which never
+            // gets a setWorkspaceDefined() registration (only the real canvas workspace does —
+            // see exrail-block-canvas.ts) — so this is "can't resolve the project's objects from
+            // here", not "the project has none". Say so distinctly from the genuine-empty-state
+            // message below, which would otherwise misleadingly suggest nothing's been defined
+            // yet even when the block already shows real options once dragged onto the canvas.
+            return [[ws?.isFlyout ? 'Make a selection…' : '(no objects defined)', '']]
+        }
         const current = this.getValue() ?? undefined
         const opts = optionsForRefKind(this.kind, defined, current)
         if (opts.length === 0) return [['(none defined)', '']]
         return opts.map((o) => [o.label, String(o.value)])
+    }
+
+    /**
+     * FieldDropdown's own getText_() reads a `selectedOption` cache that's only refreshed inside
+     * doValueUpdate_() by matching the field's *current* value against getOptions() — and only
+     * overwrites the cache on a match. A flyout preview block is constructed with a real seeded
+     * value (e.g. turnout id "1", from exrail-blockly-toolbox.ts's defaultFieldsFor()) but before
+     * the field is attached to a source block, at which point our getOptions() override above
+     * can't resolve anything and returns a single placeholder option whose value is always `''`
+     * — that never matches "1", so the cache is never overwritten with the placeholder's *label*
+     * either, freezing it at whatever getOptions() happened to return on that very first
+     * pre-attachment call. Recomputing the label directly here — instead of trusting that cache —
+     * keeps it correctly live across attachment the same way getOptions() itself already is.
+     */
+    protected override getText_(): string | null {
+        const opts = this.getOptions()
+        const value = this.getValue()
+        const match = opts.find((o) => o[1] === value)
+        return (match ?? opts[0])?.[0] ?? null
     }
 
     // Widened param type (rather than `{ kind: BlockParamKind; value?: string }`) so this
@@ -286,7 +313,7 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
     const json: Record<string, unknown> = {
         type: def.id,
         colour: def.color,
-        tooltip: def.label,
+        tooltip: def.description ?? def.label,
     }
     if (def.helpUrl) json.helpUrl = def.helpUrl
 
