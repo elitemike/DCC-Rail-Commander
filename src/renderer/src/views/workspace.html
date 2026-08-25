@@ -262,21 +262,27 @@
                         class.bind="activeSection === 'config' && activeFileIndex === generalWifiFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">General + WiFi</span>
+                        <span class="truncate flex-1">General + WiFi</span>
+                        <span if.bind="generalWifiHasError" data-testid="error-dot-general-wifi"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectAccessoriesSection()" data-testid="nav-accessories"
                         class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
                         class.bind="activeSection === 'accessories'
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Accessories</span>
+                        <span class="truncate flex-1">Accessories</span>
+                        <span if.bind="accessoriesHasError" data-testid="error-dot-accessories"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectStartup()" data-testid="nav-startup"
                         class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
                         class.bind="activeSection === 'config' && activeFileIndex === startupFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Startup</span>
+                        <span class="truncate flex-1">Startup</span>
+                        <span if.bind="startupHasError" data-testid="error-dot-startup"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectAdvanced()" data-testid="nav-advanced"
                         title="myAutomation.h — links your other config files together"
@@ -284,7 +290,9 @@
                         class.bind="activeSection === 'config' && activeFileIndex === automationFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Advanced</span>
+                        <span class="truncate flex-1">Advanced</span>
+                        <span if.bind="automationHasError" data-testid="error-dot-advanced"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                 </div>
 
@@ -304,6 +312,8 @@
                         <span class="truncate text-xs opacity-40 font-mono"
                             if.bind="friendlyName(file.name) !== file.name">${file.name}</span>
                     </span>
+                    <span if.bind="filesWithErrors.has(file.name)" data-testid="error-dot-${file.name}"
+                        title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     <!-- Delete button: only shown on custom (user-created) files -->
                     <button if.bind="configEditorState.isCustomFile(file.name)"
                         click.trigger="removeCustomFile($index, $event)" title="Delete ${file.name}"

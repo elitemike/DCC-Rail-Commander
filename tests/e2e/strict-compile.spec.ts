@@ -58,10 +58,12 @@ test.describe('Strict compile', () => {
 
         await expect(compileBtn).toBeDisabled()
         await expect(compileBtn).toHaveAttribute('title', /Strict compile is on/)
+        await expect(page.getByTestId('error-dot-myRoster.h')).toBeVisible()
 
         await setMonacoContent(page, 'ROSTER(42, "Loco", "LIGHT")')
         await expect(page.locator('.squiggly-error')).toHaveCount(0)
         await expect(compileBtn).toBeEnabled()
+        await expect(page.getByTestId('error-dot-myRoster.h')).toHaveCount(0)
     })
 
     test('turning Strict compile off re-enables Compile even with an active error marker', async ({ workspacePage: page }) => {
@@ -91,5 +93,19 @@ test.describe('Strict compile', () => {
         await expect(page.locator('.squiggly-error').first()).toBeVisible({ timeout: 4_000 })
 
         await expect(compileBtn).toBeEnabled()
+    })
+
+    test('file-list error dot appears/disappears with a file\'s error markers, independent of Strict compile', async ({ workspacePage: page }) => {
+        const errorDot = page.getByTestId('error-dot-myRoster.h')
+        await expect(errorDot).toHaveCount(0)
+
+        await openRawRoster(page)
+        await setMonacoContent(page, 'ROSTER(notAnInt, "Loco", "LIGHT")')
+        await expect(page.locator('.squiggly-error').first()).toBeVisible({ timeout: 4_000 })
+        await expect(errorDot).toBeVisible()
+
+        await setMonacoContent(page, 'ROSTER(42, "Loco", "LIGHT")')
+        await expect(page.locator('.squiggly-error')).toHaveCount(0)
+        await expect(errorDot).toHaveCount(0)
     })
 })

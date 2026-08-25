@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // Minimal Monaco mock — only the constants the validators actually use.
-let mockModelMarkers: Array<{ severity: number }> = []
+let mockModelMarkers: Array<{ severity: number; resource?: { path: string } }> = []
 vi.mock('monaco-editor', () => ({
     MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
     editor: {
@@ -14,7 +14,7 @@ vi.mock('monaco-editor', () => ({
 }))
 
 import * as monaco from 'monaco-editor'
-import { _runValidatorsForTest, hasErrorMarkers, onMarkersChanged } from '../../src/renderer/src/config/dccex-validators'
+import { _runValidatorsForTest, hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers } from '../../src/renderer/src/config/dccex-validators'
 
 // Convenience constants that mirror the mock values above.
 const ERROR = 8
@@ -463,5 +463,34 @@ describe('onMarkersChanged', () => {
         handler([] as never)
 
         expect(callback).toHaveBeenCalled()
+    })
+})
+
+describe('filesWithErrorMarkers', () => {
+    it('is empty when there are no markers at all', () => {
+        mockModelMarkers = []
+        expect(filesWithErrorMarkers()).toEqual(new Set())
+    })
+
+    it('excludes files whose markers are all below Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING, resource: { path: '/myRoster.h' } }]
+        expect(filesWithErrorMarkers()).toEqual(new Set())
+    })
+
+    it('includes the filename of any model with an Error-severity marker, stripped of its leading slash', () => {
+        mockModelMarkers = [
+            { severity: WARNING, resource: { path: '/myRoster.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+        ]
+        expect(filesWithErrorMarkers()).toEqual(new Set(['myAutomation.h']))
+    })
+
+    it('collects filenames from multiple errored models', () => {
+        mockModelMarkers = [
+            { severity: ERROR, resource: { path: '/myRoster.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+        ]
+        expect(filesWithErrorMarkers()).toEqual(new Set(['myRoster.h', 'myAutomation.h']))
     })
 })

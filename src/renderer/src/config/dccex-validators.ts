@@ -894,3 +894,12 @@ export function hasErrorMarkers(): boolean {
 export function onMarkersChanged(callback: () => void): monaco.IDisposable {
     return monaco.editor.onDidChangeMarkers(() => callback())
 }
+
+/** Filenames (matching state.configFiles' `name`, e.g. "myAutomation.h") of every open Monaco model that currently has an Error-severity marker. Drives the file-list error indicator in workspace.html. */
+export function filesWithErrorMarkers(): Set<string> {
+    const files = new Set<string>()
+    for (const m of monaco.editor.getModelMarkers({})) {
+        if (m.severity === monaco.MarkerSeverity.Error) files.add(m.resource.path.replace(/^\//, ''))
+    }
+    return files
+}
