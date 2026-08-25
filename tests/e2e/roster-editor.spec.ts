@@ -286,6 +286,23 @@ test.describe('Roster Editor', () => {
         expect(content).toContain('Mute')
     })
 
+    test('Strict aliases (on by default): each un-aliased loco shows a warning dot in the tree, which clears once aliased', async ({ workspacePage: page }) => {
+        await openRosterEditor(page)
+
+        const thomasRow = page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first()
+        await expect(thomasRow.getByTestId('alias-warning-dot')).toBeVisible()
+
+        await thomasRow.locator('.e-fullrow').click()
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('THOMAS_ALIAS')
+        await aliasInput.blur()
+
+        await expect(thomasRow.getByTestId('alias-warning-dot')).toHaveCount(0)
+        // Percy is still unaliased and keeps its dot.
+        const percyRow = page.locator('#roster-treeview li').filter({ hasText: 'Percy' }).first()
+        await expect(percyRow.getByTestId('alias-warning-dot')).toBeVisible()
+    })
+
     test('alias from myAliases.h populates in the roster visual editor', async ({ workspacePage: page }) => {
         await openAliasesEditor(page)
         await switchToRaw(page)

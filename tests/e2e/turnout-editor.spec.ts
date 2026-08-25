@@ -102,6 +102,23 @@ test.describe('Turnout Editor', () => {
         await expect(page.getByText('2 entries')).toBeVisible()
     })
 
+    test('Strict aliases (on by default): each un-aliased turnout shows a warning dot in the visual list, which clears once aliased', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+
+        const rows = page.locator('nav[aria-label="Turnouts"] a')
+        await expect(rows.filter({ hasText: 'Main Line Junction' }).getByTestId('alias-warning-dot')).toBeVisible()
+        await expect(rows.filter({ hasText: 'Yard Entry' }).getByTestId('alias-warning-dot')).toBeVisible()
+
+        await rows.filter({ hasText: 'Main Line Junction' }).click()
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('MAIN_JUNCTION')
+        await aliasInput.blur()
+
+        await expect(rows.filter({ hasText: 'Main Line Junction' }).getByTestId('alias-warning-dot')).toHaveCount(0)
+        // The other, still-unaliased turnout keeps its dot.
+        await expect(rows.filter({ hasText: 'Yard Entry' }).getByTestId('alias-warning-dot')).toBeVisible()
+    })
+
     test('raw tab shows correct SERVO_TURNOUT() macros for mock data', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
         await switchToRaw(page)

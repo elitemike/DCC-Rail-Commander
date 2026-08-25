@@ -254,5 +254,25 @@ test.describe('Validators', () => {
 
             await expect(page.locator('.squiggly-warning')).toHaveCount(0)
         })
+
+        test('the sidebar file list shows an amber dot for myTurnouts.h/myRoster.h on load, with no file ever opened', async ({ workspacePage: page }) => {
+            // Deliberately never opens Turnouts/Roster — this dot is driven by
+            // ConfigEditorState directly (configEditorState.filesNeedingAlias), not by
+            // Monaco markers, specifically so it doesn't need a Raw tab ever mounted.
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toBeVisible()
+            await expect(page.getByTestId('alias-warning-dot-myRoster.h')).toBeVisible()
+        })
+
+        test('the sidebar dot for myTurnouts.h clears once every turnout has an alias', async ({ workspacePage: page }) => {
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toBeVisible()
+
+            await page.getByText('Aliases', { exact: true }).first().click()
+            await expect(page.getByRole('button', { name: 'Raw' })).toBeVisible()
+            await page.getByRole('button', { name: 'Raw' }).click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, 'ALIAS(MAIN_JUNCTION, 200) // type: Turnout\nALIAS(YARD_ENTRY, 201) // type: Turnout')
+
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toHaveCount(0)
+        })
     })
 })
