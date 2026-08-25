@@ -109,6 +109,19 @@ test.describe('Sequences Editor', () => {
         await expect(page.getByText('0 entries')).toBeVisible()
     })
 
+    test('Strict aliases (on by default): a freshly-added sequence shows a warning dot in the list, which clears once aliased', async ({ workspacePage: page }) => {
+        await openSequencesEditor(page)
+        await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        const row = sequenceListItems(page).first()
+        await expect(row.getByTestId('alias-warning-dot')).toBeVisible()
+
+        await setHatAlias(page, 'NEW_SEQUENCE')
+
+        await expect(row.getByTestId('alias-warning-dot')).toHaveCount(0)
+    })
+
     // ── Visual → Raw sync ─────────────────────────────────────────────────────
 
     test('setting a description on a new sequence appears in raw as a trailing comment', async ({ workspacePage: page }) => {

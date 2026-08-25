@@ -123,6 +123,17 @@ function randomUnknownCommand(): string {
 }
 
 test.describe('EXRAIL block canvas', () => {
+    test('Strict aliases (on by default): the un-aliased seeded route shows a warning dot in the routes list, which clears once aliased', async ({ workspacePage: page }) => {
+        await openRoutesEditor(page)
+        const row = page.locator('routes-editor nav[aria-label="Routes"] a').first()
+        await expect(row.getByTestId('alias-warning-dot')).toBeVisible()
+
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await setHatAlias(page, 'MAIN_ROUTE')
+
+        await expect(row.getByTestId('alias-warning-dot')).toHaveCount(0)
+    })
+
     test('renders the Blocks tab for a route whose body parses cleanly', async ({ workspacePage: page }) => {
         await openRoutesEditor(page)
 

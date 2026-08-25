@@ -57,7 +57,12 @@
                                 class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                         </div>
                         <div class="flex flex-col gap-1 flex-1">
-                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Alias</label>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                                Alias
+                                <span if.bind="state.sensorIdsNeedingAlias.has(s.id)" data-testid="alias-warning-dot"
+                                    title="No alias set (Strict aliases is enabled)"
+                                    class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                            </label>
                             <alias-picker target-id.bind="s.id" alias-type="Sensor" on-change.bind="makeAliasChangeHandler($index)"></alias-picker>
                         </div>
                         <button click.trigger="removeSensor($index)" title="Remove sensor"

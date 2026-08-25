@@ -314,6 +314,9 @@
                     </span>
                     <span if.bind="filesWithErrors.has(file.name)" data-testid="error-dot-${file.name}"
                         title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                    <span if.bind="configEditorState.filesNeedingAlias.has(file.name)" data-testid="alias-warning-dot-${file.name}"
+                        title="This file has objects with no alias (Strict aliases is enabled)"
+                        class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                     <!-- Delete button: only shown on custom (user-created) files -->
                     <button if.bind="configEditorState.isCustomFile(file.name)"
                         click.trigger="removeCustomFile($index, $event)" title="Delete ${file.name}"

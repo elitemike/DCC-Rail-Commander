@@ -645,6 +645,33 @@ describe('RosterEditorCustomElement alias integration', () => {
         expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...existing, dccAddress: 84 })
         expect(syncAliasForId).toHaveBeenCalledWith(42, 84, 'NEW_ALIAS', 'Roster', 'OLD_ALIAS')
     })
+
+    it('rebuilds the tree on an alias-only edit, even though the roster entry data itself is unchanged', () => {
+        // Regression: the strict-aliases warning dot lives in the TreeView (drawNode-rendered,
+        // not Aurelia-bound), so it only repaints via an explicit _rebuildTree() call — an
+        // alias-only edit must still trigger one, or clearing the dot needs an unrelated field
+        // edit (or a tab switch) to become visible.
+        const existing = { dccAddress: 42, name: 'Switcher', functions: [], comment: '' }
+        const rebuildTree = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                roster: [existing],
+                updateRosterEntry: vi.fn(),
+                syncAliasForId: vi.fn().mockReturnValue({ ok: true }),
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+            },
+            editBufferIndex: 0,
+            editBuffer: { ...existing },
+            aliasInput: 'NEW_ALIAS',
+            errorMessage: '',
+            _rebuildTree: rebuildTree,
+        })
+
+        editor.commitBuffer()
+
+        expect(rebuildTree).toHaveBeenCalledOnce()
+    })
 })
 
 describe('RosterEditorCustomElement strict aliases', () => {

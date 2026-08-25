@@ -414,6 +414,14 @@ export class RosterEditorCustomElement {
             textSpan.appendChild(nameSpan)
             textSpan.appendChild(addrSpan)
             textSpan.appendChild(fnBadge)
+
+            if (this.state.rosterAddressesNeedingAlias.has(Number(data.dccAddress))) {
+                const warningDot = document.createElement('span')
+                warningDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0'
+                warningDot.title = 'No alias set (Strict aliases is enabled)'
+                warningDot.setAttribute('data-testid', 'alias-warning-dot')
+                textSpan.appendChild(warningDot)
+            }
         }
 
     }
@@ -554,7 +562,11 @@ export class RosterEditorCustomElement {
         // Only rebuild the tree when data actually changed; pure selection switches
         // (no edits) call commitBuffer too but produce no visible change, and
         // triggering a refresh on every click breaks SF's own selection management.
-        if (changed) this._rebuildTree()
+        // aliasChanged is included alongside `changed` because the alias itself lives
+        // outside the roster entry object diffed by `changed` — an alias-only edit
+        // (e.g. clearing the strict-aliases warning dot) would otherwise never repaint
+        // the tree despite being a real, visible change.
+        if (changed || aliasChanged) this._rebuildTree()
     }
 
     // ── DCC address + field blur handlers ────────────────────────────────────

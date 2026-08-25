@@ -47,6 +47,9 @@
                             ? 'bg-blue-900/60 text-white font-medium'
                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
                             <span class="flex-1 min-w-0 truncate">${getDisplayName(turnout)}</span>
+                            <span if.bind="state.turnoutIdsNeedingAlias.has(turnout.id)" data-testid="alias-warning-dot"
+                                title="No alias set (Strict aliases is enabled)"
+                                class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                             <button
                                 class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
                                 click.trigger="removeEntryByIndex($index, $event)" title="Remove">×</button>

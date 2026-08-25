@@ -535,6 +535,54 @@ export class ConfigEditorState {
         return getPrimaryAliasForId(this.aliases, id, type)?.name ?? ''
     }
 
+    // ── Strict aliases: which existing objects need one ──────────────────────
+    // Getters (not methods) so templates can bind `state.turnoutIdsNeedingAlias.has(t.id)`
+    // directly and have Aurelia's computed-getter tracking pick up changes to
+    // strictAliases/aliases/turnouts — a plain method call in a template binding does
+    // NOT get that tracking (only the top-level getter/property access does), so this
+    // shape matters, not just style. Empty whenever strictAliases is off.
+
+    get turnoutIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.turnouts.filter(t => !getPrimaryAliasForId(this.aliases, t.id, 'Turnout')).map(t => t.id))
+    }
+
+    get sensorIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.sensors.filter(s => !getPrimaryAliasForId(this.aliases, s.id, 'Sensor')).map(s => s.id))
+    }
+
+    /** Keyed by DCC address (Roster's own id field). */
+    get rosterAddressesNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.roster.filter(r => !getPrimaryAliasForId(this.aliases, r.dccAddress, 'Roster')).map(r => r.dccAddress))
+    }
+
+    get routeIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.routes.filter(r => !getPrimaryAliasForId(this.aliases, r.id, 'Route')).map(r => r.id))
+    }
+
+    get sequenceIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.sequences.filter(s => !getPrimaryAliasForId(this.aliases, s.id, 'Sequence')).map(s => s.id))
+    }
+
+    /** Filenames (matching state.configFiles' `name`) of every alias-eligible file with at
+     *  least one un-aliased object — drives the file-list warning dot in workspace.html.
+     *  Independent of Monaco: correct on load even before that file's editor has ever
+     *  been opened, unlike the Monaco-marker-driven error dot (see workspace.ts's
+     *  filesWithErrors). */
+    get filesNeedingAlias(): Set<string> {
+        const files = new Set<string>()
+        if (this.turnoutIdsNeedingAlias.size > 0) files.add('myTurnouts.h')
+        if (this.sensorIdsNeedingAlias.size > 0) files.add('mySensors.h')
+        if (this.rosterAddressesNeedingAlias.size > 0) files.add('myRoster.h')
+        if (this.routeIdsNeedingAlias.size > 0) files.add('myRoutes.h')
+        if (this.sequenceIdsNeedingAlias.size > 0) files.add('mySequences.h')
+        return files
+    }
+
     getObjectIdReferences(id: number) {
         return collectObjectIdReferences(id, {
             roster: this.roster,
