@@ -12,7 +12,7 @@
 import * as monaco from 'monaco-editor'
 import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData, type ExrailRefKind } from '../utils/exrail-completions'
 import { definedTracksFor } from '../components/visual-editors/exrail-block-compiler'
-import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
+import { collectObjectIdReferences, getPrimaryAliasForId, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
 
@@ -852,6 +852,53 @@ function validateTrailingLineGarbage(text: string, filename: string, out: monaco
     }
 }
 
+/**
+ * Which macro(s) define an alias-eligible object in each file, and which AliasTargetType
+ * they define. Drives validateAliasRequired() below — the closed-vocabulary object-
+ * definition files only (myAutomation.h/myRoutes.h/mySequences.h reference these ids, they
+ * don't define new ones, so they're not in this table).
+ */
+const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType }> = {
+    'myRoster.h': { source: '\\bROSTER\\s*\\(\\s*(\\d+)', type: 'Roster' },
+    'myTurnouts.h': { source: '\\b(?:SERVO_TURNOUT|TURNOUT|PIN_TURNOUT)\\s*\\(\\s*(\\d+)', type: 'Turnout' },
+    'mySensors.h': { source: '\\bSENSOR\\s*\\(\\s*(\\d+)', type: 'Sensor' },
+    'myRoutes.h': { source: '\\bROUTE\\s*\\(\\s*(\\d+)', type: 'Route' },
+    'mySequences.h': { source: '\\bSEQUENCE\\s*\\(\\s*(\\d+)', type: 'Sequence' },
+}
+
+/**
+ * When ConfigEditorState.strictAliases is on, every alias-eligible object must carry an
+ * alias — the editors themselves enforce this on add/edit (see turnout-editor.ts's
+ * commitBuffer(), etc.), but that only catches *new* edits. This flags every existing
+ * object-definition line whose id has no matching myAliases.h entry, so a folder of
+ * pre-existing EXRAIL loaded with the setting already on shows what needs an alias added
+ * instead of the gap only surfacing the next time someone tries to edit that object.
+ *
+ * Deliberately Warning, not Error: a missing alias is a workflow rule this app enforces on
+ * *new* edits, not something that fails to compile — EXRAIL itself doesn't require aliases.
+ * Error-severity would (via hasErrorMarkers()/filesWithErrorMarkers()) trip Strict compile's
+ * gate and the file-list error dot for files nobody has touched yet, which is a much bigger
+ * and unrelated behavior change than "show what needs updating."
+ */
+function validateAliasRequired(text: string, filename: string, out: monaco.editor.IMarkerData[], aliases: AliasEntry[]): void {
+    const target = STRICT_ALIAS_TARGETS[filename]
+    if (!target) return
+
+    const scanText = blankLineComments(text)
+    const stringMask = buildStringMask(scanText)
+    const re = new RegExp(target.source, 'g')
+    let m: RegExpExecArray | null
+    while ((m = re.exec(scanText)) !== null) {
+        if (stringMask[m.index]) continue
+        const id = Number(m[1])
+        if (getPrimaryAliasForId(aliases, id, target.type)) continue
+        out.push(makeMarker(text, m.index, m.index + m[0].length,
+            `This ${target.type.toLowerCase()} has no alias — required while Strict aliases is enabled.`,
+            monaco.MarkerSeverity.Warning,
+        ))
+    }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
@@ -930,6 +977,11 @@ function validateModel(model: monaco.editor.ITextModel): void {
         if (state) validateSequenceIdRules(text, filename, state.getSequenceIdViolations(), markers)
     }
 
+    if (STRICT_ALIAS_TARGETS[filename]) {
+        const state = getSharedConfigEditorState()
+        if (state?.strictAliases) validateAliasRequired(text, filename, markers, state.aliases)
+    }
+
     monaco.editor.setModelMarkers(model, OWNER, markers)
 }
 
@@ -947,12 +999,17 @@ function validateModel(model: monaco.editor.ITextModel): void {
  * range/uniqueness validator (see validateSequenceIds in myAutomationParser.ts) for
  * myRoutes.h / mySequences.h / myAutomation.h, using the full combined list — same as
  * ConfigEditorState.sequenceIdEntries would produce in the real app.
+ *
+ * `strictAliasesData`, when supplied, also runs validateAliasRequired() — as if
+ * ConfigEditorState.strictAliases were on — against the given alias list, for
+ * myRoster.h / myTurnouts.h / mySensors.h / myRoutes.h / mySequences.h.
  */
 export function _runValidatorsForTest(
     filename: string,
     text: string,
     exrailData?: ExrailCompletionData,
     sequenceIdEntries?: SequenceIdEntry[],
+    strictAliasesData?: AliasEntry[],
 ): Array<{ message: string; severity: number }> {
     const markers: monaco.editor.IMarkerData[] = []
 
@@ -977,6 +1034,10 @@ export function _runValidatorsForTest(
         validateSequenceIdRules(text, filename, validateSequenceIds(sequenceIdEntries), markers)
     }
 
+    if (strictAliasesData) {
+        validateAliasRequired(text, filename, markers, strictAliasesData)
+    }
+
     return markers.map((m) => ({ message: m.message, severity: m.severity }))
 }
 
@@ -996,6 +1057,21 @@ export function revalidateModel(
     // Force a full decoration repaint so squiggly SVG background images appear
     // immediately rather than waiting for the browser's next paint cycle.
     editor?.render(true)
+}
+
+/**
+ * Re-runs validation on every currently-open Monaco model. Content-based validators
+ * already refresh on every keystroke (see registerDiagnosticProviders() below), but
+ * validators driven by external state — e.g. validateAliasRequired()'s dependence on
+ * ConfigEditorState.strictAliases — have nothing to react to when that state changes
+ * without an edit to the model's own text, so a toggle like Settings' "Strict aliases"
+ * checkbox must explicitly ask every open model to re-check itself. See workspace.ts's
+ * setStrictAliases().
+ */
+export function revalidateAllModels(): void {
+    for (const model of monaco.editor.getModels()) {
+        validateModel(model)
+    }
 }
 
 /**

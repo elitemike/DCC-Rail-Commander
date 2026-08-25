@@ -24,7 +24,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
-import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers } from '../config/dccex-validators'
+import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels } from '../config/dccex-validators'
 import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
@@ -351,11 +351,12 @@ export class Workspace {
         void this.preferences.set('strictCompile', enabled)
     }
 
-    /** Persists the strict-aliases preference and mirrors it onto configEditorState, which the turnout/roster/sensor/route/sequence editors actually consult — called from the Settings dialog. */
+    /** Persists the strict-aliases preference and mirrors it onto configEditorState, which the turnout/roster/sensor/route/sequence editors actually consult — called from the Settings dialog. Also re-runs Monaco validation on every open model, since validateAliasRequired() depends on this setting but has no text change of its own to react to. */
     setStrictAliases(enabled: boolean): void {
         this.strictAliases = enabled
         this.configEditorState.strictAliases = enabled
         void this.preferences.set('strictAliases', enabled)
+        revalidateAllModels()
     }
 
     /** Opens the app-wide Settings dialog. Each toggle applies (and persists) immediately via its callback — there is nothing to "save" on close. */
