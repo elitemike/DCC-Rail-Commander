@@ -296,13 +296,46 @@ class ExrailAliasField extends Blockly.FieldTextInput {
 }
 
 /**
- * Collapses newlines/runs of whitespace into single spaces — shared by ExrailCodeField's
- * block-face preview (getText_()) and its actual committed value (_onHide()) so the two can
- * never drift apart, and exported purely so this specific rule is unit-testable without needing
- * to drive Blockly's DropDownDiv/a real Monaco instance.
+ * Converts a `//` line comment (outside any double-quoted string) into an equivalent block
+ * comment (asterisk-delimited, C-style) on the same line. Used only for ExrailCodeField's
+ * block-face *preview* text (getText_() below) — Blockly's SVG text element can't show real line
+ * breaks, so multi-line code gets flattened onto one line for display, and a `//` comment that
+ * used to correctly terminate at a real line break would otherwise swallow everything that
+ * follows it once flattened. The *committed* value (what's actually compiled — see _onHide()) is
+ * never touched by this: EXRAIL doesn't care about embedded line breaks inside a macro call's
+ * argument, so there's no reason to flatten it there, and doing so previously corrupted any code
+ * containing a `//` comment (see the regression test below for the exact failure).
+ */
+function blockifyLineComment(line: string): string {
+    let inStr = false
+    let esc = false
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '/' && line[i + 1] === '/') {
+            const before = line.slice(0, i)
+            const comment = line.slice(i + 2).trim()
+            return comment === '' ? before.trimEnd() : `${before}/* ${comment} */`
+        }
+    }
+    return line
+}
+
+/**
+ * Block-face preview text for ExrailCodeField's `code` value — every `//` line comment converted
+ * to a block comment first (see blockifyLineComment() above for why), then every line break/run
+ * of whitespace collapsed to one space so it renders as a single readable line. Exported purely so
+ * this specific rule is unit-testable without needing to drive Blockly's DropDownDiv/a real Monaco
+ * instance.
  */
 export function collapseCodeWhitespace(raw: string): string {
-    return raw.replace(/\s+/g, ' ').trim()
+    return raw.split('\n').map(blockifyLineComment).join(' ').replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -393,14 +426,14 @@ class ExrailCodeField extends Blockly.FieldTextInput {
      *  change event exactly like any other field edit — no host-callback plumbing needed here,
      *  unlike ExrailIdField/ExrailAliasField's hat-specific synchronous reporting.
      *
-     * Collapses whitespace (same rule getText_() already uses for the block-face preview, so
-     * what's shown always matches what's saved) before committing — EXRAIL's own body-text
-     * format is one statement per line (see parseBody()/LINE_RE), so a literal newline embedded
-     * in STEALTH's argument can't be parsed back into blocks. Left uncollapsed, committing
-     * multi-line code silently fails to round-trip: the route falls back out of Blocks mode and
-     * the edit is lost. Collapsing to one line changes nothing about the code's *meaning* — `if
-     * (x) { y(); }` compiles identically with or without a literal line break in the source —
-     * while still letting the popup itself be edited comfortably across multiple lines.
+     * Commits the raw value as-is — trimmed of leading/trailing whitespace only, embedded line
+     * breaks left completely untouched. EXRAIL genuinely doesn't mind a macro call's argument
+     * spanning multiple physical lines (see parseBody()'s own paren-balanced multi-line statement
+     * handling), and neither does the C++ compiler. An earlier version of this method collapsed
+     * every line break to a space before committing, which actively corrupted any code containing
+     * a `//` line comment: flattened onto one line, the comment no longer terminates at a real
+     * line break and instead swallows everything after it — including, in the reported case, the
+     * STEALTH call's own closing paren and everything the compiler was supposed to see next.
      *
      * Defensively tolerant of `dispose()` itself throwing (observed as a genuine, reproducible
      * "Model is disposed!" crash from Monaco's internals under some dismiss paths, even with
@@ -423,7 +456,7 @@ class ExrailCodeField extends Blockly.FieldTextInput {
         } catch {
             // Already torn down by something else (see comment above) — nothing left to clean up.
         }
-        this.setValue(collapseCodeWhitespace(raw))
+        this.setValue(raw.trim())
     }
 
     static override fromJson(options: Record<string, unknown>): ExrailCodeField {

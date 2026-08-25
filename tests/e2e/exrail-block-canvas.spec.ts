@@ -647,13 +647,14 @@ test.describe('EXRAIL block canvas', () => {
             expect(rawText).toContain('STEALTH(digitalWrite(30, LOW); digitalWrite(31, HIGH);)')
         })
 
-        // Regression: EXRAIL's body format is one statement per line — a genuinely multi-line
-        // commit (real newlines, typed with Enter, not just long text) used to reach the
-        // compiled body uncollapsed, which parseBody() can't read back into blocks. The route
-        // silently fell out of Blocks mode and the edit was lost. ExrailCodeField's _onHide()
-        // now collapses whitespace before committing (see collapseCodeWhitespace()), so this
-        // must still compile to a single valid line and the route must stay editable in Blocks.
-        test('typing genuinely multi-line C++ (real newlines) still commits as one valid EXRAIL line', async ({ workspacePage: page }) => {
+        // EXRAIL doesn't mind a macro call's argument spanning multiple physical lines, and
+        // neither does the C++ compiler (see parseBody()'s paren-balanced multi-line statement
+        // handling in exrail-block-compiler.ts) — so typing genuinely multi-line code (real
+        // newlines, via Enter) must commit exactly as typed, embedded line breaks and all, and
+        // the route must stay usable in Blocks mode rather than being forced into a Raw-only
+        // fallback. Only the block-face *preview* collapses to one line, since Blockly's SVG text
+        // can't show real line breaks — the underlying committed value is untouched.
+        test('typing genuinely multi-line C++ (real newlines) commits with the line breaks intact, and the route stays usable in Blocks mode', async ({ workspacePage: page }) => {
             await openStealthEditor(page)
 
             await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
@@ -678,16 +679,17 @@ test.describe('EXRAIL block canvas', () => {
             await page.waitForTimeout(300)
 
             // The route must still be usable in Blocks mode — a stuck-in-Raw-fallback route
-            // (Blocks disabled) is exactly the broken state this fix prevents.
+            // (Blocks disabled) is exactly the broken state the parser fix prevents.
             await expect(page.locator('.blocklySvg').first()).toBeVisible()
             await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
+            // Block-face preview: collapsed to one readable line.
             await expect(page.locator('[data-id="n1"]')).toContainText('digitalWrite(30, HIGH); delay(500); digitalWrite(30, LOW);')
 
             await page.getByTestId('editor-tab-raw').click()
             const rawText = await getMonacoContent(page)
-            // The compiled body must be exactly one line for this statement — no embedded newline.
-            const stealthLine = rawText.split('\n').find((l) => l.startsWith('STEALTH('))
-            expect(stealthLine).toBe('STEALTH(digitalWrite(30, HIGH); delay(500); digitalWrite(30, LOW);)')
+            // The committed value keeps its real line breaks — the compiled STEALTH(...) call
+            // itself spans three physical lines in the file, exactly as typed.
+            expect(rawText).toContain('STEALTH(digitalWrite(30, HIGH);\ndelay(500);\ndigitalWrite(30, LOW);)')
         })
 
         // Regression: dismissing the popup by clicking outside it (as opposed to Escape) raced
@@ -721,6 +723,49 @@ test.describe('EXRAIL block canvas', () => {
             expect(pageErrors).toEqual([])
             await expect(page.locator('.blocklySvg').first()).toBeVisible()
             await expect(page.locator('[data-id="n1"]')).toContainText('asdfasdf=234 asdfasdfa=21')
+        })
+
+        // Regression: the exact user-reported case — pasting a real multi-line C++ function
+        // containing `//` comments, then dismissing by clicking outside. An earlier version
+        // collapsed the committed value to one line without converting `//` to `/* */`, so the
+        // comment swallowed everything after it in the compiled file (confirmed via a user
+        // screenshot showing the STEALTH call's own closing paren and the next statement eaten
+        // by the comment). The fix commits the value with real line breaks intact — the raw file
+        // must contain the code exactly as typed, comment included, with nothing after it lost.
+        test('pasting multi-line C++ with a // comment and clicking outside does not corrupt the raw file', async ({ workspacePage: page }) => {
+            await openStealthEditor(page)
+
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            const popup = page.locator('.blocklyDropDownDiv')
+            const monacoEditor = popup.locator('div.monaco-editor')
+            await expect(monacoEditor).toBeVisible()
+
+            await monacoEditor.click()
+            await page.keyboard.press('Control+A')
+            await page.keyboard.type('if (x) {')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('// a comment that must not eat the next line')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('digitalWrite(30, HIGH);')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('}')
+            await page.waitForTimeout(300)
+
+            // Click empty canvas background, not a keyboard dismissal.
+            await page.locator('.blocklySvg').first().click({ position: { x: 500, y: 400 } })
+            await page.waitForTimeout(1000)
+
+            await page.getByTestId('editor-tab-raw').click()
+            const rawText = await getMonacoContent(page)
+            // Everything typed must survive, in order, on its own real line — the comment must not
+            // have swallowed the digitalWrite call or the closing brace/paren after it. The raw-file
+            // formatter re-indents each line, so match line content only, ignoring leading whitespace.
+            const lines = rawText.split('\n').map((l) => l.trim())
+            const commentIdx = lines.indexOf('// a comment that must not eat the next line')
+            expect(commentIdx).toBeGreaterThan(-1)
+            expect(lines[commentIdx + 1]).toBe('digitalWrite(30, HIGH);')
+            expect(lines[commentIdx + 2]).toBe('}')
+            expect(rawText).toContain('DONE')
         })
 
         test('is also used by STEALTH_GLOBAL', async ({ workspacePage: page }) => {

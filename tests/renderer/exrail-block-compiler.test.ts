@@ -129,6 +129,54 @@ describe('parseBody / compileBody round-trip', () => {
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
     })
 
+    // Regression: EXRAIL doesn't mind a macro call's argument spanning multiple physical lines
+    // (nor does the C++ compiler) — only this parser's own line-by-line scan needs to recognize
+    // that a statement continues past the first line whenever its parens aren't balanced yet.
+    // Before this fix, a genuinely multi-line STEALTH body failed LINE_RE on its very first
+    // (unbalanced) line, and — critically — whatever came *after* it (a later DONE, another
+    // statement) was never reached at all, since the loop had already returned a parse failure.
+    describe('multi-line statements (paren-balanced across physical lines)', () => {
+        it('parses a STEALTH body whose parens close on a later physical line', () => {
+            const body = 'STEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})'
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('if (x) {\n  digitalWrite(30, HIGH);\n}')
+        })
+
+        it('round-trips a multi-line STEALTH body exactly, embedded newlines and all', () => {
+            const body = 'STEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})'
+            const graph = parseOk(body)
+            expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+        })
+
+        it('still parses whatever comes after a multi-line statement, not just the statement itself', () => {
+            // This is the exact failure mode reported: a multi-line STEALTH swallowing (or never
+            // reaching) the DONE/next statement that follows it in the body.
+            const body = 'THROW(200)\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})\nCLOSE(201)'
+            const graph = parseOk(body)
+            expect(graph.nodes.map((n) => n.info.blockTypeId)).toEqual(['ROUTE', 'THROW', 'STEALTH', 'CLOSE'])
+            expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+        })
+
+        it('a multi-line statement containing a // comment still gracefully falls back to Raw mode, not a crash or a mis-parse', () => {
+            // Comments inside a Blocks-mode body are a separate, pre-existing, documented
+            // limitation (see the "Comments inside a route/sequence body" rejection below) — the
+            // multi-line fix must not accidentally make this parse "successfully" into a graph
+            // that's silently wrong; it must still cleanly reject and defer to Raw mode.
+            const body = 'STEALTH(if (x) {\n  // a comment\n  digitalWrite(30, HIGH);\n})'
+            const result = parseBody(body, 'ROUTE', BLOCK_REGISTRY)
+            expect(result.ok).toBe(false)
+            if (!result.ok) expect(result.reason).toMatch(/Comments/)
+        })
+
+        it('handles a statement whose parens balance across more than two lines', () => {
+            const body = 'STEALTH(a();\nb();\nc();)'
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('a();\nb();\nc();')
+        })
+    })
+
     it('graph structure is preserved through parseBody(compileBody(graph))', () => {
         const body = 'IF(1)\n  THROW(200)\nELSE\n  CLOSE(200)\nENDIF\nDELAY(100)'
         const graph = parseOk(body)
