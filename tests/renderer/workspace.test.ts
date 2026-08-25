@@ -72,7 +72,7 @@ function makeWorkspace(opts: {
             repoPath: opts.repoPath === undefined ? '/repo' : opts.repoPath,
             selectedVersion: opts.selectedVersion ?? null,
         },
-        configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn() },
+        configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn(), strictAliases: true },
         toastService: { show: toastShowFn },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
         files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
@@ -509,6 +509,19 @@ describe('Workspace.setStrictCompile', () => {
 
         expect(workspace.strictCompile).toBe(true)
         expect(preferencesSetFn).toHaveBeenCalledWith('strictCompile', true)
+    })
+})
+
+describe('Workspace.setStrictAliases', () => {
+    it('updates the field, mirrors it onto configEditorState, and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.strictAliases = true
+
+        workspace.setStrictAliases(false)
+
+        expect(workspace.strictAliases).toBe(false)
+        expect(workspace.configEditorState.strictAliases).toBe(false)
+        expect(preferencesSetFn).toHaveBeenCalledWith('strictAliases', false)
     })
 })
 

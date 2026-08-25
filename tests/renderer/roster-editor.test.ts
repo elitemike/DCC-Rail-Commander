@@ -647,6 +647,67 @@ describe('RosterEditorCustomElement alias integration', () => {
     })
 })
 
+describe('RosterEditorCustomElement strict aliases', () => {
+    const LOCO = { dccAddress: 42, name: 'Switcher', functions: [], comment: '' }
+
+    it('blocks the commit — even of an unrelated field, not just the alias — when strictAliases is on and no alias is set', () => {
+        const updateRosterEntry = vi.fn()
+        const syncAliasForId = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: true, updateRosterEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).not.toHaveBeenCalled()
+        expect(syncAliasForId).not.toHaveBeenCalled()
+        expect(editor.errorMessage).toContain('alias')
+    })
+
+    it('allows the commit when strictAliases is on and an alias is present', () => {
+        const updateRosterEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: true, updateRosterEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('THOMAS') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: 'THOMAS',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...LOCO, name: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
+
+    it('allows an aliasless commit when strictAliases is off', () => {
+        const updateRosterEntry = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: false, updateRosterEntry, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...LOCO, name: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
+})
+
 describe('Alias type comments', () => {
     it('parses alias type metadata from an end-of-line comment', () => {
         const aliases = parseAliasesFromFile('ALIAS(YARD_EXIT, 200) // type: Turnout')

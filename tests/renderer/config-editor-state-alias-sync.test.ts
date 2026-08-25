@@ -132,6 +132,64 @@ describe('ConfigEditorState.syncAliasForId', () => {
         expect(result).toEqual({ ok: true })
         expect(state.aliases).toEqual([{ name: 'AMBIG_ALIAS', value: '3', aliasType: 'Turnout' }])
     })
+
+    describe('strictAliases', () => {
+        it('rejects clearing an alias to blank when strictAliases is on', () => {
+            const state = {
+                aliases: [{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }],
+                hasChanges: false,
+                strictAliases: true,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, '', 'Turnout', 'YARD_TURNOUT',
+            )
+
+            expect(result).toEqual({ ok: false, reason: 'An alias is required when Strict aliases is enabled.' })
+            // Nothing removed — the alias must survive the rejected attempt.
+            expect(state.aliases).toEqual([{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }])
+        })
+
+        it('still allows clearing an alias to blank when strictAliases is off', () => {
+            const state = {
+                aliases: [{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }],
+                hasChanges: false,
+                strictAliases: false,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, '', 'Turnout', 'YARD_TURNOUT',
+            )
+
+            expect(result).toEqual({ ok: true })
+            expect(state.aliases).toEqual([])
+        })
+
+        it('still allows setting a non-blank alias when strictAliases is on', () => {
+            const state = {
+                aliases: [] as { name: string; value: string; aliasType?: string }[],
+                hasChanges: false,
+                strictAliases: true,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, 'YARD_TURNOUT', 'Turnout', '',
+            )
+
+            expect(result).toEqual({ ok: true })
+            expect(state.aliases).toEqual([{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }])
+        })
+
+    })
 })
 
 describe('ConfigEditorState.getPrimaryAliasNameForId', () => {

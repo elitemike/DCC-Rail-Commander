@@ -92,6 +92,20 @@ async function pickDropdownOption(page: import('@playwright/test').Page, current
 }
 
 /**
+ * Sets the hat block's ALIAS field (see exrail-blockly-blocks.ts's ExrailAliasField) — a Blockly
+ * field, not a plain `<input>`. Mirrors sequences-editor.spec.ts's setHatAlias(); needed here
+ * because strict aliases is on by default, and MOCK_ROUTES_H's seeded route has none, so any
+ * genuine body edit (dropdown pick, alias-driven field normalization) is blocked until one exists.
+ */
+async function setHatAlias(page: import('@playwright/test').Page, value: string) {
+    await page.getByRole('button', { name: /^Edit text:/ }).click()
+    await page.keyboard.press('Control+A')
+    if (value) await page.keyboard.type(value)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+}
+
+/**
  * Generates a random EXRAIL-command-shaped word Blocks mode has never heard of — a made-up
  * ALL_CAPS identifier, optionally called with garbage arguments. Blocks mode must never crash
  * on this (see exrail-block-compiler.ts's parseBody() doc comment: any unrecognized line
@@ -222,6 +236,9 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
         await expect(page.locator('[data-id="n1"]')).toContainText('Main Line Junction (200)')
 
+        // Strict aliases is on by default — the seeded route has none yet.
+        await setHatAlias(page, 'MAIN_ROUTE')
+
         // Picking a different known turnout compiles cleanly, never as NaN — the field is a
         // restricted dropdown, not the free-text input a stray/unresolved value could corrupt.
         await pickDropdownOption(page, 'Main Line Junction (200)', 'Yard Entry (201)')
@@ -249,11 +266,18 @@ test.describe('EXRAIL block canvas', () => {
     })
 
     test('a turnout alias shows up in the turnout-ref dropdown and compiles by name, not NaN', async ({ workspacePage: page }) => {
+        // Strict aliases is on by default — give the seeded route one first, before the turnout
+        // alias below triggers an auto-normalization pass on this route's body (see
+        // _normalizeExistingBlocks() in exrail-block-canvas.ts).
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await setHatAlias(page, 'MAIN_ROUTE')
+
         await openAliasesEditor(page)
         await page.getByRole('button', { name: 'Raw' }).click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         await page.waitForTimeout(400)
-        await setMonacoContent(page, 'ALIAS(mysidingpoint, 201) // type: Turnout')
+        await setMonacoContent(page, 'ALIAS(mysidingpoint, 201) // type: Turnout\nALIAS(MAIN_ROUTE, 1) // type: Route')
 
         await openRoutesEditor(page)
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
@@ -279,11 +303,18 @@ test.describe('EXRAIL block canvas', () => {
         // dedupe) — the stored raw "201" must be migrated to the alias name (see
         // exrail-block-canvas.ts's _normalizeExistingBlocks()) so the field still resolves
         // to a real option instead of falling back to "201 (not found)".
+        // Strict aliases is on by default — give the seeded route one first, before the turnout
+        // alias below triggers an auto-normalization pass on this route's body (see
+        // _normalizeExistingBlocks() in exrail-block-canvas.ts).
+        await openRoutesEditor(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await setHatAlias(page, 'MAIN_ROUTE')
+
         await openAliasesEditor(page)
         await page.getByRole('button', { name: 'Raw' }).click()
         await expect(page.locator('div.monaco-editor')).toBeVisible()
         await page.waitForTimeout(400)
-        await setMonacoContent(page, 'ALIAS(mysidingpoint, 201) // type: Turnout')
+        await setMonacoContent(page, 'ALIAS(mysidingpoint, 201) // type: Turnout\nALIAS(MAIN_ROUTE, 1) // type: Route')
 
         await openRoutesEditor(page)
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })

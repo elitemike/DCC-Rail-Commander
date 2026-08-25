@@ -114,6 +114,10 @@ test.describe('Sequences Editor', () => {
     test('setting a description on a new sequence appears in raw as a trailing comment', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — a freshly-added sequence has no alias yet.
+        await setHatAlias(page, 'YARD_SHUNT')
 
         const descInput = descriptionInput(page)
         await descInput.fill('Yard shunt')
@@ -130,6 +134,10 @@ test.describe('Sequences Editor', () => {
     test('editing a sequence description updates the sidebar label and raw', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — a freshly-added sequence has no alias yet.
+        await setHatAlias(page, 'LOOP_A')
 
         const descInput = descriptionInput(page)
         await descInput.fill('Loop A')
@@ -149,6 +157,10 @@ test.describe('Sequences Editor', () => {
     test('a sequence with no description falls back to "Sequence id" and omits the comment', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — a freshly-added sequence has no alias yet.
+        await setHatAlias(page, 'SEQ_2')
 
         // addSequence() defaults to a placeholder description — clear it to
         // exercise the true no-description fallback.
@@ -167,6 +179,10 @@ test.describe('Sequences Editor', () => {
     test('removing a sequence with a description removes it from raw', async ({ workspacePage: page }) => {
         await openSequencesEditor(page)
         await addSequence(page)
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — a freshly-added sequence has no alias yet.
+        await setHatAlias(page, 'REMOVABLE_SEQUENCE')
 
         const descInput = descriptionInput(page)
         await descInput.fill('Removable Sequence')

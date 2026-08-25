@@ -109,6 +109,20 @@ async function pickDropdownOption(page: import('@playwright/test').Page, current
     await menuItem.click()
 }
 
+/**
+ * Sets the hat block's ALIAS field (see exrail-blockly-blocks.ts's ExrailAliasField) — a Blockly
+ * field, not a plain `<input>`. Needed because strict aliases is on by default: these tests seed
+ * a sequence directly via raw text (no alias), so any genuine Blocks-mode structural edit is
+ * blocked until one exists.
+ */
+async function setHatAlias(page: import('@playwright/test').Page, value: string) {
+    await page.getByRole('button', { name: /^Edit text:/ }).click()
+    await page.keyboard.press('Control+A')
+    if (value) await page.keyboard.type(value)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test.describe('Sequences branch logic', () => {
@@ -125,6 +139,9 @@ test.describe('Sequences branch logic', () => {
         await expect(blocksButton).toBeEnabled()
         await blocksButton.click()
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — this sequence was seeded via raw text, no alias yet.
+        await setHatAlias(page, 'PLAIN_SEQUENCE')
 
         // DONE is real body content now (parseRoutesFromFile/parseSequencesFromFile keep it
         // instead of stripping it) — it gets an ordinary node id (n4) in the same depth-first
@@ -188,6 +205,9 @@ test.describe('Sequences branch logic', () => {
 
         await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        // Strict aliases is on by default — this sequence was seeded via raw text, no alias yet.
+        await setHatAlias(page, 'BRANCH_TEST')
 
         // n1 = IFCLOSED(200), the branch's own condition field.
         await pickDropdownOption(page, 'Main Line Junction (200)', 'Yard Entry (201)')

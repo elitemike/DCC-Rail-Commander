@@ -227,6 +227,17 @@ export class ConfigEditorState {
     // ── Unsaved-changes tracking ──────────────────────────────────────────────
     hasChanges = false
 
+    /**
+     * Persisted app-wide preference (default on) — when true, every alias-eligible entry
+     * (Turnout, Roster, Sensor, Route, Sequence) must carry an alias: syncAliasForId()
+     * rejects blanking one out, and each editor's own commit path (turnout/roster-editor's
+     * commitBuffer(), sensors-editor's updateSensor(), routes/sequences-editor's
+     * updateRoute()/updateSequence()) refuses to save *any* field change on an entry that
+     * currently lacks an alias, not just alias edits themselves. Loaded/toggled from
+     * workspace.ts's Settings dialog wiring — see setStrictAliases() there.
+     */
+    strictAliases = true
+
     // ── myRoster.h ───────────────────────────────────────────────────────────
     @observable roster: Roster[] = []
 
@@ -631,6 +642,9 @@ export class ConfigEditorState {
         previousAliasName?: string,
     ): { ok: true } | { ok: false; reason: string } {
         const trimmedName = aliasName.trim()
+        if (trimmedName === '' && this.strictAliases) {
+            return { ok: false, reason: 'An alias is required when Strict aliases is enabled.' }
+        }
         const trimmedPreviousName = previousAliasName?.trim() ?? ''
         const aliases = [...this.aliases]
 

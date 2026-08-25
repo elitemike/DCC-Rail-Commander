@@ -37,6 +37,7 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
         rawEditor: null,
         rawSnapshot: '',
         _idBeforeEdit: new Map<number, number>(),
+        _rowBeforeEdit: new Map<number, { id: number; pin: number; description: string }>(),
     })
 
     return { editor, state, toastShow }
@@ -159,5 +160,63 @@ describe('SensorsEditorCustomElement.makeAliasChangeHandler', () => {
         const [payload] = toastShow.mock.calls[0]
         expect(payload).toMatchObject({ title: 'Alias Error', cssClass: 'e-toast-warning' })
         expect(payload.content).toContain('BLOCK_1')
+    })
+})
+
+describe('SensorsEditorCustomElement strict aliases', () => {
+    it('blocks updateSensor — even for an unrelated field, not just the alias — when strictAliases is on and no alias is set', () => {
+        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        state.strictAliases = true
+
+        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+
+        // The mutation never landed — state.sensors is untouched.
+        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Block Detector' }])
+    })
+
+    it('shows a warning toast when updateSensor is blocked', () => {
+        const { editor, state, toastShow } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        state.strictAliases = true
+
+        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+
+        expect(toastShow).toHaveBeenCalledOnce()
+        const [payload] = toastShow.mock.calls[0]
+        expect(payload).toMatchObject({ title: 'Alias Required', cssClass: 'e-toast-warning' })
+    })
+
+    it('allows updateSensor when strictAliases is on and an alias is present', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
+        )
+        state.strictAliases = true
+
+        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+
+        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Renamed' }])
+    })
+
+    it('allows an aliasless updateSensor when strictAliases is off', () => {
+        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        state.strictAliases = false
+
+        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+
+        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Renamed' }])
+    })
+
+    it('uses the pre-edit id to look up the alias when a rename is in flight, so an aliased sensor can still be renamed', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
+        )
+        state.strictAliases = true
+
+        editor.captureIdBeforeEdit(0)
+        editor.updateSensor(0, { id: 20, pin: 5, description: 'Block Detector' })
+
+        expect(state.sensors).toEqual([{ id: 20, pin: 5, description: 'Block Detector' }])
+        expect(state.syncAliasForId).toHaveBeenCalledWith(10, 20, 'BLOCK_1', 'Sensor', 'BLOCK_1')
     })
 })

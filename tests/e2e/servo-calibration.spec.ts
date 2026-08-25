@@ -210,6 +210,14 @@ test.describe('Servo Calibration', () => {
     })
 
     test('save writes the updated positions back into myTurnouts.h', async ({ workspacePage: page }) => {
+        // Strict aliases is on by default — this mock turnout has none yet, so give it one
+        // before Save (which commits through the same edit-buffer gate as any other field).
+        await openTurnoutEditor(page)
+        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        const aliasInput = page.locator('div:has(> label:has-text("Alias")) input[type="text"]').first()
+        await aliasInput.fill('MAIN_JUNCTION')
+        await aliasInput.blur()
+
         await openCalibrationDialog(page)
 
         await dialog(page).getByRole('button', { name: 'Swap' }).click()

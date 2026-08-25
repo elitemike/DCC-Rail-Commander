@@ -11,11 +11,13 @@ export interface SettingsDialogModel {
     verboseCompile: boolean
     useLatestProdVersion: boolean
     strictCompile: boolean
+    strictAliases: boolean
     onAutoConnectChange: (enabled: boolean) => void
     onShowMonitorOnConnectChange: (enabled: boolean) => void
     onVerboseCompileChange: (enabled: boolean) => void
     onUseLatestProdVersionChange: (enabled: boolean) => void
     onStrictCompileChange: (enabled: boolean) => void
+    onStrictAliasesChange: (enabled: boolean) => void
 }
 
 /**
@@ -37,12 +39,14 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     verboseCompile = false
     useLatestProdVersion = true
     strictCompile = false
+    strictAliases = true
 
     autoConnectEl!: HTMLInputElement
     showMonitorOnConnectEl!: HTMLInputElement
     verboseCompileEl!: HTMLInputElement
     useLatestProdVersionEl!: HTMLInputElement
     strictCompileEl!: HTMLInputElement
+    strictAliasesEl!: HTMLInputElement
     blocklySoundsEl!: HTMLInputElement
 
     private sfAutoConnect?: CheckBox
@@ -50,6 +54,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     private sfVerboseCompile?: CheckBox
     private sfUseLatestProdVersion?: CheckBox
     private sfStrictCompile?: CheckBox
+    private sfStrictAliases?: CheckBox
     private sfBlocklySounds?: CheckBox
 
     activate(model: SettingsDialogModel): void {
@@ -59,6 +64,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.verboseCompile = model.verboseCompile
         this.useLatestProdVersion = model.useLatestProdVersion
         this.strictCompile = model.strictCompile
+        this.strictAliases = model.strictAliases
     }
 
     attached(): void {
@@ -92,6 +98,12 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         })
         this.sfStrictCompile.appendTo(this.strictCompileEl)
 
+        this.sfStrictAliases = new CheckBox({
+            checked: this.strictAliases,
+            change: (args) => this.model.onStrictAliasesChange(args.checked),
+        })
+        this.sfStrictAliases.appendTo(this.strictAliasesEl)
+
         this.sfBlocklySounds = new CheckBox({
             checked: this.blocklySounds.enabled,
             change: (args) => void this.blocklySounds.setEnabled(args.checked),
@@ -110,6 +122,8 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.sfUseLatestProdVersion = undefined
         this.sfStrictCompile?.destroy()
         this.sfStrictCompile = undefined
+        this.sfStrictAliases?.destroy()
+        this.sfStrictAliases = undefined
         this.sfBlocklySounds?.destroy()
         this.sfBlocklySounds = undefined
     }
