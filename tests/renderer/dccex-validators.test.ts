@@ -1,16 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // Minimal Monaco mock — only the constants the validators actually use.
+let mockModelMarkers: Array<{ severity: number }> = []
 vi.mock('monaco-editor', () => ({
     MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
     editor: {
         setModelMarkers: vi.fn(),
         getModels: () => [],
         onDidCreateModel: vi.fn(),
+        getModelMarkers: () => mockModelMarkers,
+        onDidChangeMarkers: vi.fn(() => ({ dispose: vi.fn() })),
     },
 }))
 
-import { _runValidatorsForTest } from '../../src/renderer/src/config/dccex-validators'
+import * as monaco from 'monaco-editor'
+import { _runValidatorsForTest, hasErrorMarkers, onMarkersChanged } from '../../src/renderer/src/config/dccex-validators'
 
 // Convenience constants that mirror the mock values above.
 const ERROR = 8
@@ -428,5 +432,36 @@ describe('validateSequenceIdRules — wired through _runValidatorsForTest', () =
         // even though id 10 collides elsewhere.
         const markers = _runValidatorsForTest('myAutomation.h', '// no automations here', undefined, entries)
         expect(markers).toHaveLength(0)
+    })
+})
+
+// ── hasErrorMarkers() / onMarkersChanged() — the strict-compile gate ────────────
+
+describe('hasErrorMarkers', () => {
+    it('is false when there are no markers at all', () => {
+        mockModelMarkers = []
+        expect(hasErrorMarkers()).toBe(false)
+    })
+
+    it('is false when markers exist but are all below Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING }]
+        expect(hasErrorMarkers()).toBe(false)
+    })
+
+    it('is true when at least one marker is Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING }, { severity: ERROR }]
+        expect(hasErrorMarkers()).toBe(true)
+    })
+})
+
+describe('onMarkersChanged', () => {
+    it('invokes the callback when monaco reports a markers change', () => {
+        const callback = vi.fn()
+        onMarkersChanged(callback)
+
+        const [handler] = vi.mocked(monaco.editor.onDidChangeMarkers).mock.calls.at(-1)!
+        handler([] as never)
+
+        expect(callback).toHaveBeenCalled()
     })
 })
