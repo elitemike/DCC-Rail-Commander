@@ -284,6 +284,34 @@ function splitArgs(argsRaw: string): string[] {
     return parts
 }
 
+/**
+ * Net paren-depth change contributed by one physical line — `(` count minus `)` count — ignoring
+ * anything inside a double-quoted string or after an (unquoted) `//` marker, since neither
+ * contributes real structure (mirrors how the C++ compiler itself would see it). Used by
+ * parseBody() below to recognize when a statement's argument (e.g. a STEALTH block embedding
+ * multi-line C++) genuinely continues onto the next physical line, rather than assuming every
+ * statement fits on exactly one line.
+ */
+function netParenDelta(line: string): number {
+    let depth = 0
+    let inStr = false
+    let esc = false
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '/' && line[i + 1] === '/') break
+        if (ch === '(') depth++
+        else if (ch === ')') depth--
+    }
+    return depth
+}
+
 function stripQuotes(value: string): string {
     if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
         return value.slice(1, -1)
@@ -375,9 +403,22 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
         return top.target === 'then' ? top.node.then! : top.node.else!
     }
 
-    for (const raw of lines) {
-        const line = raw.trim()
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim()
         if (line === '') continue
+
+        // A statement whose opening paren isn't yet balanced by a closing one on this same
+        // physical line continues onto the next (e.g. STEALTH embedding a multi-line C++
+        // function) — keep consuming lines, joined back with real newlines so the statement's
+        // own internal formatting/comments survive, until the parens balance. EXRAIL itself
+        // doesn't care about embedded line breaks inside a macro call's argument; only this
+        // parser's own line-by-line scan needs to know where one statement actually ends.
+        let depth = netParenDelta(line)
+        while (depth > 0 && i + 1 < lines.length) {
+            i++
+            line += '\n' + lines[i]
+            depth += netParenDelta(lines[i])
+        }
 
         const withoutStrings = line.replace(/"[^"]*"/g, '')
         if (withoutStrings.includes('//')) {

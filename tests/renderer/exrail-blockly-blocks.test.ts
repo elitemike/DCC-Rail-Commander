@@ -184,11 +184,10 @@ describe('ExrailCodeField (STEALTH/STEALTH_GLOBAL code field)', () => {
 })
 
 describe('collapseCodeWhitespace', () => {
-    // Regression: committing genuinely multi-line code typed in the Monaco popup (real newlines,
-    // not just long text) used to reach the field's value uncollapsed — EXRAIL's body format is
-    // one statement per line, so the route silently failed to parse back into blocks and the
-    // edit was lost the moment the popup closed. ExrailCodeField's _onHide() runs every commit
-    // through this same function before calling setValue(), so that can never happen again.
+    // Preview-text only (getText_()'s block-face label) — see ExrailCodeField's _onHide(), which
+    // commits the raw multi-line value untouched. EXRAIL doesn't mind a macro argument spanning
+    // multiple physical lines, and neither does the C++ compiler; only Blockly's SVG text element
+    // (no line-wrapping) needs a single-line version, purely for display.
     it('collapses a genuinely multi-line if-statement to one line', () => {
         const typed = 'if (digitalRead(30) == LOW) {\n  digitalWrite(31, HIGH);\n}'
         expect(collapseCodeWhitespace(typed)).toBe('if (digitalRead(30) == LOW) { digitalWrite(31, HIGH); }')
@@ -213,5 +212,42 @@ describe('collapseCodeWhitespace', () => {
 
     it('collapses whitespace-only input to an empty string', () => {
         expect(collapseCodeWhitespace('   \n\t  \n')).toBe('')
+    })
+
+    // Regression: an earlier version collapsed every line break to a plain space with no regard
+    // for `//` comments — flattened onto one line, a comment that used to correctly terminate at
+    // a real line break instead swallowed everything after it, including a STEALTH call's own
+    // closing paren. Converting each `//` comment to a block comment first (before flattening)
+    // keeps it correctly scoped to just its own original line's content.
+    it('converts a trailing // comment to a block comment so flattening does not swallow the next line', () => {
+        const typed = 'foo(); // does a thing\nbar();'
+        expect(collapseCodeWhitespace(typed)).toBe('foo(); /* does a thing */ bar();')
+    })
+
+    it('converts a whole-line // comment to a block comment', () => {
+        const typed = '// explain what this does\nfoo();'
+        expect(collapseCodeWhitespace(typed)).toBe('/* explain what this does */ foo();')
+    })
+
+    it('does not treat // inside a string literal as a comment', () => {
+        const typed = 'F("http://example.com")'
+        expect(collapseCodeWhitespace(typed)).toBe('F("http://example.com")')
+    })
+
+    it('handles the exact reported case: an end-of-line comment followed by more real code', () => {
+        const typed = [
+            'void myFilter(Print * stream, byte & opcode) {',
+            '  // use command <U locoId> to display name from roster',
+            '  if (opcode == \'U\') {',
+            '    opcode=0;',
+            '  }',
+            '}',
+        ].join('\n')
+        const collapsed = collapseCodeWhitespace(typed)
+        // Every line's actual code must still be present — none of it silently commented away.
+        expect(collapsed).toContain("if (opcode == 'U') {")
+        expect(collapsed).toContain('opcode=0;')
+        expect(collapsed).toContain('}')
+        expect(collapsed).not.toMatch(/[\r\n]/)
     })
 })
