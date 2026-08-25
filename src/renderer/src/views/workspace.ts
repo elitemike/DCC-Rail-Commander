@@ -24,6 +24,8 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
+import { hasErrorMarkers, onMarkersChanged } from '../config/dccex-validators'
+import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
     private readonly router = resolve(Router)
@@ -149,6 +151,11 @@ export class Workspace {
     verboseCompile = false
     /** Persisted app-wide preference — whether loadVersions() always overrides the version selection with the latest Prod release. Loaded in binding(), toggled from the Settings dialog. */
     useLatestProdVersion = true
+    /** Persisted app-wide preference — when on, canCompile also requires no Monaco error markers across any config file. Loaded in binding(), toggled from the Settings dialog. */
+    strictCompile = false
+    /** Live mirror of hasErrorMarkers(), kept current via onMarkersChanged() (see binding()/detaching()) — only consulted when strictCompile is on. */
+    hasBlockingErrors = false
+    private _unsubMarkersChanged: IDisposable | null = null
 
     // ── Serial connection — the actual open/closed state of the port ─────────
     /** True once connect() has successfully opened the selected device's port. The single source of truth for whether anything (Throttle, Monitor) can currently talk to the device — Monitor visibility is a separate, unrelated concern. */
@@ -272,6 +279,11 @@ export class Workspace {
         this.showMonitorOnConnect = (await this.preferences.get<boolean>('showMonitorOnConnect')) ?? true
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
+        this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
+        this.hasBlockingErrors = hasErrorMarkers()
+        this._unsubMarkersChanged = onMarkersChanged(() => {
+            this.hasBlockingErrors = hasErrorMarkers()
+        })
         // Fire-and-forget: a git call that can be slow (or fail entirely
         // offline) and must never block the rest of the view from rendering.
         // Started after the preferences above are loaded so it reads a
@@ -308,6 +320,12 @@ export class Workspace {
         void this.preferences.set('useLatestProdVersion', enabled)
     }
 
+    /** Persists the strict-compile preference — called from the Settings dialog. */
+    setStrictCompile(enabled: boolean): void {
+        this.strictCompile = enabled
+        void this.preferences.set('strictCompile', enabled)
+    }
+
     /** Opens the app-wide Settings dialog. Each toggle applies (and persists) immediately via its callback — there is nothing to "save" on close. */
     openSettings(): void {
         void this.dialogService.open({
@@ -317,10 +335,12 @@ export class Workspace {
                 showMonitorOnConnect: this.showMonitorOnConnect,
                 verboseCompile: this.verboseCompile,
                 useLatestProdVersion: this.useLatestProdVersion,
+                strictCompile: this.strictCompile,
                 onAutoConnectChange: (v: boolean) => this.setAutoConnectMonitor(v),
                 onShowMonitorOnConnectChange: (v: boolean) => this.setShowMonitorOnConnect(v),
                 onVerboseCompileChange: (v: boolean) => this.setVerboseCompile(v),
                 onUseLatestProdVersionChange: (v: boolean) => this.setUseLatestProdVersion(v),
+                onStrictCompileChange: (v: boolean) => this.setStrictCompile(v),
             },
         })
     }
@@ -501,6 +521,8 @@ export class Workspace {
         this._unsubUsbAttached = null
         this._unsubUsbDetached = null
         this._unsubUsbClosed = null
+        this._unsubMarkersChanged?.dispose()
+        this._unsubMarkersChanged = null
         // Don't leak an open port once the workspace itself goes away (e.g.
         // navigating Home) — Monitor no longer owns this, so nothing else will.
         if (this.portConnected) void this.disconnect()
@@ -1275,10 +1297,12 @@ export class Workspace {
         void this.checkDeviceConnection()
     }
 
-    /** True when a device with both an FQBN and a port is selected. */
+    /** True when a device with both an FQBN and a port is selected, and (if strictCompile is on) no config file currently has a Monaco error marker. */
     get canCompile(): boolean {
         const d = this.state.selectedDevice
-        return !!d && !!d.fqbn && !!d.port
+        if (!d || !d.fqbn || !d.port) return false
+        if (this.strictCompile && this.hasBlockingErrors) return false
+        return true
     }
 
     get productName(): string {

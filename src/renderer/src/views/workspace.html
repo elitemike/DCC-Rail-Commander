@@ -120,7 +120,7 @@
 
         <!-- ── COMPILE button (dev/mock mode only) ── -->
         <button if.bind="isMock" click.trigger="compile()" disabled.bind="isCompiling || !canCompile"
-            title.bind="!canCompile ? 'Select a device with a port before compiling' : ''"
+            title.bind="!canCompile ? (strictCompile && hasBlockingErrors ? 'Fix editor errors before compiling (Strict compile is on)' : 'Select a device with a port before compiling') : ''"
             class="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-semibold text-sm transition-colors shadow-lg shadow-blue-900/30">
             <svg if.bind="!isCompiling" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -135,7 +135,7 @@
 
         <!-- ── COMPILE & UPLOAD button (production only) ── -->
         <button if.bind="!isMock" click.trigger="compileAndUpload()" disabled.bind="isCompiling || !canCompile"
-            title.bind="!canCompile ? 'Select a device with a port before compiling' : ''"
+            title.bind="!canCompile ? (strictCompile && hasBlockingErrors ? 'Fix editor errors before compiling (Strict compile is on)' : 'Select a device with a port before compiling') : ''"
             class="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-semibold text-sm transition-colors shadow-lg shadow-green-900/30">
             <svg if.bind="!isCompiling" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

@@ -884,3 +884,13 @@ export function registerDiagnosticProviders(): void {
         model.onDidChangeContent(() => validateModel(model))
     })
 }
+
+/** True if any open Monaco model (any config file) currently has an Error-severity marker. Drives the "strict compile" preference — see workspace.ts's canCompile. */
+export function hasErrorMarkers(): boolean {
+    return monaco.editor.getModelMarkers({}).some((m) => m.severity === monaco.MarkerSeverity.Error)
+}
+
+/** Fires whenever any model's markers change anywhere in the app — used to keep strict-compile's error gate live-updated without polling. */
+export function onMarkersChanged(callback: () => void): monaco.IDisposable {
+    return monaco.editor.onDidChangeMarkers(() => callback())
+}

@@ -1,4 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
+
+// Workspace pulls in dccex-validators.ts (strict-compile's error-marker check), which imports
+// the real monaco-editor package — that package touches `window` at module scope and crashes
+// under vitest's node environment, same reason exrail-block-registry.test.ts and
+// dccex-validators.test.ts mock it.
+vi.mock('monaco-editor', () => ({
+    MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+    editor: {
+        setModelMarkers: vi.fn(),
+        getModels: () => [],
+        getModelMarkers: () => [],
+        onDidCreateModel: vi.fn(),
+        onDidChangeMarkers: vi.fn(() => ({ dispose: vi.fn() })),
+    },
+}))
+
 import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
@@ -28,6 +44,8 @@ function makeWorkspace(opts: {
     selectedVersion?: string | null
     tags?: string[]
     useLatestProdVersion?: boolean
+    strictCompile?: boolean
+    hasBlockingErrors?: boolean
 } = {}) {
     const workspace = Object.create(Workspace.prototype) as Workspace
 
@@ -78,6 +96,8 @@ function makeWorkspace(opts: {
         portConnected: opts.portConnected ?? false,
         autoConnectMonitor: opts.autoConnectMonitor ?? true,
         showMonitorOnConnect: opts.showMonitorOnConnect ?? true,
+        strictCompile: opts.strictCompile ?? false,
+        hasBlockingErrors: opts.hasBlockingErrors ?? false,
         activeSection: 'config',
         activeBottomTab: 'output',
         isCompiling: false,
@@ -474,6 +494,42 @@ describe('Workspace.setUseLatestProdVersion', () => {
 
         expect(workspace.useLatestProdVersion).toBe(false)
         expect(preferencesSetFn).toHaveBeenCalledWith('useLatestProdVersion', false)
+    })
+})
+
+describe('Workspace.setStrictCompile', () => {
+    it('updates the field and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.strictCompile = false
+
+        workspace.setStrictCompile(true)
+
+        expect(workspace.strictCompile).toBe(true)
+        expect(preferencesSetFn).toHaveBeenCalledWith('strictCompile', true)
+    })
+})
+
+// ── canCompile — device gating plus, when strictCompile is on, the error-marker gate ──
+
+describe('Workspace.canCompile', () => {
+    it('is true for a fully-selected device when strictCompile is off, even with blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: false, hasBlockingErrors: true })
+        expect(workspace.canCompile).toBe(true)
+    })
+
+    it('is true when strictCompile is on but there are no blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: true, hasBlockingErrors: false })
+        expect(workspace.canCompile).toBe(true)
+    })
+
+    it('is false when strictCompile is on and there are blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: true, hasBlockingErrors: true })
+        expect(workspace.canCompile).toBe(false)
+    })
+
+    it('stays false for an incomplete device selection regardless of strictCompile', () => {
+        const { workspace } = makeWorkspace({ device: null, strictCompile: false, hasBlockingErrors: false })
+        expect(workspace.canCompile).toBe(false)
     })
 })
 
