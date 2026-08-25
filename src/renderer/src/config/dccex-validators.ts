@@ -10,7 +10,8 @@
  */
 
 import * as monaco from 'monaco-editor'
-import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
+import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData, type ExrailRefKind } from '../utils/exrail-completions'
+import { definedTracksFor } from '../components/visual-editors/exrail-block-compiler'
 import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
@@ -587,7 +588,7 @@ function validateAliasTargets(text: string, out: monaco.editor.IMarkerData[], da
 // ── EXRAIL object-reference validator (myAutomation.h / myRoutes.h / mySequences.h) ────
 
 /** True when `value` is a configured object ID or a defined alias resolving to one of `targetTypes`. */
-function isValidExrailReference(value: string, targetTypes: AliasTargetType[], data: ExrailCompletionData): boolean {
+function isValidExrailReference(value: string, targetTypes: ExrailRefKind[], data: ExrailCompletionData): boolean {
     if (isInt(value)) {
         const n = Number(value)
         return targetTypes.some((type) => {
@@ -597,9 +598,17 @@ function isValidExrailReference(value: string, targetTypes: AliasTargetType[], d
                 case 'Sensor': return (data.sensors ?? []).some((s) => s.id === n)
                 case 'Route': return (data.routes ?? []).some((r) => r.id === n)
                 case 'Sequence': return (data.sequences ?? []).some((s) => s.id === n)
+                case 'Signal': return (data.signals ?? []).some((s) => s.red === n)
                 default: return false
             }
         })
+    }
+    // Track is a bare letter (A/B/C/D) — never numeric, and never alias-eligible (no ALIAS
+    // mechanism covers tracks) — so it's checked directly rather than falling into the
+    // identifier/alias branch below, which would otherwise (incorrectly) look it up as an alias
+    // name and almost always fail.
+    if (targetTypes.includes('Track') && (data.tracks ?? []).some((t) => String(t.value) === value)) {
+        return true
     }
     if (isIdentifier(value)) {
         const alias = data.aliases.find((a) => a.name === value)
@@ -771,6 +780,8 @@ function validateModel(model: monaco.editor.ITextModel): void {
                 sensors: state.sensors,
                 routes: state.routes,
                 sequences: state.sequences,
+                signals: state.signals,
+                tracks: definedTracksFor(state.hasStackedMotorShield),
             })
         }
     }

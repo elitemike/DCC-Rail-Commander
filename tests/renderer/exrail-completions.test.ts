@@ -20,6 +20,8 @@ const COMPLETION_DATA = {
     sensors: [{ id: 40, pin: 17, description: 'Yard Occupancy' }],
     routes: [{ id: 12, description: 'Coal Yard Exit', body: '  THROW(200)' }],
     sequences: [{ id: 66, body: '  FWD(30)' }],
+    signals: [{ red: 8, amber: 9, green: 10, description: 'Home signal' }],
+    tracks: [{ value: 'A', label: 'Track A' }, { value: 'B', label: 'Track B' }],
 }
 
 describe('EXRAIL completion helpers', () => {
@@ -54,10 +56,37 @@ describe('EXRAIL completion helpers', () => {
         expect(onButtonSuggestions.map(s => s.label)).toContain('YARD_SENSOR')
         expect(onButtonSuggestions.map(s => s.label)).toContain('40')
 
+        // ROUTE_ACTIVE's own DCC-EX doc names its argument "sequence_id" — it addresses either a
+        // ROUTE or a SEQUENCE (both share the throttle "route button" mechanic), matching
+        // BLOCK_REGISTRY's routeOrSequenceRef param kind for this command.
         const routeStateSuggestions = buildExrailSymbolSuggestions('myRoutes.h', '  ROUTE_ACTIVE(', COMPLETION_DATA)
         expect(routeStateSuggestions.map(s => s.label)).toContain('COAL_ROUTE')
         expect(routeStateSuggestions.map(s => s.label)).toContain('12')
-        expect(routeStateSuggestions.map(s => s.label)).not.toContain('SHUTTLE_RUN')
+        expect(routeStateSuggestions.map(s => s.label)).toContain('SHUTTLE_RUN')
+        expect(routeStateSuggestions.map(s => s.label)).toContain('66')
+    })
+
+    it('offers live signal IDs (not aliases — signals have no ALIAS mechanism) for RED/AMBER/GREEN', () => {
+        const suggestions = buildExrailSymbolSuggestions('myRoutes.h', '  RED(', COMPLETION_DATA)
+        expect(suggestions.map(s => s.label)).toContain('8')
+        expect(suggestions.every(s => s.kind === 'id')).toBe(true)
+    })
+
+    it('offers live track IDs (bare letters, not numeric) for SET_TRACK', () => {
+        const suggestions = buildExrailSymbolSuggestions('myRoutes.h', '  SET_TRACK(', COMPLETION_DATA)
+        expect(suggestions.map(s => s.label)).toEqual(expect.arrayContaining(['A', 'B']))
+    })
+
+    it('offers turnout completions for a command outside the original hand-maintained list (TOGGLE_TURNOUT) — proves derivation from BLOCK_REGISTRY, not a hardcoded per-command list', () => {
+        const suggestions = buildExrailSymbolSuggestions('myRoutes.h', '  TOGGLE_TURNOUT(', COMPLETION_DATA)
+        expect(suggestions.map(s => s.label)).toContain('JUNCTION_MAIN')
+        expect(suggestions.map(s => s.label)).toContain('200')
+    })
+
+    it('recognizes myEvents.h as an EXRAIL completion file', () => {
+        expect(isExrailCompletionFile('myEvents.h')).toBe(true)
+        const suggestions = buildExrailSymbolSuggestions('myEvents.h', '  THROW(', COMPLETION_DATA)
+        expect(suggestions.map(s => s.label)).toContain('JUNCTION_MAIN')
     })
 
     it('exposes EXRAIL body commands in routes and sequences editors', () => {
