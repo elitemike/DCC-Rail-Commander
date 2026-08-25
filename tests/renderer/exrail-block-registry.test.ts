@@ -112,6 +112,8 @@ describe('BLOCK_REGISTRY toolbox categories', () => {
 
 describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference validators', () => {
     it('every stack/branch/cap block emits text with no casing or reference diagnostics', () => {
+        const trackFixture = [{ value: 'A', label: 'Track A' }]
+
         const exrailData = {
             roster: POPULATED.roster,
             turnouts: POPULATED.turnouts,
@@ -119,6 +121,8 @@ describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference v
             routes: POPULATED.routes,
             sequences: POPULATED.sequences,
             aliases: POPULATED.aliases,
+            signals: POPULATED.signals,
+            tracks: trackFixture,
         }
 
         const idForKind: Record<string, string | number> = {
@@ -127,6 +131,7 @@ describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference v
             rosterRef: POPULATED.roster[0].dccAddress,
             routeOrSequenceRef: POPULATED.routes![0].id,
             signalRef: POPULATED.signals[0].red,
+            trackRef: trackFixture[0].value,
             number: 1,
             string: 'x',
         }
