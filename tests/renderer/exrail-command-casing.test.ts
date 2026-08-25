@@ -211,4 +211,49 @@ describe('validateTrailingLineGarbage', () => {
     it('does not run for files with no defined command vocabulary', () => {
         expect(_runValidatorsForTest('config.h', 'anything(1) garbage')).toHaveLength(0)
     })
+
+    // Regression: a STEALTH/STEALTH_GLOBAL argument may legitimately span multiple
+    // physical lines (EXRAIL and the C++ compiler both tolerate it — see
+    // exrail-block-compiler.ts's parseBody()). The old line-scoped paren scan gave up
+    // after one line and treated every following C++ line as its own top-level EXRAIL
+    // statement, firing a false "allows only one command per line" on each one.
+    it('does not flag a multi-line STEALTH body as multiple commands', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('still flags stray text after a multi-line STEALTH call\'s actual closing paren', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n}) garbage\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.some(m => m.message.includes('one command per line'))).toBe(true)
+    })
+})
+
+describe('validateUnknownExrailCommand / validateExrailCommandCasing inside STEALTH bodies', () => {
+    // Regression: STEALTH/STEALTH_GLOBAL's argument is arbitrary C++, not EXRAIL — a C++
+    // identifier in call position (`if (`, `digitalWrite(`) was being flagged as an
+    // unrecognised EXRAIL command, and a lowercase C++ keyword that happens to collide
+    // with an EXRAIL command name (e.g. `close`) was being flagged as miscased EXRAIL.
+    it('does not flag C++ identifiers inside a STEALTH body as unrecognised commands', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n  delay(500);\n})\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('does not flag a STEALTH_GLOBAL body either', () => {
+        const markers = _runValidatorsForTest('myAutomation.h', 'STEALTH_GLOBAL(int counter = 0;\nvoid tick() { counter++; })')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('does not flag a lowercase C++ identifier inside STEALTH that collides with an EXRAIL command name', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(int close = 1;)\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('case-sensitive'))).toHaveLength(0)
+    })
+
+    it('still flags an unrecognised command outside any STEALTH body', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nMADE_UP_COMMAND(1)\nDONE')
+        expect(markers.some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
 })

@@ -690,6 +690,30 @@ function buildStringMask(text: string): boolean[] {
 }
 
 /**
+ * Offset → true while inside a STEALTH(...)/STEALTH_GLOBAL(...) call's argument — the
+ * raw C++ body, not the surrounding EXRAIL syntax. That argument is arbitrary C++, not
+ * EXRAIL, so it must be exempt from EXRAIL's closed-vocabulary/casing checks below:
+ * without this, any C++ identifier in call position inside it (`if (`, `digitalWrite(`,
+ * ...) would be flagged as an unrecognised EXRAIL command. Reuses findMatchingCloseParen
+ * so a body spanning multiple physical lines is masked correctly, matching
+ * validateTrailingLineGarbage's own multi-line tolerance.
+ */
+function buildStealthArgMask(scanText: string): boolean[] {
+    const mask: boolean[] = new Array(scanText.length).fill(false)
+    const stringMask = buildStringMask(scanText)
+    const re = /\bSTEALTH(?:_GLOBAL)?\b\s*\(/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(scanText)) !== null) {
+        if (stringMask[m.index]) continue
+        const openIdx = m.index + m[0].length - 1
+        const closeIdx = findMatchingCloseParen(scanText, openIdx)
+        if (closeIdx === -1) continue  // unbalanced — mid-edit
+        for (let i = openIdx + 1; i < closeIdx; i++) mask[i] = true
+    }
+    return mask
+}
+
+/**
  * EXRAIL command names are C preprocessor macros and are case-sensitive —
  * `throw(200)` is not recognised as `THROW(200)`, it's an undefined symbol that
  * fails to compile. Flags any word that matches a known command name only when
@@ -707,6 +731,7 @@ function validateExrailCommandCasing(text: string, filename: string, out: monaco
 
     const scanText = blankLineComments(text)
     const stringMask = buildStringMask(scanText)
+    const stealthMask = buildStealthArgMask(scanText)
 
     const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
     let m: RegExpExecArray | null
@@ -716,6 +741,7 @@ function validateExrailCommandCasing(text: string, filename: string, out: monaco
         if (token === upper) continue  // already correctly cased
         if (!canonicalNames.has(upper)) continue  // not a known EXRAIL command at all
         if (stringMask[m.index]) continue  // inside a quoted string
+        if (stealthMask[m.index]) continue  // inside a STEALTH/STEALTH_GLOBAL C++ body, not EXRAIL
 
         const afterIdx = m.index + token.length
         const lineEnd = scanText.indexOf('\n', m.index)
@@ -752,6 +778,7 @@ function validateUnknownExrailCommand(text: string, filename: string, out: monac
 
     const scanText = blankLineComments(text)
     const stringMask = buildStringMask(scanText)
+    const stealthMask = buildStealthArgMask(scanText)
 
     const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
     let m: RegExpExecArray | null
@@ -760,6 +787,7 @@ function validateUnknownExrailCommand(text: string, filename: string, out: monac
         const upper = token.toUpperCase()
         if (canonicalNames.has(upper)) continue  // known command, right case or wrong — casing validator's job
         if (stringMask[m.index]) continue  // inside a quoted string
+        if (stealthMask[m.index]) continue  // inside a STEALTH/STEALTH_GLOBAL C++ body, not EXRAIL
 
         const afterIdx = m.index + token.length
         const lineEnd = scanText.indexOf('\n', m.index)
@@ -779,16 +807,19 @@ function validateUnknownExrailCommand(text: string, filename: string, out: monac
 }
 
 /**
- * Scans forward from `openIdx` (the index of a `(` within `line`) for its matching `)`,
- * ignoring parens inside double-quoted strings. Returns -1 if unbalanced (e.g. the line
- * is still mid-edit) — callers should skip rather than guess.
+ * Scans forward from `openIdx` (the absolute index of a `(` within `text`) for its
+ * matching `)`, ignoring parens inside double-quoted strings and freely crossing line
+ * breaks — a macro call's argument (e.g. STEALTH/STEALTH_GLOBAL's C++ body) may
+ * legitimately span multiple physical lines, same as exrail-block-compiler.ts's
+ * parseBody() tolerates. Returns -1 if unbalanced by end of text (e.g. still mid-edit) —
+ * callers should skip rather than guess.
  */
-function findMatchingCloseParen(line: string, openIdx: number): number {
+function findMatchingCloseParen(text: string, openIdx: number): number {
     let depth = 0
     let inStr = false
     let esc = false
-    for (let i = openIdx; i < line.length; i++) {
-        const ch = line[i]
+    for (let i = openIdx; i < text.length; i++) {
+        const ch = text[i]
         if (inStr) {
             if (esc) { esc = false; continue }
             if (ch === '\\') { esc = true; continue }
@@ -807,9 +838,10 @@ function findMatchingCloseParen(line: string, openIdx: number): number {
 
 /**
  * EXRAIL allows exactly one statement per line — a `COMMAND(args)` call (through its
- * closing paren) or a bare paren-less keyword (DONE, ELSE, ...) is the entire line;
- * anything else trailing (other than a `//` comment, already blanked out here) means
- * the generated header won't compile, e.g. `ROUTE(1, "Yard Reverse") asfdsadf`.
+ * closing paren, which may land on a later physical line — see findMatchingCloseParen
+ * above) or a bare paren-less keyword (DONE, ELSE, ...) is the entire line; anything else
+ * trailing (other than a `//` comment, already blanked out here) means the generated
+ * header won't compile, e.g. `ROUTE(1, "Yard Reverse") asfdsadf`.
  */
 function validateTrailingLineGarbage(text: string, filename: string, out: monaco.editor.IMarkerData[]): void {
     if (getCompletions(filename).length === 0) return
@@ -818,37 +850,50 @@ function validateTrailingLineGarbage(text: string, filename: string, out: monaco
     const lines = scanText.split('\n')
     let lineStart = 0
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
         const leadingWs = line.match(/^\s*/)![0].length
         const trimmed = line.slice(leadingWs)
 
-        if (trimmed.length > 0) {
-            const idMatch = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*/)
-            if (idMatch) {
-                let cursor = leadingWs + idMatch[0].length
-                while (cursor < line.length && /\s/.test(line[cursor])) cursor++
+        if (trimmed.length === 0) { lineStart += line.length + 1; continue }
 
-                let statementEnd = leadingWs + idMatch[0].length
-                if (line[cursor] === '(') {
-                    const closeIdx = findMatchingCloseParen(line, cursor)
-                    if (closeIdx === -1) { lineStart += line.length + 1; continue }  // unbalanced — mid-edit, skip
-                    statementEnd = closeIdx + 1
-                }
+        const idMatch = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*/)
+        if (!idMatch) { lineStart += line.length + 1; continue }
 
-                const rest = line.slice(statementEnd)
-                const restTrimmed = rest.trim()
-                if (restTrimmed.length > 0) {
-                    const restLeadingWs = rest.length - rest.trimStart().length
-                    const absStart = lineStart + statementEnd + restLeadingWs
-                    const absEnd = absStart + restTrimmed.length
-                    out.push(makeMarker(text, absStart, absEnd,
-                        "Unexpected text after this line's command — EXRAIL allows only one command per line.",
-                    ))
-                }
+        let cursor = leadingWs + idMatch[0].length
+        while (cursor < line.length && /\s/.test(line[cursor])) cursor++
+
+        let checkLine = line
+        let checkLineStart = lineStart
+        let statementEnd = leadingWs + idMatch[0].length
+
+        if (line[cursor] === '(') {
+            const closeAbs = findMatchingCloseParen(scanText, lineStart + cursor)
+            if (closeAbs === -1) { lineStart += line.length + 1; continue }  // unbalanced — mid-edit, skip
+
+            // The closing paren may be on a later physical line — advance past every line
+            // it consumes so none of them gets independently checked as its own top-level
+            // statement, then check trailing garbage only on the line the paren lands on.
+            while (i < lines.length - 1 && checkLineStart + checkLine.length < closeAbs) {
+                checkLineStart += checkLine.length + 1
+                i++
+                checkLine = lines[i]
             }
+            statementEnd = closeAbs + 1 - checkLineStart
         }
 
-        lineStart += line.length + 1
+        const rest = checkLine.slice(statementEnd)
+        const restTrimmed = rest.trim()
+        if (restTrimmed.length > 0) {
+            const restLeadingWs = rest.length - rest.trimStart().length
+            const absStart = checkLineStart + statementEnd + restLeadingWs
+            const absEnd = absStart + restTrimmed.length
+            out.push(makeMarker(text, absStart, absEnd,
+                "Unexpected text after this line's command — EXRAIL allows only one command per line.",
+            ))
+        }
+
+        lineStart = checkLineStart + checkLine.length + 1
     }
 }
 
