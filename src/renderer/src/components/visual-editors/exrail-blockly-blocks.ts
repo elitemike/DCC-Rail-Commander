@@ -370,7 +370,13 @@ class ExrailCodeField extends Blockly.FieldTextInput {
             value: this.getValue() ?? '',
             language: 'cpp',
             theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs',
-            automaticLayout: true,
+            // Deliberately NOT automaticLayout: true — this popup's size is fixed (set on
+            // `container` above), so there's nothing for it to react to, and its ResizeObserver
+            // has been observed firing *during* DropDownDiv's own hide/dismiss animation (a
+            // container-size change as the popup collapses), racing this.monacoEditor.dispose()
+            // in _onHide() below and throwing "Model is disposed!" from inside Monaco's own
+            // internals — a real, reproducible crash (not just this field failing to close) when
+            // dismissing by clicking outside the popup rather than pressing Escape.
             minimap: { enabled: false },
             fontSize: 13,
             lineHeight: 20,
@@ -395,11 +401,28 @@ class ExrailCodeField extends Blockly.FieldTextInput {
      * the edit is lost. Collapsing to one line changes nothing about the code's *meaning* — `if
      * (x) { y(); }` compiles identically with or without a literal line break in the source —
      * while still letting the popup itself be edited comfortably across multiple lines.
+     *
+     * Defensively tolerant of `dispose()` itself throwing (observed as a genuine, reproducible
+     * "Model is disposed!" crash from Monaco's internals under some dismiss paths, even with
+     * automaticLayout off above) and of being invoked more than once for the same popup (Blockly
+     * doesn't guarantee this callback only ever fires once) — neither should ever be able to
+     * lose the user's edit or throw an uncaught exception out of a Blockly-internal callback.
      */
     private _onHide(): void {
-        const raw = this.monacoEditor?.getValue() ?? this.getValue() ?? ''
-        this.monacoEditor?.dispose()
+        const editor = this.monacoEditor
+        if (editor === null) return
         this.monacoEditor = null
+        let raw: string
+        try {
+            raw = editor.getValue()
+        } catch {
+            raw = this.getValue() ?? ''
+        }
+        try {
+            editor.dispose()
+        } catch {
+            // Already torn down by something else (see comment above) — nothing left to clean up.
+        }
         this.setValue(collapseCodeWhitespace(raw))
     }
 

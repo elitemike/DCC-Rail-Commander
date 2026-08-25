@@ -690,6 +690,39 @@ test.describe('EXRAIL block canvas', () => {
             expect(stealthLine).toBe('STEALTH(digitalWrite(30, HIGH); delay(500); digitalWrite(30, LOW);)')
         })
 
+        // Regression: dismissing the popup by clicking outside it (as opposed to Escape) raced
+        // Monaco's automaticLayout ResizeObserver — firing during DropDownDiv's own hide/dismiss
+        // animation — against this.monacoEditor.dispose() in _onHide(), throwing "Model is
+        // disposed!" from inside Monaco's internals as a genuine uncaught page error. Fixed by
+        // dropping automaticLayout (this popup's size is fixed, so it served no purpose) plus a
+        // defensive try/catch around dispose() in _onHide() itself.
+        test('dismissing the popup by clicking outside it (not Escape) does not throw', async ({ workspacePage: page }) => {
+            const pageErrors: string[] = []
+            page.on('pageerror', (err) => pageErrors.push(err.message))
+
+            await openStealthEditor(page)
+
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            const popup = page.locator('.blocklyDropDownDiv')
+            const monacoEditor = popup.locator('div.monaco-editor')
+            await expect(monacoEditor).toBeVisible()
+
+            await monacoEditor.click()
+            await page.keyboard.press('Control+A')
+            await page.keyboard.type('asdfasdf=234')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('asdfasdfa=21')
+            await page.waitForTimeout(300)
+
+            // Click empty canvas background, not a keyboard dismissal.
+            await page.locator('.blocklySvg').first().click({ position: { x: 500, y: 400 } })
+            await page.waitForTimeout(1000)
+
+            expect(pageErrors).toEqual([])
+            await expect(page.locator('.blocklySvg').first()).toBeVisible()
+            await expect(page.locator('[data-id="n1"]')).toContainText('asdfasdf=234 asdfasdfa=21')
+        })
+
         test('is also used by STEALTH_GLOBAL', async ({ workspacePage: page }) => {
             await openRoutesEditor(page)
             await page.getByTestId('editor-tab-raw').click()
