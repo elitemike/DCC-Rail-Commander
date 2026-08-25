@@ -197,5 +197,20 @@ test.describe('Validators', () => {
             await setMonacoContent(page, 'ROUTE(1, "Test")\n  THROW(200)\n  DELAY(500)\nDONE')
             await expectNoErrorSquiggle(page)
         })
+
+        test('trailing text after a valid call gets an error squiggle', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+            await expectErrorSquiggle(page)
+        })
+
+        test('squiggle clears once the trailing text is removed', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+            await expectErrorSquiggle(page)
+
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse")\nDONE')
+            await expectNoErrorSquiggle(page)
+        })
     })
 })
