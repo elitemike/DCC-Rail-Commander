@@ -213,4 +213,46 @@ test.describe('Validators', () => {
             await expectNoErrorSquiggle(page)
         })
     })
+
+    // ── Strict aliases (on by default) flags pre-existing un-aliased objects too ─
+    // — not just new edits (see turnout-editor.ts's commitBuffer() etc. for the
+    // add/edit-time gate). Loading a folder of existing EXRAIL with no myAliases.h
+    // must show what needs an alias, not silently pass until someone tries to edit it.
+
+    test.describe('Strict aliases — existing objects with no alias', () => {
+        test('an existing turnout with no alias gets a warning squiggle on load, with no edits made', async ({ workspacePage: page }) => {
+            // workspacePage's seeded myTurnouts.h has no matching myAliases.h entries.
+            await openRawTurnouts(page)
+            await expectWarningSquiggle(page)
+            // It must not also read as a compile-blocking error.
+            await expect(page.locator('.squiggly-error')).toHaveCount(0)
+        })
+
+        test('adding a matching alias clears that turnout\'s warning squiggle', async ({ workspacePage: page }) => {
+            await page.getByText('Aliases', { exact: true }).first().click()
+            await expect(page.getByRole('button', { name: 'Raw' })).toBeVisible()
+            await page.getByRole('button', { name: 'Raw' }).click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, 'ALIAS(MAIN_JUNCTION, 200) // type: Turnout\nALIAS(YARD_ENTRY, 201) // type: Turnout')
+
+            await openRawTurnouts(page)
+            await expect(page.locator('.squiggly-warning')).toHaveCount(0)
+        })
+
+        test('an existing roster entry with no alias gets a warning squiggle on load', async ({ workspacePage: page }) => {
+            await openRawRoster(page)
+            await expectWarningSquiggle(page)
+        })
+
+        test('turning Strict aliases off clears the warning squiggle on an existing un-aliased turnout', async ({ workspacePage: page }) => {
+            await openRawTurnouts(page)
+            await expectWarningSquiggle(page)
+
+            await page.getByTestId('settings-button').click()
+            await page.getByTestId('settings-strict-aliases').uncheck({ force: true })
+            await page.getByRole('button', { name: 'Done' }).click()
+
+            await expect(page.locator('.squiggly-warning')).toHaveCount(0)
+        })
+    })
 })
