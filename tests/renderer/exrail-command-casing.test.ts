@@ -116,3 +116,52 @@ describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL fil
         expect(markers.some(m => m.message.includes("'signal' should be 'SIGNAL'"))).toBe(true)
     })
 })
+
+describe('validateUnknownExrailCommand — closed-vocabulary object-definition files', () => {
+    it('flags a typo\'d macro name that is not a case variant of any known command', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'Ros("")')
+        expect(markers.some(m => m.message === "'Ros' is not a recognised EXRAIL command.")).toBe(true)
+    })
+
+    it('does not flag a correctly-cased command', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('leaves genuine case-mismatches to validateExrailCommandCasing, not this validator', () => {
+        // "roster" uppercases to a real command name — should get exactly the casing marker,
+        // not also an "unrecognised command" one.
+        const markers = _runValidatorsForTest('myRoster.h', 'roster(3, "Thomas", "LIGHT/HORN")')
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain("should be 'ROSTER'")
+    })
+
+    it('does not flag identifiers used as arguments, only genuine command position', () => {
+        const markers = _runValidatorsForTest('mySignals.h', 'SIGNAL(myRedPin, 6, 13)')
+        expect(markers).toHaveLength(0)
+    })
+
+    it('does not flag unrecognised-looking words inside comments or quoted strings', () => {
+        expect(_runValidatorsForTest('myRoster.h', '// Ros(1, "x", "y") — todo\nROSTER(1, "x", "y")')).toHaveLength(0)
+        expect(_runValidatorsForTest('myRoster.h', 'ROSTER(1, "Ros(200)", "y")')).toHaveLength(0)
+    })
+
+    it('flags an unrecognised macro across every closed-vocabulary file', () => {
+        expect(_runValidatorsForTest('myTurnouts.h', 'MADE_UP_TURNOUT(1, 25, "x")')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySensors.h', 'SENSER(1, 17, "x")')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySignals.h', 'SIGNALS(5, 6, 13)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myAliases.h', 'ALIASS(FOO, 1)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
+
+    it('does not run on EXRAIL script files — a user may legitimately call their own function there', () => {
+        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')).toHaveLength(0)
+        expect(_runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
+        expect(_runValidatorsForTest('mySequences.h', 'SEQUENCE(1)\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
+        expect(_runValidatorsForTest('myEvents.h', 'ONSENSOR(1)\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
+        expect(_runValidatorsForTest('myStartup.h', 'AUTOSTART\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
+    })
+})
