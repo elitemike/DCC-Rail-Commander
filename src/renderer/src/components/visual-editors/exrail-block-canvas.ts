@@ -2,11 +2,11 @@ import { bindable, BindingMode, queueTask, resolve } from 'aurelia'
 import * as Blockly from 'blockly/core'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
-import { canonicalRefValue, parseBody, compileBody } from './exrail-block-compiler'
-import type { DefinedObjects, ParsedGraph } from './exrail-block-compiler'
+import { canonicalRefValue, parseBody, compileBody, parseEventHandlerBlock, compileEventHandlerBlock } from './exrail-block-compiler'
+import type { BlockTypeDef, DefinedObjects, ParsedGraph } from './exrail-block-compiler'
 import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceHatCallbacks, setWorkspaceSelfId, withHatCallbacksSuppressed } from './exrail-blockly-blocks'
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
-import { buildCategoryTree, firstLeafPath, flatToolboxForPath } from './exrail-blockly-toolbox'
+import { buildCategoryTree, defaultFieldsFor, firstLeafPath, flatToolboxForPath } from './exrail-blockly-toolbox'
 import type { PaletteCategoryNode } from './exrail-blockly-toolbox'
 import { ThemeService } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
@@ -83,22 +83,41 @@ export class ExrailBlockCanvasCustomElement {
     private readonly themeService = resolve(ThemeService)
     private readonly blocklySounds = resolve(BlocklySoundsService)
 
-    @bindable kind: 'route' | 'sequence' = 'route'
+    /**
+     * The literal hat block-type id from BLOCK_REGISTRY: `'ROUTE'`, `'SEQUENCE'`, or a
+     * param-flavored hat like `'ONSENSOR'`. Which flavor drives most of this component's
+     * branching — see `_isParamFlavoredHat()`.
+     */
+    @bindable kind = 'ROUTE'
+    /**
+     * For an id/alias-flavored hat (ROUTE/SEQUENCE): the post-header body text only (matches
+     * RouteEntry.body/SequenceEntry.body). For a param-flavored hat (event handlers): the FULL
+     * on-disk text, header line included — see parseEventHandlerBlock(), the parser this flavor
+     * uses instead of parseBody().
+     */
     @bindable({ mode: BindingMode.oneTime }) initialBody = ''
     @bindable defined: DefinedObjects | null = null
+    /** Fires on every structural change for an id/alias-flavored hat (ROUTE/SEQUENCE) — body only, matching RouteEntry.body/SequenceEntry.body. Unused for a param-flavored hat; see onFullTextChange. */
     @bindable onBodyChange: ((body: string) => void) | null = null
     /** Seeds the hat block's editable ID/Alias fields (see ExrailIdField/ExrailAliasField in
      *  exrail-blockly-blocks.ts) — not part of the compiled graph (compileBody() never emits the
      *  hat node). Edits made directly on the block are reported back via onIdChange/onAliasChange
      *  rather than round-tripped through these bindables, so the host (routes-editor.ts/
-     *  sequences-editor.ts) owns persisting them to ConfigEditorState. */
+     *  sequences-editor.ts) owns persisting them to ConfigEditorState. Unused for a param-flavored
+     *  hat (event handlers) — those have no id/alias concept at all. */
     @bindable headerId = 0
     @bindable headerAlias = ''
     /** Route description (SEQUENCE has no equivalent) — only used to render the `ROUTE(id, "desc")`
-     *  header line in the readonly output pane; the hat block itself has no description field. */
+     *  header line in the readonly output pane; the hat block itself has no description field.
+     *  Unused for a param-flavored hat. */
     @bindable headerDescription = ''
     @bindable onIdChange: ((id: number) => void) | null = null
     @bindable onAliasChange: ((alias: string) => void) | null = null
+    /** Fires on every structural change for a param-flavored hat (event handlers) — the FULL
+     *  on-disk text (header line + body), since that flavor's header args live only on the hat
+     *  block itself, not in a separate structured field the host could reconstruct a header from.
+     *  Unused for an id/alias-flavored hat (ROUTE/SEQUENCE); see onBodyChange. */
+    @bindable onFullTextChange: ((text: string) => void) | null = null
 
     private container!: HTMLElement
     private workspace: Blockly.WorkspaceSvg | null = null
@@ -361,8 +380,25 @@ export class ExrailBlockCanvasCustomElement {
         this._refreshOutput()
     }
 
+    /** The registry entry for `this.kind` — resolved fresh each time rather than cached, since `kind` only ever changes across a reload() (a new canvas instance for practical purposes). */
+    private _hatDef(): BlockTypeDef | undefined {
+        return BLOCK_REGISTRY.find((b) => b.id === this.kind)
+    }
+
+    /**
+     * True for a param-flavored hat (an event handler like ONSENSOR — real typed params on the
+     * block face, no id/alias/description). False for an id/alias-flavored hat (ROUTE/SEQUENCE,
+     * `params.length === 0`) or if `kind` doesn't resolve to a registered hat at all. Drives every
+     * fork between the two hat mechanisms throughout this file — see the generalization notes on
+     * jsonFor() in exrail-blockly-blocks.ts for the underlying discriminator this mirrors.
+     */
+    private _isParamFlavoredHat(): boolean {
+        const def = this._hatDef()
+        return !!def && def.shape === 'hat' && !!def.paramFlavoredHat
+    }
+
     private _applyHeaderFields(): void {
-        if (!this.workspace) return
+        if (!this.workspace || this._isParamFlavoredHat()) return
         const hat = this.workspace.getTopBlocks(true).find((b) => b.type === 'ROUTE' || b.type === 'SEQUENCE')
         if (!hat) return
         if (String(hat.getFieldValue('ID') ?? '') !== String(this.headerId)) hat.setFieldValue(String(this.headerId), 'ID')
@@ -370,13 +406,25 @@ export class ExrailBlockCanvasCustomElement {
     }
 
     private _loadGraph(): ParsedGraph {
-        const emptyRoot = (): ParsedGraph => ({
-            nodes: [{ id: 'hat', info: { blockTypeId: this.kind === 'route' ? 'ROUTE' : 'SEQUENCE', paramValues: {} } }],
-            connectors: [],
-            hatNodeId: 'hat',
-        })
+        const hatDef = this._hatDef()
+        const emptyRoot = (): ParsedGraph => {
+            // A brand-new param-flavored hat needs real starting values on its ref-kind fields
+            // (mirrors how a freshly-dragged toolbox block gets seeded — see defaultFieldsFor());
+            // an id/alias-flavored hat has no def.params, so this stays `{}` exactly as before.
+            const paramValues = hatDef?.paramFlavoredHat && this.defined ? defaultFieldsFor(hatDef, this.defined) : {}
+            return {
+                nodes: [{ id: 'hat', info: { blockTypeId: this.kind, paramValues } }],
+                connectors: [],
+                hatNodeId: 'hat',
+            }
+        }
         if (this.initialBody.trim() === '') return emptyRoot()
-        const result = parseBody(this.initialBody, this.kind, BLOCK_REGISTRY)
+        // Param-flavored hats receive the FULL text (header line included) via `initialBody` — see
+        // that bindable's own doc comment — so they parse through parseEventHandlerBlock() instead
+        // of parseBody(), which only ever expects post-header body text.
+        const result = this._isParamFlavoredHat()
+            ? parseEventHandlerBlock(this.initialBody, BLOCK_REGISTRY)
+            : parseBody(this.initialBody, this.kind, BLOCK_REGISTRY)
         if (!result.ok) {
             this.parseError = result.reason
             return emptyRoot()
@@ -405,22 +453,33 @@ export class ExrailBlockCanvasCustomElement {
     private _commitNow(): void {
         if (!this.workspace) return
         const text = this._refreshOutput()
-        this.onBodyChange?.(text)
+        if (this._isParamFlavoredHat()) {
+            this.onFullTextChange?.(text)
+        } else {
+            this.onBodyChange?.(text)
+        }
     }
 
     /** Recompiles the workspace and stores the result on `outputText` for the readonly output pane
      *  — the single choke point every load/structural-change path routes through, so the pane never
-     *  drifts from what onBodyChange would push out. Returns the *body* text (no header line) so
-     *  _commitNow() doesn't need a second compile just to hand it to onBodyChange — onBodyChange's
-     *  contract is body-only, matching RouteEntry.body/SequenceEntry.body, while outputText is the
-     *  full on-disk shape (header line + body, mirroring serializeRoutesToFile/
-     *  serializeSequencesToFile) since that's what a readonly preview pane is actually for. */
+     *  drifts from what onBodyChange/onFullTextChange would push out. For an id/alias-flavored hat
+     *  (ROUTE/SEQUENCE), returns the *body* text only (no header line) — onBodyChange's contract is
+     *  body-only, matching RouteEntry.body/SequenceEntry.body — while `outputText` is the full
+     *  on-disk shape (header line + body, mirroring serializeRoutesToFile/serializeSequencesToFile).
+     *  For a param-flavored hat (event handlers), the header line IS part of the compiled graph (see
+     *  compileEventHandlerBlock()), so the returned text and `outputText` are the same full text —
+     *  onFullTextChange's contract, matching EventHandlerEntry.text. */
     private _refreshOutput(): string {
         if (!this.workspace) {
             this.outputText = ''
             return ''
         }
         const graph = buildGraphFromWorkspace(this.workspace, BLOCK_REGISTRY)
+        if (this._isParamFlavoredHat()) {
+            const fullText = compileEventHandlerBlock(graph, BLOCK_REGISTRY)
+            this.outputText = fullText
+            return fullText
+        }
         const text = compileBody(graph, BLOCK_REGISTRY)
         this.outputText = `${this._headerLine()}\n${text.trim() || 'DONE'}`
         return text
@@ -433,7 +492,7 @@ export class ExrailBlockCanvasCustomElement {
         // headerDescription is optional on SequenceEntry (undefined, not ''), so this can arrive
         // unset despite the class field's own default.
         const description = (this.headerDescription ?? '').trim()
-        if (this.kind === 'route') return `ROUTE(${this.headerId}, "${description}")`
+        if (this.kind === 'ROUTE') return `ROUTE(${this.headerId}, "${description}")`
         return `SEQUENCE(${this.headerId})${description ? ` // ${description}` : ''}`
     }
 

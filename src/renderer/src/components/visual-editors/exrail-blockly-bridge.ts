@@ -187,7 +187,12 @@ export function buildGraphFromWorkspace(workspace: Blockly.Workspace, registry: 
 
     const hatDef = byId.get(hatBlock.type)
     const hatId = nextId(hatBlock.id)
-    nodes.push({ id: hatId, info: { blockTypeId: hatDef?.id ?? hatBlock.type, paramValues: {} } })
+    // A param-flavored hat (e.g. ONSENSOR — including a zero-arg one like ONRAILSYNCON) has real
+    // fields on its own block face — read them the same way any stack block's params are read. An
+    // id/alias-flavored hat (ROUTE/SEQUENCE) has no def.params at all, so this is `{}` for those
+    // exactly as before.
+    const hatParamValues = hatDef?.paramFlavoredHat ? readParamValues(hatBlock, hatDef) : {}
+    nodes.push({ id: hatId, info: { blockTypeId: hatDef?.id ?? hatBlock.type, paramValues: hatParamValues } })
     walkChain(hatBlock.getNextBlock(), hatId, 'next')
 
     return { nodes, connectors, hatNodeId: hatId }

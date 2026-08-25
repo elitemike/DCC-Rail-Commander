@@ -46,6 +46,11 @@
             <sequences-editor component.ref="sequencesEditorEl"></sequences-editor>
         </div>
 
+        <!-- myEvents.h → event-handlers-editor -->
+        <div if.bind="currentView === 'eventHandlers'" class="flex flex-col flex-1 overflow-hidden">
+            <event-handlers-editor component.ref="eventHandlersEditorEl"></event-handlers-editor>
+        </div>
+
         <!-- myAliases.h → aliases-editor -->
         <div if.bind="currentView === 'aliases'" class="flex flex-col flex-1 overflow-hidden">
             <aliases-editor></aliases-editor>

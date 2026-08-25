@@ -16,6 +16,8 @@ import {
     serializeRoutesToFile,
     parseSequencesFromFile,
     serializeSequencesToFile,
+    parseEventHandlersFromFile,
+    serializeEventHandlersToFile,
     parseAliasesFromFile,
     serializeAliasesToFile,
     parseDefaultThrownTurnoutIdsFromAutomation,
@@ -36,6 +38,7 @@ import {
     type SignalEntry,
     type RouteEntry,
     type SequenceEntry,
+    type EventHandlerEntry,
     type AutomationEntry,
     type AliasEntry,
     type AliasTargetType,
@@ -474,6 +477,25 @@ export class ConfigEditorState {
         this._syncToInstallerState()
     }
 
+    // ── myEvents.h ────────────────────────────────────────────────────────
+    @observable eventHandlers: EventHandlerEntry[] = []
+
+    get eventHandlersRaw(): string {
+        const header = buildGeneratorHeader('myEvents.h', this.installerState.appVersion)
+        const serialized = serializeEventHandlersToFile(this.eventHandlers)
+        return `${header}\n${serialized}`
+    }
+
+    setEventHandlersFromRaw(text: string): void {
+        try {
+            this.eventHandlers = parseEventHandlersFromFile(text)
+            this.hasChanges = true
+        } catch {
+            // keep existing event handlers if parse fails
+        }
+        this._syncToInstallerState()
+    }
+
     // ── myAliases.h ───────────────────────────────────────────────────────
     @observable aliases: AliasEntry[] = []
 
@@ -774,6 +796,7 @@ export class ConfigEditorState {
         'mySensors.h',
         'myRoutes.h',
         'mySequences.h',
+        'myEvents.h',
         'myAliases.h',
         'myAutomation.h',
         'myStartup.h',
@@ -836,7 +859,7 @@ export class ConfigEditorState {
             if (!f) return false
             return f.content.split('\n').some(l => l.trim() && !l.trim().startsWith('//'))
         }
-        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myAliases.h']) {
+        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myEvents.h', 'myAliases.h']) {
             if (hasUserContent(name)) includes.push(`#include "${name}"`)
         }
 
@@ -907,6 +930,7 @@ export class ConfigEditorState {
         this.signals = []
         this.routes = []
         this.sequences = []
+        this.eventHandlers = []
         this.aliases = []
         this.preservedAutomationContent = ''
         this.generatedHalDevicesContent = ''
@@ -931,6 +955,8 @@ export class ConfigEditorState {
                 this.routes = parseRoutesFromFile(f.content)
             } else if (f.name === 'mySequences.h') {
                 this.sequences = parseSequencesFromFile(f.content)
+            } else if (f.name === 'myEvents.h') {
+                this.eventHandlers = parseEventHandlersFromFile(f.content)
             } else if (f.name === 'myAliases.h') {
                 // Deferred until every other file has been parsed (see below) — alias
                 // target validation needs the fully-populated roster/turnouts/etc.
@@ -1029,6 +1055,9 @@ export class ConfigEditorState {
         if (!names.includes('mySequences.h')) {
             files.push({ name: 'mySequences.h', content: buildGeneratorHeader('mySequences.h', this.installerState.appVersion) + '\n' })
         }
+        if (!names.includes('myEvents.h')) {
+            files.push({ name: 'myEvents.h', content: buildGeneratorHeader('myEvents.h', this.installerState.appVersion) + '\n' })
+        }
         if (!names.includes('myAliases.h')) {
             files.push({ name: 'myAliases.h', content: buildGeneratorHeader('myAliases.h', this.installerState.appVersion) + '\n' })
         }
@@ -1081,6 +1110,8 @@ export class ConfigEditorState {
                 f.content = this.routesRaw
             } else if (f.name === 'mySequences.h') {
                 f.content = this.sequencesRaw
+            } else if (f.name === 'myEvents.h') {
+                f.content = this.eventHandlersRaw
             } else if (f.name === 'myAliases.h') {
                 f.content = this.aliasesRaw
             }
@@ -1108,6 +1139,7 @@ export class ConfigEditorState {
             hasBuiltInContent('mySensors.h') ||
             hasBuiltInContent('myRoutes.h') ||
             hasBuiltInContent('mySequences.h') ||
+            hasBuiltInContent('myEvents.h') ||
             hasBuiltInContent('myAliases.h')
         if (!hasAutomation && needsIt) {
             files.push({ name: 'myAutomation.h', content: this.automationPreview })

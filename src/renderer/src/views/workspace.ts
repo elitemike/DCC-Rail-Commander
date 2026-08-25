@@ -626,6 +626,7 @@ export class Workspace {
             'mySensors.h',
             'myRoutes.h',
             'mySequences.h',
+            'myEvents.h',
             'myAliases.h',
             'myAutomation.h',
             'myStartup.h',

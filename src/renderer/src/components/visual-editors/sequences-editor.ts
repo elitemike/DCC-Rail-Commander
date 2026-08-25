@@ -57,7 +57,7 @@ export class SequencesEditorCustomElement {
     }
 
     canUseBlocks(s: SequenceEntry): boolean {
-        return parseBody(s.body, 'sequence', BLOCK_REGISTRY).ok
+        return parseBody(s.body, 'SEQUENCE', BLOCK_REGISTRY).ok
     }
 
     private static readonly SEQ_HEADER_RE = /^SEQUENCE\s*\(\s*\d+\s*\)\s*(?:\/\/\s*(.*))?$/
