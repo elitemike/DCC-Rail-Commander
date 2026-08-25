@@ -10,7 +10,7 @@ vi.mock('monaco-editor', () => ({
     editor: { create: vi.fn() },
 }))
 
-import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
+import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId, collapseCodeWhitespace } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
 import type { DefinedObjects } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 
 registerExrailBlocks()
@@ -180,5 +180,38 @@ describe('ExrailCodeField (STEALTH/STEALTH_GLOBAL code field)', () => {
         const { block, workspace } = makeCodeBlock('STEALTH_GLOBAL')
         expect(block.getField('code')!.getText()).toBe('(click to edit C++ code)')
         workspace.dispose()
+    })
+})
+
+describe('collapseCodeWhitespace', () => {
+    // Regression: committing genuinely multi-line code typed in the Monaco popup (real newlines,
+    // not just long text) used to reach the field's value uncollapsed — EXRAIL's body format is
+    // one statement per line, so the route silently failed to parse back into blocks and the
+    // edit was lost the moment the popup closed. ExrailCodeField's _onHide() runs every commit
+    // through this same function before calling setValue(), so that can never happen again.
+    it('collapses a genuinely multi-line if-statement to one line', () => {
+        const typed = 'if (digitalRead(30) == LOW) {\n  digitalWrite(31, HIGH);\n}'
+        expect(collapseCodeWhitespace(typed)).toBe('if (digitalRead(30) == LOW) { digitalWrite(31, HIGH); }')
+    })
+
+    it('never contains a newline in its output, regardless of input shape', () => {
+        const typed = '\n\nline1();\n\n\tline2();\r\n  line3();\n'
+        expect(collapseCodeWhitespace(typed)).not.toMatch(/[\r\n]/)
+    })
+
+    it('collapses tabs and repeated spaces along with newlines', () => {
+        expect(collapseCodeWhitespace('a();\t\t  \n  b();')).toBe('a(); b();')
+    })
+
+    it('trims leading and trailing whitespace', () => {
+        expect(collapseCodeWhitespace('\n  code();  \n')).toBe('code();')
+    })
+
+    it('leaves already-single-line code untouched (aside from trimming)', () => {
+        expect(collapseCodeWhitespace('digitalWrite(30, HIGH);')).toBe('digitalWrite(30, HIGH);')
+    })
+
+    it('collapses whitespace-only input to an empty string', () => {
+        expect(collapseCodeWhitespace('   \n\t  \n')).toBe('')
     })
 })
