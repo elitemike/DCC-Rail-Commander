@@ -171,3 +171,44 @@ describe('validateUnknownExrailCommand', () => {
         expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
     })
 })
+
+describe('validateTrailingLineGarbage', () => {
+    it('flags stray text after a valid call\'s closing paren', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+        expect(markers.some(m => m.message.includes("EXRAIL allows only one command per line"))).toBe(true)
+    })
+
+    it('does not flag a valid call alone on its line', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse")\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not flag a trailing comment after a valid call', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse") // reversing move\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('flags stray text after a bare paren-less keyword', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nDONE now')
+        expect(markers.some(m => m.message.includes('one command per line'))).toBe(true)
+    })
+
+    it('does not flag a bare keyword alone on its line', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not misfire on a closing paren inside a quoted string argument', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(1, "Loco (Diesel)", "LIGHT")')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('skips an unbalanced (mid-edit) call rather than guessing where it ends', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(1, "Loco",')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not run for files with no defined command vocabulary', () => {
+        expect(_runValidatorsForTest('config.h', 'anything(1) garbage')).toHaveLength(0)
+    })
+})

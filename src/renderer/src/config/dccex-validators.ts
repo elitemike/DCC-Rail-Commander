@@ -778,6 +778,80 @@ function validateUnknownExrailCommand(text: string, filename: string, out: monac
     }
 }
 
+/**
+ * Scans forward from `openIdx` (the index of a `(` within `line`) for its matching `)`,
+ * ignoring parens inside double-quoted strings. Returns -1 if unbalanced (e.g. the line
+ * is still mid-edit) — callers should skip rather than guess.
+ */
+function findMatchingCloseParen(line: string, openIdx: number): number {
+    let depth = 0
+    let inStr = false
+    let esc = false
+    for (let i = openIdx; i < line.length; i++) {
+        const ch = line[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '(') depth++
+        else if (ch === ')') {
+            depth--
+            if (depth === 0) return i
+        }
+    }
+    return -1
+}
+
+/**
+ * EXRAIL allows exactly one statement per line — a `COMMAND(args)` call (through its
+ * closing paren) or a bare paren-less keyword (DONE, ELSE, ...) is the entire line;
+ * anything else trailing (other than a `//` comment, already blanked out here) means
+ * the generated header won't compile, e.g. `ROUTE(1, "Yard Reverse") asfdsadf`.
+ */
+function validateTrailingLineGarbage(text: string, filename: string, out: monaco.editor.IMarkerData[]): void {
+    if (getCompletions(filename).length === 0) return
+
+    const scanText = blankLineComments(text)
+    const lines = scanText.split('\n')
+    let lineStart = 0
+
+    for (const line of lines) {
+        const leadingWs = line.match(/^\s*/)![0].length
+        const trimmed = line.slice(leadingWs)
+
+        if (trimmed.length > 0) {
+            const idMatch = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*/)
+            if (idMatch) {
+                let cursor = leadingWs + idMatch[0].length
+                while (cursor < line.length && /\s/.test(line[cursor])) cursor++
+
+                let statementEnd = leadingWs + idMatch[0].length
+                if (line[cursor] === '(') {
+                    const closeIdx = findMatchingCloseParen(line, cursor)
+                    if (closeIdx === -1) { lineStart += line.length + 1; continue }  // unbalanced — mid-edit, skip
+                    statementEnd = closeIdx + 1
+                }
+
+                const rest = line.slice(statementEnd)
+                const restTrimmed = rest.trim()
+                if (restTrimmed.length > 0) {
+                    const restLeadingWs = rest.length - rest.trimStart().length
+                    const absStart = lineStart + statementEnd + restLeadingWs
+                    const absEnd = absStart + restTrimmed.length
+                    out.push(makeMarker(text, absStart, absEnd,
+                        "Unexpected text after this line's command — EXRAIL allows only one command per line.",
+                    ))
+                }
+            }
+        }
+
+        lineStart += line.length + 1
+    }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
@@ -810,13 +884,15 @@ function validateModel(model: monaco.editor.ITextModel): void {
 
     if (validate) validate(text, markers)
 
-    // Case-sensitivity and unknown-command checks apply to every macro-file "vocabulary"
-    // (ROSTER, SERVO_TURNOUT, SENSOR, SIGNAL, THROW, ...), including the EXRAIL script
-    // files — EXRAIL is a closed macro DSL, so a call that isn't one of its defined
-    // commands can't compile there either.
+    // Case-sensitivity, unknown-command, and trailing-garbage checks apply to every
+    // macro-file "vocabulary" (ROSTER, SERVO_TURNOUT, SENSOR, SIGNAL, THROW, ...),
+    // including the EXRAIL script files — EXRAIL is a closed, one-statement-per-line
+    // macro DSL, so neither an undefined call nor stray extra text after a valid one
+    // can compile there.
     if (hasVocabulary) {
         validateExrailCommandCasing(text, filename, markers)
         validateUnknownExrailCommand(text, filename, markers)
+        validateTrailingLineGarbage(text, filename, markers)
     }
 
     if (isExrailFile) {
@@ -886,6 +962,7 @@ export function _runValidatorsForTest(
     if (hasCommandVocabulary(filename)) {
         validateExrailCommandCasing(text, filename, markers)
         validateUnknownExrailCommand(text, filename, markers)
+        validateTrailingLineGarbage(text, filename, markers)
     }
 
     if (isExrailCompletionFile(filename) && exrailData) {
