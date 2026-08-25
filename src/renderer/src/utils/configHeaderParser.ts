@@ -1,6 +1,6 @@
 /**
  * Parser and builder for the device-configuration comment block that
- * EX-Commander embeds at the top of config.h.
+ * DCC-Rail-Commander embeds at the top of config.h.
  *
  * The block is pure C++ comment syntax so it compiles cleanly, but it encodes
  * the board name/port/FQBN so the app can restore device selection when the
@@ -8,18 +8,18 @@
  *
  * Format (both lines act as the open and close tag):
  *
- *   // ==== DCCEX-Commander Device Configuration ====
+ *   // ==== DCC-Rail-Commander Device Configuration ====
  *   //   Name:     Arduino Mega 2560
  *   //   Port:     /dev/ttyUSB0
  *   //   FQBN:     arduino:avr:mega
  *   //   Protocol: serial
  *   //   Updated:  2024-01-15T14:30:00.000Z
- *   // ==== DCCEX-Commander Device Configuration ====
+ *   // ==== DCC-Rail-Commander Device Configuration ====
  */
 
 import type { DetectedBoardInfo } from '../../../types/ipc'
 
-const DEVICE_HEADER_TAG = '// ==== DCCEX-Commander Device Configuration ===='
+const DEVICE_HEADER_TAG = '// ==== DCC-Rail-Commander Device Configuration ===='
 
 /** Returns true if config.h text contains an embedded device header block */
 export function hasDeviceHeader(text: string): boolean {

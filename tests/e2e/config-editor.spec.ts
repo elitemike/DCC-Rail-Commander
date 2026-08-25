@@ -263,12 +263,12 @@ test.describe('Automation Editor — myAutomation.h', () => {
 
     test('regression: pasting raw content into myAutomation.h and immediately hitting Save preserves it', async ({ workspacePage }) => {
         const pasted = [
-            '// ==== EX-Commander Required Includes ====',
-            '// These #includes are managed by EX-Commander.',
+            '// ==== DCC-Rail-Commander Required Includes ====',
+            '// These #includes are managed by DCC-Rail-Commander.',
             '// Do not remove them — they are required for the installer to function correctly.',
             '#include "myRoster.h"',
             '#include "myTurnouts.h"',
-            '// ==== EX-Commander Required Includes ====',
+            '// ==== DCC-Rail-Commander Required Includes ====',
             '',
             'AUTOMATION(1,"My custom automation")',
             '  DONE',
@@ -470,8 +470,8 @@ test.describe('Startup Editor — myStartup.h', () => {
 
     test('regression: pasting raw content into myStartup.h and immediately hitting Save preserves it', async ({ workspacePage }) => {
         const pasted = [
-            '// ==== EX-Commander TrackManager ====',
-            '// This TrackManager block is managed by EX-Commander.',
+            '// ==== DCC-Rail-Commander TrackManager ====',
+            '// This TrackManager block is managed by DCC-Rail-Commander.',
             '// Do not edit inside this block manually.',
             'AUTOSTART',
             'SET_TRACK(A,MAIN)',
@@ -479,7 +479,7 @@ test.describe('Startup Editor — myStartup.h', () => {
             'SET_POWER(A,ON)',
             'SET_POWER(B,ON)',
             'DONE',
-            '// ==== EX-Commander TrackManager ====',
+            '// ==== DCC-Rail-Commander TrackManager ====',
         ].join('\n')
 
         await openStartupRaw(workspacePage)

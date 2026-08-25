@@ -1,6 +1,6 @@
 # The bundled Python/PlatformIO toolchain
 
-EX-Commander builds firmware with **PlatformIO Core**, running on **its own bundled Python
+DCC-Rail-Commander builds firmware with **PlatformIO Core**, running on **its own bundled Python
 interpreter** — never the user's system Python, never PlatformIO's usual `~/.platformio` install, and
 never anything downloaded at runtime. This doc explains how that bundle is built, how it's laid out on
 disk, how the app turns it into a running build, and the offline guarantee the whole thing exists to
@@ -12,7 +12,7 @@ one level deeper.
 PlatformIO normally expects to manage itself: `pip install platformio` puts the package wherever your
 active Python environment is, and on first use it downloads the toolchains/frameworks/boards it needs
 into `~/.platformio`. Both of those steps assume internet access and a Python the user already has.
-Neither assumption holds for EX-Commander's users, so the app instead ships:
+Neither assumption holds for DCC-Rail-Commander's users, so the app instead ships:
 
 1. A complete, relocatable **CPython interpreter** — nothing is installed into or read from the user's
    system Python, if they even have one.
@@ -30,7 +30,7 @@ toolchain-related.
 There are two separate copies of this tree, produced by two separate steps, and it's important not to
 conflate them:
 
-| | **`resources/`** (read-only, shipped with the app) | **`~/ex-commander/platformio/`** (writable, per-machine) |
+| | **`resources/`** (read-only, shipped with the app) | **`~/dcc-rail-commander/platformio/`** (writable, per-machine) |
 |---|---|---|
 | Populated by | `scripts/fetch-toolchain.mjs` (`pnpm toolchain:fetch`) | `seedRuntime()` in `src/main/pio-runtime.ts` |
 | Runs | At build time, on the machine producing the release, once per OS/arch being packaged | At app startup, once per machine, guarded by a stamp file |
@@ -86,10 +86,10 @@ Implemented in `src/main/pio-runtime.ts`, called once from `views/startup.ts` on
 core dir:
 
 ```
-~/ex-commander/platformio/
+~/dcc-rail-commander/platformio/
 ├── platforms/                     copied from resources/pio-core/platforms
 ├── packages/                      copied from resources/pio-core/packages
-└── .ex-commander-toolchain        the seeded stamp — compared against the manifest's stamp
+└── .dcc-rail-commander-toolchain        the seeded stamp — compared against the manifest's stamp
 ```
 
 `isRuntimeReady()` is just `hasBundledRuntime() && (seededStamp === manifest.stamp)` — cheap, so it's
@@ -100,7 +100,7 @@ a re-seed after a version bump only copies what actually changed.
 **Copies are atomic.** Each package/platform is copied to a sibling temp path and then `rename()`d into
 its final location — never written directly to the target path. This matters because the per-entry skip
 check is a plain `existsSync(target)`: without the rename being atomic, a process crash mid-copy (or two
-app instances racing to seed the same shared `~/ex-commander/platformio/` concurrently) can leave a
+app instances racing to seed the same shared `~/dcc-rail-commander/platformio/` concurrently) can leave a
 directory that *exists* but is missing files, and nothing would ever detect or repair it afterward — the
 skip check would treat it as done forever. This is exactly what happened on 2026-08-11: a WSL crash
 truncated `packages/framework-arduinoespressif32` mid-copy (missing ~2,749 files, including its
@@ -114,7 +114,7 @@ package/platform; a mismatch there is the tell.
 Every PlatformIO subprocess runs through `pioEnv()` in `pio-runtime.ts`, which:
 
 - Points `PLATFORMIO_CORE_DIR` / `PLATFORMIO_PLATFORMS_DIR` / `PLATFORMIO_PACKAGES_DIR` at
-  `~/ex-commander/platformio/...` instead of PlatformIO's default `~/.platformio`.
+  `~/dcc-rail-commander/platformio/...` instead of PlatformIO's default `~/.platformio`.
 - Sets `PYTHONPATH` to `resources/pio/site-packages` and `PYTHONNOUSERSITE=1`, so nothing on the bundled
   interpreter's path resolves through the user's own Python packages, even if they have some.
 - Routes `HTTP_PROXY`/`HTTPS_PROXY` at `http://127.0.0.1:9` — a guaranteed-dead local port. If PlatformIO
@@ -148,9 +148,9 @@ missing-SDK error that looks like a corrupted seed.
   `resources/pio/site-packages` isn't there. Run `pnpm toolchain:fetch`.
 - **A specific board's compile fails with a network/HTTP error despite the fuse** — almost certainly a
   corrupted seed, not a missing platform. Compare file counts:
-  `diff <(find resources/pio-core/packages/<pkg> -type f | sort) <(find ~/ex-commander/platformio/packages/<pkg> -type f | sort)`.
-  Delete the mismatched package directory under `~/ex-commander/platformio/packages/` (or the whole
-  `~/ex-commander/platformio/` dir, plus its `.ex-commander-toolchain` stamp) and relaunch to force a
+  `diff <(find resources/pio-core/packages/<pkg> -type f | sort) <(find ~/dcc-rail-commander/platformio/packages/<pkg> -type f | sort)`.
+  Delete the mismatched package directory under `~/dcc-rail-commander/platformio/packages/` (or the whole
+  `~/dcc-rail-commander/platformio/` dir, plus its `.dcc-rail-commander-toolchain` stamp) and relaunch to force a
   clean re-seed.
 - **Other boards on the same machine compile fine** — the seed is per-package, so corruption is usually
   scoped to whichever package was mid-copy when something interrupted it; unaffected packages keep

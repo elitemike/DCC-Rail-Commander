@@ -11,7 +11,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to submit a bug report to the DCC-EX team!
+        Thanks for taking the time to submit a bug report!
+
+        Note: DCC-Rail-Commander is not an official DCC-EX project and is not supported by the DCC-EX team.
 
         In order to help us to validate the bug and ascertain what's causing it, please provide as much information as possible in this form.
 
@@ -19,7 +21,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Please provide the version of EX-Commander in use.
+      description: Please provide the version of DCC-Rail-Commander in use.
     validations:
       required: true
 
@@ -39,7 +41,7 @@ body:
       label: Steps to reproduce the bug
       description: Please provide the steps to reproduce the behaviour.
       placeholder: |
-        1. Run EX-Commander.
+        1. Run DCC-Rail-Commander.
         2. Select an Arduino device.
         3. Select Latest Production version.
         4. Specify the EX8874 motor shield, leave display and WiFi disabled.
