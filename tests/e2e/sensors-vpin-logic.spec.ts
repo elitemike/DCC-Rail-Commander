@@ -56,8 +56,13 @@ test.describe('Sensors VPin logic', () => {
         await addSensor(page)
         await addSensor(page)
 
-        // Move the first sensor (default VPin 100) out of the way.
+        // Strict aliases is on by default — this sensor has none yet.
         const firstRow = sensorRows(page).first()
+        const aliasInput = firstRow.locator('alias-picker input')
+        await aliasInput.fill('MOVED_SENSOR')
+        await aliasInput.blur()
+
+        // Move the first sensor (default VPin 100) out of the way.
         const pinInput = firstRow.locator('[data-field="pin-value"]')
         await pinInput.fill('150')
         await pinInput.blur()

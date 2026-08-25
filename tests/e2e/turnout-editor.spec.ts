@@ -126,6 +126,12 @@ test.describe('Turnout Editor', () => {
         await expect(page.getByRole('dialog').getByText('Calibrate Servo', { exact: true })).toBeVisible()
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
 
+        // Strict aliases is on by default — a freshly-added entry has no alias yet,
+        // so give it one before any other field edit can commit.
+        const newAliasInput = await getDetailTextInput(page, 'Alias')
+        await newAliasInput.fill('GOODS_YARD_SWITCH')
+        await newAliasInput.blur()
+
         // The new entry form should open — find and fill the description field
         const descInput = page.locator('label', { hasText: /Description/i })
             .locator('..').locator('input[type="text"]')
@@ -147,6 +153,11 @@ test.describe('Turnout Editor', () => {
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
+        // Strict aliases is on by default — this mock turnout has none yet.
+        const aliasInput1 = await getDetailTextInput(page, 'Alias')
+        await aliasInput1.fill('MAIN_JUNCTION')
+        await aliasInput1.blur()
+
         const defaultStateSelect = page.locator('#turnout-splitter')
             .locator('label', { hasText: /Default\s+State/i }).locator('..').locator('select')
         await defaultStateSelect.selectOption('THROWN')
@@ -161,6 +172,11 @@ test.describe('Turnout Editor', () => {
         await openTurnoutEditor(page)
 
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+
+        // Strict aliases is on by default — this mock turnout has none yet.
+        const aliasInput2 = await getDetailTextInput(page, 'Alias')
+        await aliasInput2.fill('MAIN_JUNCTION')
+        await aliasInput2.blur()
 
         const defaultStateSelect = page.locator('#turnout-splitter')
             .locator('label', { hasText: /Default\s+State/i }).locator('..').locator('select')
@@ -263,6 +279,12 @@ test.describe('Turnout Editor', () => {
 
         // Click on it to edit, change description
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Water Tower' }).click()
+
+        // Strict aliases is on by default — this turnout has none yet (it was added via raw text).
+        const waterTowerAliasInput = await getDetailTextInput(page, 'Alias')
+        await waterTowerAliasInput.fill('WATER_TOWER')
+        await waterTowerAliasInput.blur()
+
         const descInput = page.locator('label', { hasText: /Description/i })
             .locator('..').locator('input[type="text"]')
         await descInput.clear()
@@ -305,6 +327,11 @@ test.describe('Turnout Editor', () => {
         await openTurnoutEditor(page)
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
+        // Strict aliases is on by default — this mock turnout has none yet.
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('MAIN_JUNCTION')
+        await aliasInput.blur()
+
         const idInput = page
             .locator('div:has(> label:has-text("ID")) input[type="number"]')
             .first()
@@ -318,7 +345,12 @@ test.describe('Turnout Editor', () => {
         await openTurnoutEditor(page)
         await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
 
-        // Create ambiguity first: turnout ID 3 collides with roster ID 3.
+        // Strict aliases is on by default — set an alias before the ID rename below can commit.
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('MAIN_JUNCTION')
+        await aliasInput.blur()
+
+        // Create ambiguity: turnout ID 3 collides with roster ID 3.
         const idInput = page
             .locator('div:has(> label:has-text("ID")) input[type="number"]')
             .first()
@@ -326,7 +358,7 @@ test.describe('Turnout Editor', () => {
         await idInput.blur()
         await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (3)' })).toBeVisible()
 
-        const aliasInput = await getDetailTextInput(page, 'Alias')
+        // Rename the alias itself — this is the actual "shared ID across object types" case under test.
         await aliasInput.fill('AMBIG_ALIAS')
         await aliasInput.blur()
 

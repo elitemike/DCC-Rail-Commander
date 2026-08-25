@@ -238,6 +238,10 @@ export class TurnoutEditorCustomElement {
             this.errorMessage = `Turnout ID ${this.editBuffer.id} is already used by "${this.getDisplayName(conflict)}".`
             return
         }
+        if (this.state.strictAliases && this.aliasInput.trim() === '') {
+            this.errorMessage = 'This turnout requires an alias when Strict aliases is enabled.'
+            return
+        }
         const existing = this.state.turnouts?.[this.editBufferIndex]
         const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id, 'Turnout') : ''
         const aliasChanged = !!existing && (existing.id !== this.editBuffer.id || existingAliasName !== this.aliasInput.trim())

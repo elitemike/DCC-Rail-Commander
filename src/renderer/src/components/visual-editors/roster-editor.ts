@@ -528,6 +528,10 @@ export class RosterEditorCustomElement {
             this.errorMessage = `DCC address ${this.editBuffer.dccAddress} is already used by "${conflict.name}".`
             return
         }
+        if (this.state.strictAliases && this.aliasInput.trim() === '') {
+            this.errorMessage = 'This loco requires an alias when Strict aliases is enabled.'
+            return
+        }
         const existing = this.state.roster[this.editBufferIndex]
         const changed = !existing || JSON.stringify(existing) !== JSON.stringify(this.editBuffer)
         const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress, 'Roster') : ''

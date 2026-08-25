@@ -66,6 +66,7 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
             rawEditor: null,
             rawSnapshot: '',
             _idBeforeEdit: new Map<number, number>(),
+            _rowBeforeEdit: new Map<number, { id: number; pin: number; description: string }>(),
         })
         return editor
     }

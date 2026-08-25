@@ -880,6 +880,11 @@ test.describe('Roster Editor — TreeView grouping (pre-grouped roster)', () => 
         const thomasNode = steamGroupLi.locator('ul li').filter({ hasText: 'Thomas' }).first()
         await thomasNode.locator('.e-fullrow').click()
 
+        // Strict aliases is on by default — this mock loco has none yet.
+        const thomasAliasInput = detail.locator('div:has(> label:has-text("Alias")) input[type="text"]').first()
+        await thomasAliasInput.fill('THOMAS')
+        await thomasAliasInput.blur()
+
         // Verify custom functions section is present with proper label
         await expect(detail.getByText('Custom Functions (optional)')).toBeVisible()
 

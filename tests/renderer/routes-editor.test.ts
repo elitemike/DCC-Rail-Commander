@@ -179,6 +179,61 @@ describe('RoutesEditorCustomElement.updateRoute (id rename)', () => {
     })
 })
 
+describe('RoutesEditorCustomElement strict aliases', () => {
+    it('blocks updateRoute — including a body-only edit routed through makeBodyChangeHandler — when strictAliases is on and no alias is set', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Old', body: '' }])
+        state.strictAliases = true
+        editor.selectedId = 1
+
+        editor.makeBodyChangeHandler(1)('THROW(1)\nDONE')
+
+        expect(state.routes).toEqual([{ id: 1, description: 'Old', body: '' }])
+    })
+
+    it('shows a warning toast when updateRoute is blocked', () => {
+        const { editor, state, toastShow } = makeEditor([{ id: 1, description: 'Old', body: '' }])
+        state.strictAliases = true
+
+        editor.updateRoute(0, { ...state.routes[0], description: 'New desc' })
+
+        expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Alias Required' }))
+    })
+
+    it('allows updateRoute when strictAliases is on and an alias is present', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 1, description: 'Old', body: '' }],
+            [{ name: 'mysiding', value: '1', aliasType: 'Route' }],
+        )
+        state.strictAliases = true
+
+        editor.updateRoute(0, { ...state.routes[0], description: 'New desc' })
+
+        expect(state.routes[0]).toMatchObject({ description: 'New desc' })
+    })
+
+    it('allows an aliasless updateRoute when strictAliases is off', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Old', body: '' }])
+        state.strictAliases = false
+
+        editor.updateRoute(0, { ...state.routes[0], description: 'New desc' })
+
+        expect(state.routes[0]).toMatchObject({ description: 'New desc' })
+    })
+
+    it('uses the pre-edit id to look up the alias when a rename is in flight, so an aliased route can still be renamed', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 1, description: 'Old', body: '' }],
+            [{ name: 'mysiding', value: '1', aliasType: 'Route' }],
+        )
+        state.strictAliases = true
+        editor.selectedId = 1
+
+        editor.updateRoute(0, { ...state.routes[0], id: 5 })
+
+        expect(state.routes[0]).toMatchObject({ id: 5 })
+    })
+})
+
 describe('RoutesEditorCustomElement.makeIdChangeHandler', () => {
     it('looks the route up by the id captured at bind time and persists the new id', () => {
         const { editor, state } = makeEditor([{ id: 1, description: 'Old', body: '' }])

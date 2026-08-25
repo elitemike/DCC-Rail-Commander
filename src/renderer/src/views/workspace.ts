@@ -170,6 +170,8 @@ export class Workspace {
     useLatestProdVersion = true
     /** Persisted app-wide preference — when on, canCompile also requires no Monaco error markers across any config file. Loaded in binding(), toggled from the Settings dialog. */
     strictCompile = false
+    /** Persisted app-wide preference (default on) — mirrored onto configEditorState.strictAliases, which the turnout/roster/sensor/route/sequence editors actually consult. Loaded in binding(), toggled from the Settings dialog. */
+    strictAliases = true
     /** Live mirror of hasErrorMarkers(), kept current via onMarkersChanged() (see binding()/detaching()) — only consulted when strictCompile is on. */
     hasBlockingErrors = false
     /** Live mirror of filesWithErrorMarkers(), kept current via onMarkersChanged() — drives the error dot in the file list, independent of strictCompile. */
@@ -299,6 +301,8 @@ export class Workspace {
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
         this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
+        this.strictAliases = (await this.preferences.get<boolean>('strictAliases')) ?? true
+        this.configEditorState.strictAliases = this.strictAliases
         this.hasBlockingErrors = hasErrorMarkers()
         this.filesWithErrors = filesWithErrorMarkers()
         this._unsubMarkersChanged = onMarkersChanged(() => {
@@ -347,6 +351,13 @@ export class Workspace {
         void this.preferences.set('strictCompile', enabled)
     }
 
+    /** Persists the strict-aliases preference and mirrors it onto configEditorState, which the turnout/roster/sensor/route/sequence editors actually consult — called from the Settings dialog. */
+    setStrictAliases(enabled: boolean): void {
+        this.strictAliases = enabled
+        this.configEditorState.strictAliases = enabled
+        void this.preferences.set('strictAliases', enabled)
+    }
+
     /** Opens the app-wide Settings dialog. Each toggle applies (and persists) immediately via its callback — there is nothing to "save" on close. */
     openSettings(): void {
         void this.dialogService.open({
@@ -357,11 +368,13 @@ export class Workspace {
                 verboseCompile: this.verboseCompile,
                 useLatestProdVersion: this.useLatestProdVersion,
                 strictCompile: this.strictCompile,
+                strictAliases: this.strictAliases,
                 onAutoConnectChange: (v: boolean) => this.setAutoConnectMonitor(v),
                 onShowMonitorOnConnectChange: (v: boolean) => this.setShowMonitorOnConnect(v),
                 onVerboseCompileChange: (v: boolean) => this.setVerboseCompile(v),
                 onUseLatestProdVersionChange: (v: boolean) => this.setUseLatestProdVersion(v),
                 onStrictCompileChange: (v: boolean) => this.setStrictCompile(v),
+                onStrictAliasesChange: (v: boolean) => this.setStrictAliases(v),
             },
         })
     }

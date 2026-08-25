@@ -130,6 +130,17 @@
 
                     <div class="flex items-start justify-between gap-4 mt-3">
                         <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">Strict aliases</p>
+                            <p class="text-xs text-gray-500 mt-0.5">Require an alias on every turnout, sensor,
+                                loco, route, and sequence — makes EXRAIL code read by name instead of by number.</p>
+                        </div>
+                        <div class="shrink-0 pt-0.5">
+                            <input ref="strictAliasesEl" type="checkbox" data-testid="settings-strict-aliases" />
+                        </div>
+                    </div>
+
+                    <div class="flex items-start justify-between gap-4 mt-4">
+                        <div class="min-w-0">
                             <p class="text-sm font-medium text-gray-900 dark:text-white">Default view</p>
                             <p class="text-xs text-gray-500 mt-0.5">Which tab each config file editor opens on:
                                 the visual form, or the raw text.</p>
