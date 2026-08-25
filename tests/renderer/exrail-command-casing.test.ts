@@ -66,10 +66,6 @@ describe('validateExrailCommandCasing', () => {
     it('does not run for files with no defined command vocabulary (e.g. config.h)', () => {
         expect(_runValidatorsForTest('config.h', 'throw(200)')).toHaveLength(0)
     })
-
-    it('does not flag words that are not EXRAIL commands at all', () => {
-        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')).toHaveLength(0)
-    })
 })
 
 describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL files', () => {
@@ -117,7 +113,7 @@ describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL fil
     })
 })
 
-describe('validateUnknownExrailCommand — closed-vocabulary object-definition files', () => {
+describe('validateUnknownExrailCommand', () => {
     it('flags a typo\'d macro name that is not a case variant of any known command', () => {
         const markers = _runValidatorsForTest('myRoster.h', 'Ros("")')
         expect(markers.some(m => m.message === "'Ros' is not a recognised EXRAIL command.")).toBe(true)
@@ -157,11 +153,21 @@ describe('validateUnknownExrailCommand — closed-vocabulary object-definition f
             .some(m => m.message.includes('not a recognised'))).toBe(true)
     })
 
-    it('does not run on EXRAIL script files — a user may legitimately call their own function there', () => {
-        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')).toHaveLength(0)
-        expect(_runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
-        expect(_runValidatorsForTest('mySequences.h', 'SEQUENCE(1)\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
-        expect(_runValidatorsForTest('myEvents.h', 'ONSENSOR(1)\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
-        expect(_runValidatorsForTest('myStartup.h', 'AUTOSTART\n  myCustomFunction(200)\nDONE')).toHaveLength(0)
+    it('also runs on EXRAIL script files — EXRAIL is a closed macro DSL, a stray function call cannot compile there either', () => {
+        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySequences.h', 'SEQUENCE(1)\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myEvents.h', 'ONSENSOR(1)\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myStartup.h', 'AUTOSTART\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
+
+    it('does not flag valid EXRAIL commands in a script file, only genuinely unknown ones', () => {
+        const markers = _runValidatorsForTest('myAutomation.h', 'ROUTE(1, "Test")\n  THROW(200)\n  DELAY(500)\nDONE')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
     })
 })

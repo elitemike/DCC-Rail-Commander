@@ -175,4 +175,27 @@ test.describe('Validators', () => {
             await expectErrorSquiggle(page)
         })
     })
+
+    // ── Unknown-command checks also apply to EXRAIL script files ────────────────
+    // (myAutomation.h and friends), not just the closed-vocabulary object-definition
+    // files above — EXRAIL is a closed macro DSL everywhere.
+
+    test.describe('unrecognised commands in EXRAIL script files', () => {
+        async function openAutomationTab(page: Page) {
+            await page.getByText('Advanced', { exact: true }).first().click()
+            await expect(page.locator('automation-editor div.monaco-editor')).toBeVisible()
+        }
+
+        test('a call that is not a defined EXRAIL command gets an error squiggle in myAutomation.h', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'myCustomFunction(200)')
+            await expectErrorSquiggle(page)
+        })
+
+        test('valid EXRAIL commands in myAutomation.h stay squiggle-free', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Test")\n  THROW(200)\n  DELAY(500)\nDONE')
+            await expectNoErrorSquiggle(page)
+        })
+    })
 })
