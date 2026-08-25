@@ -1,7 +1,7 @@
 {
-    "name": "ex-commander-electron",
+    "name": "dcc-rail-commander-electron",
     "version": "0.1.0",
-    "description": "EX-Commander - Electron/Aurelia 2 frontend",
+    "description": "DCC-Rail-Commander - Electron/Aurelia 2 frontend",
     "author": {
         "name": "DCC-EX",
         "email": "m.j.stankovich@gmail.com"
@@ -75,8 +75,8 @@
     },
     "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c",
     "build": {
-        "appId": "org.dcc-ex.commander",
-        "productName": "EX-Commander",
+        "appId": "com.dcc-rail-commander.app",
+        "productName": "DCC Rail Commander",
         "directories": {
             "output": "release"
         },

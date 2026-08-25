@@ -27,7 +27,7 @@ describe('ConfigEditorState — HAL Devices managed block', () => {
         const body = generateHalDevicesBlock(devices)
         const automationContent = [
             MANAGED_HAL_DEVICES_TAG,
-            '// This HAL Devices block is managed by EX-Commander.',
+            '// This HAL Devices block is managed by DCC-Rail-Commander.',
             '// Do not edit inside this block manually.',
             body,
             MANAGED_HAL_DEVICES_TAG,

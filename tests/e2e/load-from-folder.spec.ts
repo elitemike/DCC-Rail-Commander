@@ -78,7 +78,7 @@ async function launchBareApp(): Promise<{ app: ElectronApplication; testDataDir:
     mkdirSync(prefsDir, { recursive: true })
     // Start with an empty saved-configurations list so we get the onboarding screen
     writeFileSync(
-        join(prefsDir, 'ex-commander-preferences.json'),
+        join(prefsDir, 'dcc-rail-commander-preferences.json'),
         JSON.stringify({ savedConfigurations: [] }, null, 2),
         'utf-8',
     )
@@ -233,7 +233,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await expect(homePage.locator('div.monaco-editor')).toBeVisible({ timeout: 5_000 })
         await homePage.waitForTimeout(400)
 
-        await expect(homePage.locator('div.monaco-editor')).toContainText('DCCEX-Commander')
+        await expect(homePage.locator('div.monaco-editor')).toContainText('DCC-Rail-Commander')
     })
 
     test('loads a folder containing only config.h (with device header)', async ({ electronApp, homePage, sourceFolder }) => {
@@ -363,7 +363,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         await expect(homePage.getByText('Port Updated')).toBeVisible({ timeout: 5_000 })
 
         // Leave, then reopen the same saved config from the home screen.
-        await homePage.getByRole('button', { name: 'EX-Commander' }).click()
+        await homePage.getByRole('button', { name: 'DCC Rail Commander' }).click()
         await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
         await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
@@ -465,7 +465,7 @@ test.describe('Load from Folder — device header present in config.h', () => {
         // Leave and reopen the same saved config — a fresh Workspace instance
         // whose binding() must read the persisted preference from disk, not
         // just carry over an in-memory flag from the previous instance.
-        await homePage.getByRole('button', { name: 'EX-Commander' }).click()
+        await homePage.getByRole('button', { name: 'DCC Rail Commander' }).click()
         await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
         await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()
         await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
@@ -619,7 +619,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         await homePage.waitForTimeout(500)
 
         const savedContent = readFileSync(join(sourceFolder, 'config.h'), 'utf-8')
-        expect(savedContent).toContain('DCCEX-Commander Device Configuration')
+        expect(savedContent).toContain('DCC-Rail-Commander Device Configuration')
         expect(savedContent).toContain('Arduino Mega 2560')
         expect(savedContent).toContain('arduino:avr:mega')
     })
@@ -640,7 +640,7 @@ test.describe('Load from Folder — device picker dialog', () => {
         await homePage.waitForTimeout(500)
 
         // Navigate back to home
-        await homePage.getByRole('button', { name: 'EX-Commander' }).click()
+        await homePage.getByRole('button', { name: 'DCC Rail Commander' }).click()
         await expect(homePage.getByText('Load from Folder').first()).toBeVisible({ timeout: 5_000 })
 
         // Second load from same folder — picker should not appear
@@ -666,7 +666,7 @@ test.describe('Load from Folder — migration detection', () => {
         await homePage.getByText('Load from Folder').first().click()
 
         await expect(homePage.locator('.e-toast-warning')).toBeVisible({ timeout: 8_000 })
-        await expect(homePage.locator('.e-toast-warning')).toContainText('not created by EX-Commander')
+        await expect(homePage.locator('.e-toast-warning')).toContainText('not created by DCC-Rail-Commander')
     })
 
     test('no migration warning when all managed files have generator headers', async ({ electronApp, homePage, sourceFolder }) => {
@@ -703,7 +703,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         await homePage.waitForTimeout(500)
 
         const savedContent = readFileSync(join(sourceFolder, 'myRoster.h'), 'utf-8')
-        expect(savedContent).toContain('DCCEX-Commander')
+        expect(savedContent).toContain('DCC-Rail-Commander')
         expect(savedContent).toContain('ROSTER(3, "Thomas"')
         expect(savedContent).toContain('ROSTER(5, "Percy"')
     })
@@ -787,7 +787,7 @@ test.describe('Load from Folder — save writes back to source folder', () => {
         const aliasesPath = join(sourceFolder, 'myAliases.h')
         writeFileSync(aliasesPath, 'ALIAS(DISK_ALIAS, 3) // type: Roster\n', 'utf-8')
 
-        await homePage.getByRole('button', { name: 'EX-Commander' }).click()
+        await homePage.getByRole('button', { name: 'DCC Rail Commander' }).click()
         await expect(homePage.getByText('Recent Devices')).toBeVisible({ timeout: 10_000 })
 
         await homePage.getByText(basename(sourceFolder), { exact: true }).first().click()

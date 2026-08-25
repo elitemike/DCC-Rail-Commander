@@ -4,7 +4,7 @@ import { readFile, writeFile, readdir, access, mkdir, cp, rm } from 'fs/promises
 
 export class FileService {
     get baseDir(): string {
-        return join(app.getPath('home'), 'ex-commander')
+        return join(app.getPath('home'), 'dcc-rail-commander')
     }
 
     async getInstallDir(subdir?: string): Promise<string> {

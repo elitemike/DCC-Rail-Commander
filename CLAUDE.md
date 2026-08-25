@@ -4,12 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-EX-Commander is an Electron + Aurelia 2 rewrite of a legacy Python/Tkinter installer for DCC-EX Arduino
+DCC-Rail-Commander is an Electron + Aurelia 2 rewrite of a legacy Python/Tkinter installer for DCC-EX Arduino
 products (EX-CommandStation, EX-IOExpander, EX-Turntable). The old Python app lives in `.old_ex_installer/`
 and `tests/unit/*.py` / `requirements.txt` are leftovers from it — **do not edit or run those**; all active
 development is TypeScript under `src/` with tests under `tests/main/`, `tests/renderer/`, `tests/e2e/`.
 Product metadata in `src/renderer/src/models/product-details.ts` is a direct port of the old
 `ex_installer/product_details.py`.
+
+DCC-Rail-Commander is compatible with DCC-EX products only, and is **not an official DCC-EX project** — it
+receives no support from the DCC-EX team. Keep this distinction in mind when touching user-facing copy
+(README, issue templates, in-app text): it should never imply DCC-EX endorsement or that DCC-EX provides
+support for this installer itself, as distinct from the DCC-EX firmware products it installs.
 
 The `README.md` at the repo root has a "Getting started" section for the current Electron/pnpm stack; the
 "Legacy Python installer" section further down still describes the old Python app's build/run process and
@@ -109,7 +114,7 @@ See `TOOLCHAIN.md` for the full picture (build-time fetch vs. runtime seed, on-d
 debugging a corrupted seed); the summary below is just the pointers you need day to day.
 
 - `src/main/pio-runtime.ts` — resolves the bundled runtime (`resources/python`, `resources/pio/site-packages`,
-  `resources/pio-core`, `resources/pio-libs`), seeds the writable core dir at `~/ex-commander/platformio` once
+  `resources/pio-core`, `resources/pio-libs`), seeds the writable core dir at `~/dcc-rail-commander/platformio` once
   per build (guarded by the manifest `stamp`), and builds `pioEnv()`. That environment points all HTTP at
   `http://127.0.0.1:9`, so if PlatformIO ever decides it wants to download a package the build fails loudly
   instead of quietly pulling an unpinned toolchain — do not remove that fuse. `seedRuntime()`'s copies are

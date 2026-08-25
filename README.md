@@ -1,11 +1,14 @@
-# EX-Commander
+# DCC-Rail-Commander
 
-EX-Commander is an Electron + Aurelia 2 cross-platform installer for the various Arduino based DCC-EX products.
+DCC-Rail-Commander is an Electron + Aurelia 2 cross-platform installer for the various Arduino based DCC-EX products.
 
-This repository is an active rewrite of the original Python/Tkinter EX-Installer. The old app's source lives
-in `.old_ex_installer/` for reference only; all active development happens under `src/`.
+> **Compatibility:** DCC-Rail-Commander works exclusively with [DCC-EX](https://dcc-ex.com) products
+> (EX-CommandStation, EX-IOExpander, EX-Turntable). It is **not an official DCC-EX project** and is not
+> supported by the DCC-EX team — it is developed and maintained independently. For official DCC-EX support
+> channels, see the [DCC-EX website](https://dcc-ex.com) or their own repositories.
 
-Binaries will be made available to allow EX-Commander to be run on:
+
+Binaries will be made available to allow DCC-Rail-Commander to be run on:
 
 - Windows 10/11
 - Linux graphical environments
@@ -47,11 +50,11 @@ Binaries will be made available to allow EX-Commander to be run on:
 
 ### Install and run
 
-> **Note:** this repo is still hosted at `DCC-EX/EX-Installer` on GitHub pending a repository rename; the
+> **Note:** this repo is still hosted at `elitemike/EX-Installer` on GitHub pending a repository rename; the
 > clone URL below will need updating once that rename happens.
 
 ```shell
-git clone https://github.com/DCC-EX/EX-Installer.git
+git clone https://github.com/elitemike/EX-Installer.git
 cd EX-Installer
 pnpm install       # also downloads the bundled Python/PlatformIO toolchain (postinstall, network required once)
 pnpm dev           # start the app with hot reload
@@ -90,21 +93,21 @@ network access once if the bundled Python/PlatformIO toolchain hasn't been fetch
 
 ## What's in this repository?
 
-This repository includes all source code of EX-Commander, along with related documentation and screen captures of the initial design ideas.
+This repository includes all source code of DCC-Rail-Commander, along with related documentation and screen captures of the initial design ideas.
 
 The binaries are produced in the `release/` directory when building locally (see "Building binaries" below), and will also be hosted on the [DCC-EX website](https://dcc-ex.com).
 
 ### EX-Installer-Configs repository
 
-In addition to this repository, there is a separate repository [EX-Installer-Configs](https://github.com/DCC-EX/EX-Installer-Configs) which contains various configuration information that EX-Commander relies on.
+In addition to this repository, there is a separate repository [EX-Installer-Configs](https://github.com/DCC-EX/EX-Installer-Configs) which contains various configuration information that DCC-Rail-Commander relies on.
 
-This enables product and device configuration information to be updated without necessarily needing to build a new release of EX-Commander binaries.
+This enables product and device configuration information to be updated without necessarily needing to build a new release of DCC-Rail-Commander binaries.
 
 ## Operating principles and modules
 
-EX-Commander operates within the confines of the user's home directory and temp directory only, with no files or folders outside of these directories being touched.
+DCC-Rail-Commander operates within the confines of the user's home directory and temp directory only, with no files or folders outside of these directories being touched.
 
-In Windows, this will typically be `C:\Users\<username>\ex-commander`, and in Linux or macOS `/home/<username>/ex-commander`.
+In Windows, this will typically be `C:\Users\<username>\dcc-rail-commander`, and in Linux or macOS `/home/<username>/dcc-rail-commander`.
 
 The general operating process of the installer is:
 
@@ -115,7 +118,7 @@ The general operating process of the installer is:
 
 ## Supported products
 
-EX-Commander configures and installs the following Arduino based DCC-EX products:
+DCC-Rail-Commander configures and installs the following Arduino based DCC-EX products:
 
 - EX-CommandStation
 - EX-IOExpander *(not yet tested)*

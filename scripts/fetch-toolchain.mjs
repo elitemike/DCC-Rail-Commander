@@ -2,7 +2,7 @@
 /**
  * Populates `resources/` with the version-locked build runtime.
  *
- * This is the ONLY part of EX-Commander that downloads anything, and it runs at
+ * This is the ONLY part of DCC-Rail-Commander that downloads anything, and it runs at
  * build time, never on a user's machine. Everything it produces is shipped
  * inside the application so that the packaged app can compile firmware with no
  * network access at all — `git clone` of the DCC-EX product repos is then the
