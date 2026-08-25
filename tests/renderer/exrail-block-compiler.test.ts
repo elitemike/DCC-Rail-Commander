@@ -110,6 +110,25 @@ describe('parseBody / compileBody round-trip', () => {
         expect(throwNode?.info.paramValues.turnoutId).toBe(200)
     })
 
+    // STEALTH/STEALTH_GLOBAL's `code` param is `kind: 'code'` (gives it a Monaco popup editor —
+    // see ExrailCodeField in exrail-blockly-blocks.ts) but is parsed/emitted exactly like the
+    // 'string' kind it replaced: the variadic-tail path in parseArgsForParams() never branches on
+    // param kind, so raw C++ containing commas inside unquoted function-call parens must survive
+    // the round-trip untouched.
+    it('round-trips STEALTH with raw C++ containing unquoted commas', () => {
+        const body = 'STEALTH(digitalWrite(30, HIGH); digitalWrite(31, LOW);)'
+        const graph = parseOk(body)
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+        expect(node?.info.paramValues.code).toBe('digitalWrite(30, HIGH); digitalWrite(31, LOW);')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips STEALTH_GLOBAL', () => {
+        const body = 'STEALTH_GLOBAL(int counter = 0;)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
     it('graph structure is preserved through parseBody(compileBody(graph))', () => {
         const body = 'IF(1)\n  THROW(200)\nELSE\n  CLOSE(200)\nENDIF\nDELAY(100)'
         const graph = parseOk(body)

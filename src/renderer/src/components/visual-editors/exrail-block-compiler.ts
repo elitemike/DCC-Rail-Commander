@@ -26,6 +26,11 @@ export type BlockParamKind =
     | 'trackRef'
     | 'number'
     | 'string'
+    /** Same runtime shape as 'string' (parsed/emitted identically — see parseArgsForParams'
+     *  variadic tail, which never branches on kind) — exists purely so fieldJsonFor() can give
+     *  this one param type (STEALTH/STEALTH_GLOBAL's raw C++ body) a full Monaco popup editor
+     *  instead of Blockly's inline single-line text field. See ExrailCodeField. */
+    | 'code'
 
 export interface BlockParamDef {
     name: string

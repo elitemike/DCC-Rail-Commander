@@ -73,7 +73,12 @@ async function getMonacoContent(page: import('@playwright/test').Page): Promise<
         const editorEl = document.querySelector('[data-testid="file-body-monaco"] div.monaco-editor')
             ?? document.querySelector('div.monaco-editor')
         const lines = Array.from(editorEl?.querySelectorAll('.view-line') ?? [])
-        return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
+        // Monaco renders spaces in .view-line as U+00A0 (non-breaking space) — normalize to a
+        // regular space so string comparisons against literal source text work as expected. (Was
+        // previously a no-op — regular-space-to-regular-space — until this test file's own
+        // STEALTH coverage below became the first assertion here to compare a substring
+        // containing spaces.)
+        return lines.map((l) => (l.textContent ?? '').replace(/ /g, ' ')).join('\n')
     })
 }
 
@@ -98,7 +103,12 @@ async function pickDropdownOption(page: import('@playwright/test').Page, current
  * genuine body edit (dropdown pick, alias-driven field normalization) is blocked until one exists.
  */
 async function setHatAlias(page: import('@playwright/test').Page, value: string) {
-    await page.getByRole('button', { name: /^Edit text:/ }).click()
+    // Targeted by the field's current (blank) value rather than `[data-id="hat"]` — Blockly nests
+    // a connected next block's whole SVG group *inside* its predecessor's (mirroring the logical
+    // stack, per pickDropdownOption's own comment above), so `[data-id="hat"] ...` still matches
+    // any block connected below it too (e.g. STEALTH's code field) once one exists on the canvas.
+    // Every caller here only ever uses this to set a hat alias starting from blank.
+    await page.getByRole('button', { name: 'Edit text: empty' }).click()
     await page.keyboard.press('Control+A')
     if (value) await page.keyboard.type(value)
     await page.keyboard.press('Enter')
@@ -567,5 +577,89 @@ test.describe('EXRAIL block canvas', () => {
         // check made too early would trivially "pass" whether or not the bug is present.
         await expect(page.locator('.blocklyEditableField[aria-label="Edit number: 2"]')).toBeVisible({ timeout: 10_000 })
         await expect(page.locator('.blocklyWarningIcon')).toHaveCount(0)
+    })
+
+    // ── STEALTH/STEALTH_GLOBAL's code field — Monaco popup, not Blockly's inline text box ──
+
+    test.describe('STEALTH code field (Monaco popup editor)', () => {
+        async function openStealthEditor(page: import('@playwright/test').Page) {
+            await openRoutesEditor(page)
+            await page.getByTestId('editor-tab-raw').click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, ['ROUTE(1, "Main Route")', 'STEALTH(digitalWrite(30, HIGH);)', 'DONE'].join('\n'))
+
+            await page.getByRole('button', { name: 'Visual', exact: true }).click()
+            await page.locator('routes-editor nav[aria-label="Routes"] a').first().click()
+            await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+            // Strict aliases is on by default — the seeded route has none yet, which would
+            // silently block the STEALTH body edits below (see updateRoute()'s strict-aliases
+            // gate in routes-editor.ts) while the always-visible output pane (unaffected by that
+            // gate) kept showing the edit as if it landed, masking the block.
+            await setHatAlias(page, 'MAIN_ROUTE')
+        }
+
+        test('the block face shows a one-line collapsed preview, not the raw text box', async ({ workspacePage: page }) => {
+            await openStealthEditor(page)
+            await expect(page.locator('[data-id="n1"]')).toContainText('digitalWrite(30, HIGH);')
+        })
+
+        test('clicking the code field opens a Monaco editor with C++ highlighting, seeded with the current code', async ({ workspacePage: page }) => {
+            await openStealthEditor(page)
+
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            const popup = page.locator('.blocklyDropDownDiv')
+            await expect(popup.locator('div.monaco-editor')).toBeVisible()
+            await expect(popup).toContainText('digitalWrite(30, HIGH);')
+        })
+
+        test('editing the code and closing the popup updates the compiled STEALTH(...) line', async ({ workspacePage: page }) => {
+            await openStealthEditor(page)
+
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            const popup = page.locator('.blocklyDropDownDiv')
+            const monacoEditor = popup.locator('div.monaco-editor')
+            await expect(monacoEditor).toBeVisible()
+
+            await monacoEditor.click()
+            await page.keyboard.press('Control+A')
+            await page.keyboard.type('digitalWrite(30, LOW); digitalWrite(31, HIGH);')
+
+            // Escape must close the popup (committing the edit) rather than being swallowed by
+            // the popup's own keydown handler, which stops every other key from reaching
+            // Blockly's block-deletion shortcuts while typing C++. DropDownDiv is a persistent
+            // singleton Blockly appends once and reuses (shown/hidden, never removed) — its own
+            // Monaco instance disposing (removed from the DOM) is the real signal the popup closed.
+            await page.keyboard.press('Escape')
+            await expect(popup.locator('div.monaco-editor')).toHaveCount(0)
+
+            await expect(page.locator('[data-id="n1"]')).toContainText('digitalWrite(30, LOW); digitalWrite(31, HIGH);')
+
+            // The block-face text updates synchronously with setValue(), but the workspace
+            // change event that recompiles the body (and pushes it out to ConfigEditorState) is
+            // fired on a later task (confirmed elsewhere in this codebase — see the big comment
+            // on hatCallbacksByWorkspace in exrail-blockly-blocks.ts) — give it a moment to land
+            // before reading the raw file, or this reads the pre-commit body.
+            await page.waitForTimeout(300)
+
+            await page.getByTestId('editor-tab-raw').click()
+            const rawText = await getMonacoContent(page)
+            expect(rawText).toContain('STEALTH(digitalWrite(30, LOW); digitalWrite(31, HIGH);)')
+        })
+
+        test('is also used by STEALTH_GLOBAL', async ({ workspacePage: page }) => {
+            await openRoutesEditor(page)
+            await page.getByTestId('editor-tab-raw').click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, ['ROUTE(1, "Main Route")', 'STEALTH_GLOBAL(int counter = 0;)', 'DONE'].join('\n'))
+
+            await page.getByRole('button', { name: 'Visual', exact: true }).click()
+            await page.locator('routes-editor nav[aria-label="Routes"] a').first().click()
+            await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+            await expect(page.locator('[data-id="n1"]')).toContainText('int counter = 0;')
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            await expect(page.locator('.blocklyDropDownDiv div.monaco-editor')).toBeVisible()
+        })
     })
 })

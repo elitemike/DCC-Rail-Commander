@@ -18,6 +18,7 @@
  */
 import * as Blockly from 'blockly/core'
 import * as BlocklyEnMsg from 'blockly/msg/en'
+import * as monaco from 'monaco-editor'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { optionsForRefKind, REF_KINDS } from './exrail-block-compiler'
 import type { BlockParamDef, BlockParamKind, BlockTypeDef, DefinedObjects } from './exrail-block-compiler'
@@ -294,9 +295,97 @@ class ExrailAliasField extends Blockly.FieldTextInput {
     }
 }
 
+/**
+ * STEALTH/STEALTH_GLOBAL's `code` param — literal, potentially multi-statement C++, not an
+ * EXRAIL argument. Blockly's stock `field_input` is a single-line inline text box (Enter commits
+ * rather than inserting a newline), a poor fit for real code. This swaps the editing surface for
+ * a full Monaco instance with C++ syntax highlighting, popped open in a Blockly.DropDownDiv
+ * anchored to the field — the same floating-widget primitive field_colour's picker uses — while
+ * still extending FieldTextInput so block-face rendering/serialization/fromJson work unchanged;
+ * only showEditor_() (how editing is initiated) is replaced.
+ */
+class ExrailCodeField extends Blockly.FieldTextInput {
+    private monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null
+
+    constructor(value?: string) {
+        super(value ?? '')
+        // Longer than FieldInput's default — this is a preview of a whole code block, not a
+        // short identifier, so give it more room before ellipsis-truncating on the block face.
+        this.maxDisplayLength = 60
+    }
+
+    /** Collapses newlines/runs of whitespace into single spaces so multi-line code still renders
+     *  as one readable line on the block face — Blockly's SVG text element has no line-wrapping. */
+    protected override getText_(): string | null {
+        const raw = this.getValue()
+        if (raw === null || raw === undefined) return null
+        const collapsed = raw.replace(/\s+/g, ' ').trim()
+        return collapsed === '' ? '(click to edit C++ code)' : collapsed
+    }
+
+    /** Bypasses FieldInput's own inline `<input>` editor entirely — opens a DropDownDiv containing
+     *  a real Monaco instance instead. `onFinishEditing_`/widgetDispose_ (FieldInput's normal
+     *  commit hooks) are never invoked on this path; commit happens directly in `_onHide()`. */
+    protected override showEditor_(): void {
+        const block = this.getSourceBlock()
+        if (!block) return
+
+        const container = document.createElement('div')
+        container.style.cssText = 'width:560px;height:280px;'
+        // Blockly's own keyboard shortcuts (Delete/Backspace deletes the selected block, etc.)
+        // listen on the workspace — stop key events here from bubbling out of the popup so
+        // typing/deleting code never also mutates the canvas underneath it. Escape is the one
+        // exception: handled explicitly (close the popup) rather than let it bubble, since
+        // stopping propagation would otherwise also swallow Blockly's own "Escape closes the
+        // open widget" shortcut and leave the popup stuck open.
+        container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { Blockly.DropDownDiv.hideIfOwner(this); return }
+            e.stopPropagation()
+        })
+        container.addEventListener('keyup', (e) => e.stopPropagation())
+
+        const contentDiv = Blockly.DropDownDiv.getContentDiv()
+        contentDiv.style.padding = '0'
+        contentDiv.appendChild(container)
+
+        Blockly.DropDownDiv.showPositionedByField(this, () => this._onHide())
+
+        this.monacoEditor = monaco.editor.create(container, {
+            value: this.getValue() ?? '',
+            language: 'cpp',
+            theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs',
+            automaticLayout: true,
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineHeight: 20,
+            fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+        })
+        this.monacoEditor.focus()
+    }
+
+    /** DropDownDiv's onHide callback — fires on outside click, Escape, or the field being
+     *  re-triggered elsewhere. Reads Monaco's final content back into the field's own value,
+     *  which (via the normal Field.setValue()/doValueUpdate_ path) fires Blockly's standard
+     *  change event exactly like any other field edit — no host-callback plumbing needed here,
+     *  unlike ExrailIdField/ExrailAliasField's hat-specific synchronous reporting. */
+    private _onHide(): void {
+        const value = this.monacoEditor?.getValue() ?? this.getValue() ?? ''
+        this.monacoEditor?.dispose()
+        this.monacoEditor = null
+        this.setValue(value)
+    }
+
+    static override fromJson(options: Record<string, unknown>): ExrailCodeField {
+        return new ExrailCodeField(typeof options.text === 'string' ? options.text : '')
+    }
+}
+
 const EXRAIL_REF_FIELD_TYPE = 'field_exrail_ref'
 const EXRAIL_ID_FIELD_TYPE = 'field_exrail_id'
 const EXRAIL_ALIAS_FIELD_TYPE = 'field_exrail_alias'
+const EXRAIL_CODE_FIELD_TYPE = 'field_exrail_code'
 
 function fieldJsonFor(param: BlockParamDef): Record<string, unknown> {
     if (REF_KINDS.has(param.kind)) {
@@ -304,6 +393,9 @@ function fieldJsonFor(param: BlockParamDef): Record<string, unknown> {
     }
     if (param.kind === 'number') {
         return { type: 'field_number', name: param.name, value: 0 }
+    }
+    if (param.kind === 'code') {
+        return { type: EXRAIL_CODE_FIELD_TYPE, name: param.name, text: '' }
     }
     return { type: 'field_input', name: param.name, text: '' }
 }
@@ -378,5 +470,6 @@ export function registerExrailBlocks(): void {
     Blockly.fieldRegistry.register(EXRAIL_REF_FIELD_TYPE, ExrailRefField)
     Blockly.fieldRegistry.register(EXRAIL_ID_FIELD_TYPE, ExrailIdField)
     Blockly.fieldRegistry.register(EXRAIL_ALIAS_FIELD_TYPE, ExrailAliasField)
+    Blockly.fieldRegistry.register(EXRAIL_CODE_FIELD_TYPE, ExrailCodeField)
     Blockly.defineBlocksWithJsonArray(BLOCK_REGISTRY.map(jsonFor))
 }

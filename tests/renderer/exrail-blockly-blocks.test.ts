@@ -1,5 +1,15 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as Blockly from 'blockly/core'
+
+// exrail-blockly-blocks.ts imports the real monaco-editor package (for ExrailCodeField's Monaco
+// popup) — that package touches `window` at module scope, which crashes under vitest's node
+// environment. Not exercised by these tests (nothing here opens the field's editor), but the
+// import itself still runs at module load, so it must be mocked regardless — same reason
+// dccex-validators.test.ts mocks it.
+vi.mock('monaco-editor', () => ({
+    editor: { create: vi.fn() },
+}))
+
 import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
 import type { DefinedObjects } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 
@@ -133,6 +143,42 @@ describe('ExrailAliasField (hat block ALIAS field)', () => {
         const warn = vi.spyOn(block, 'setWarningText')
         block.setFieldValue('brand_new_name', 'ALIAS')
         expect(warn).toHaveBeenCalledWith(null, 'alias')
+        workspace.dispose()
+    })
+})
+
+describe('ExrailCodeField (STEALTH/STEALTH_GLOBAL code field)', () => {
+    function makeCodeBlock(type: 'STEALTH' | 'STEALTH_GLOBAL' = 'STEALTH') {
+        const workspace = new Blockly.Workspace()
+        const block = workspace.newBlock(type)
+        block.initModel()
+        return { workspace, block }
+    }
+
+    it('shows a placeholder on the block face when no code has been entered yet', () => {
+        const { block, workspace } = makeCodeBlock()
+        expect(block.getField('code')!.getText()).toBe('(click to edit C++ code)')
+        workspace.dispose()
+    })
+
+    it('collapses newlines and repeated whitespace into one line for the block-face preview', () => {
+        const { block, workspace } = makeCodeBlock()
+        block.setFieldValue('if (digitalRead(30)==LOW) {\n  doSomething();\n}', 'code')
+        expect(block.getField('code')!.getText()).toBe('if (digitalRead(30)==LOW) { doSomething(); }')
+        workspace.dispose()
+    })
+
+    it('preserves the raw multi-line value itself — only the block-face preview text is collapsed', () => {
+        const { block, workspace } = makeCodeBlock()
+        const code = 'line1();\nline2();'
+        block.setFieldValue(code, 'code')
+        expect(block.getFieldValue('code')).toBe(code)
+        workspace.dispose()
+    })
+
+    it('is used by STEALTH_GLOBAL too, not just STEALTH', () => {
+        const { block, workspace } = makeCodeBlock('STEALTH_GLOBAL')
+        expect(block.getField('code')!.getText()).toBe('(click to edit C++ code)')
         workspace.dispose()
     })
 })
