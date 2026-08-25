@@ -647,6 +647,49 @@ test.describe('EXRAIL block canvas', () => {
             expect(rawText).toContain('STEALTH(digitalWrite(30, LOW); digitalWrite(31, HIGH);)')
         })
 
+        // Regression: EXRAIL's body format is one statement per line — a genuinely multi-line
+        // commit (real newlines, typed with Enter, not just long text) used to reach the
+        // compiled body uncollapsed, which parseBody() can't read back into blocks. The route
+        // silently fell out of Blocks mode and the edit was lost. ExrailCodeField's _onHide()
+        // now collapses whitespace before committing (see collapseCodeWhitespace()), so this
+        // must still compile to a single valid line and the route must stay editable in Blocks.
+        test('typing genuinely multi-line C++ (real newlines) still commits as one valid EXRAIL line', async ({ workspacePage: page }) => {
+            await openStealthEditor(page)
+
+            await page.locator('[data-id="n1"]').getByRole('button', { name: /^Edit text:/ }).click()
+            const popup = page.locator('.blocklyDropDownDiv')
+            const monacoEditor = popup.locator('div.monaco-editor')
+            await expect(monacoEditor).toBeVisible()
+
+            // Three independent statements on three real lines (Enter between each) — no braces/
+            // parens left open, so Monaco's own bracket auto-closing can't interfere with what
+            // actually ends up in the editor (a `{` here would auto-insert a matching `}`,
+            // duplicating the one this test would otherwise type itself).
+            await monacoEditor.click()
+            await page.keyboard.press('Control+A')
+            await page.keyboard.type('digitalWrite(30, HIGH);')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('delay(500);')
+            await page.keyboard.press('Enter')
+            await page.keyboard.type('digitalWrite(30, LOW);')
+
+            await page.keyboard.press('Escape')
+            await expect(popup.locator('div.monaco-editor')).toHaveCount(0)
+            await page.waitForTimeout(300)
+
+            // The route must still be usable in Blocks mode — a stuck-in-Raw-fallback route
+            // (Blocks disabled) is exactly the broken state this fix prevents.
+            await expect(page.locator('.blocklySvg').first()).toBeVisible()
+            await expect(page.getByRole('button', { name: 'Blocks' })).toBeEnabled()
+            await expect(page.locator('[data-id="n1"]')).toContainText('digitalWrite(30, HIGH); delay(500); digitalWrite(30, LOW);')
+
+            await page.getByTestId('editor-tab-raw').click()
+            const rawText = await getMonacoContent(page)
+            // The compiled body must be exactly one line for this statement — no embedded newline.
+            const stealthLine = rawText.split('\n').find((l) => l.startsWith('STEALTH('))
+            expect(stealthLine).toBe('STEALTH(digitalWrite(30, HIGH); delay(500); digitalWrite(30, LOW);)')
+        })
+
         test('is also used by STEALTH_GLOBAL', async ({ workspacePage: page }) => {
             await openRoutesEditor(page)
             await page.getByTestId('editor-tab-raw').click()

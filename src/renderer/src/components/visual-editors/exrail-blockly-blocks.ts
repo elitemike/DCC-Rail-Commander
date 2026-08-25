@@ -296,6 +296,16 @@ class ExrailAliasField extends Blockly.FieldTextInput {
 }
 
 /**
+ * Collapses newlines/runs of whitespace into single spaces — shared by ExrailCodeField's
+ * block-face preview (getText_()) and its actual committed value (_onHide()) so the two can
+ * never drift apart, and exported purely so this specific rule is unit-testable without needing
+ * to drive Blockly's DropDownDiv/a real Monaco instance.
+ */
+export function collapseCodeWhitespace(raw: string): string {
+    return raw.replace(/\s+/g, ' ').trim()
+}
+
+/**
  * STEALTH/STEALTH_GLOBAL's `code` param — literal, potentially multi-statement C++, not an
  * EXRAIL argument. Blockly's stock `field_input` is a single-line inline text box (Enter commits
  * rather than inserting a newline), a poor fit for real code. This swaps the editing surface for
@@ -303,6 +313,12 @@ class ExrailAliasField extends Blockly.FieldTextInput {
  * anchored to the field — the same floating-widget primitive field_colour's picker uses — while
  * still extending FieldTextInput so block-face rendering/serialization/fromJson work unchanged;
  * only showEditor_() (how editing is initiated) is replaced.
+ *
+ * The popup itself can be edited across multiple lines (real newlines, comfortable formatting),
+ * but the *committed* value is always collapsed to one line on close (_onHide()) — EXRAIL's body
+ * format is one statement per line, so a literal newline reaching the compiler breaks the
+ * round-trip. Collapsing doesn't change the code's meaning (C++ doesn't care about line breaks
+ * inside a statement), just its stored form — see _onHide()'s own comment for the full reasoning.
  */
 class ExrailCodeField extends Blockly.FieldTextInput {
     private monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null
@@ -319,7 +335,7 @@ class ExrailCodeField extends Blockly.FieldTextInput {
     protected override getText_(): string | null {
         const raw = this.getValue()
         if (raw === null || raw === undefined) return null
-        const collapsed = raw.replace(/\s+/g, ' ').trim()
+        const collapsed = collapseCodeWhitespace(raw)
         return collapsed === '' ? '(click to edit C++ code)' : collapsed
     }
 
@@ -369,12 +385,22 @@ class ExrailCodeField extends Blockly.FieldTextInput {
      *  re-triggered elsewhere. Reads Monaco's final content back into the field's own value,
      *  which (via the normal Field.setValue()/doValueUpdate_ path) fires Blockly's standard
      *  change event exactly like any other field edit — no host-callback plumbing needed here,
-     *  unlike ExrailIdField/ExrailAliasField's hat-specific synchronous reporting. */
+     *  unlike ExrailIdField/ExrailAliasField's hat-specific synchronous reporting.
+     *
+     * Collapses whitespace (same rule getText_() already uses for the block-face preview, so
+     * what's shown always matches what's saved) before committing — EXRAIL's own body-text
+     * format is one statement per line (see parseBody()/LINE_RE), so a literal newline embedded
+     * in STEALTH's argument can't be parsed back into blocks. Left uncollapsed, committing
+     * multi-line code silently fails to round-trip: the route falls back out of Blocks mode and
+     * the edit is lost. Collapsing to one line changes nothing about the code's *meaning* — `if
+     * (x) { y(); }` compiles identically with or without a literal line break in the source —
+     * while still letting the popup itself be edited comfortably across multiple lines.
+     */
     private _onHide(): void {
-        const value = this.monacoEditor?.getValue() ?? this.getValue() ?? ''
+        const raw = this.monacoEditor?.getValue() ?? this.getValue() ?? ''
         this.monacoEditor?.dispose()
         this.monacoEditor = null
-        this.setValue(value)
+        this.setValue(collapseCodeWhitespace(raw))
     }
 
     static override fromJson(options: Record<string, unknown>): ExrailCodeField {
