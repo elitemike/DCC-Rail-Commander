@@ -212,6 +212,24 @@ test.describe('Validators', () => {
             await setMonacoContent(page, 'ROUTE(1, "Yard Reverse")\nDONE')
             await expectNoErrorSquiggle(page)
         })
+
+        // Regression: a STEALTH/STEALTH_GLOBAL body is arbitrary C++ and may legitimately
+        // span multiple physical lines — the validator used to give up after one line and
+        // treat every following C++ line as its own EXRAIL statement, firing a false
+        // "allows only one command per line" squiggle plus "not a recognised EXRAIL command"
+        // on identifiers like `if`/`digitalWrite` in call position.
+        test('a multi-line STEALTH body stays squiggle-free', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, [
+                'ROUTE(1, "Test")',
+                'STEALTH(if (x) {',
+                '  digitalWrite(30, HIGH);',
+                '  delay(500);',
+                '})',
+                'DONE',
+            ].join('\n'))
+            await expectNoErrorSquiggle(page)
+        })
     })
 
     // ── Strict aliases (on by default) flags pre-existing un-aliased objects too ─
