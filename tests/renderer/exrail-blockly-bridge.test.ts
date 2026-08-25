@@ -1,5 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import * as Blockly from 'blockly/core'
+
+// exrail-blockly-blocks.ts (imported below) imports the real monaco-editor package (for
+// ExrailCodeField's Monaco popup) — that package touches `window` at module scope, which
+// crashes under vitest's node environment. Not exercised by these tests, but the import itself
+// still runs at module load — same reason dccex-validators.test.ts mocks it.
+vi.mock('monaco-editor', () => ({
+    editor: { create: vi.fn() },
+}))
+
 import { parseBody, compileBody } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 import { BLOCK_REGISTRY } from '../../src/renderer/src/components/visual-editors/exrail-block-registry'
 import { registerExrailBlocks, setWorkspaceDefined } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'

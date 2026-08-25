@@ -2175,8 +2175,9 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         color: '#34495e',
         category: 'Advanced',
         // Raw code may itself contain commas — captured verbatim via the variadic tail
-        // (see BlockParamDef.variadic) rather than parsed as normal arguments.
-        params: [{ name: 'code', label: 'C++ code', kind: 'string', variadic: true }],
+        // (see BlockParamDef.variadic) rather than parsed as normal arguments. kind: 'code'
+        // (not 'string') gives this field a full Monaco popup editor — see ExrailCodeField.
+        params: [{ name: 'code', label: 'C++ code', kind: 'code', variadic: true }],
         isAvailable: () => true,
         emit: (p) => `STEALTH(${p.code})`,
         helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#stealthcode',
@@ -2188,7 +2189,8 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         description: 'Allows embedding raw C++ code outside of task context.',
         color: '#34495e',
         category: 'Advanced',
-        params: [{ name: 'code', label: 'C++ code', kind: 'string', variadic: true }],
+        // kind: 'code' (not 'string') gives this field a full Monaco popup editor — see ExrailCodeField.
+        params: [{ name: 'code', label: 'C++ code', kind: 'code', variadic: true }],
         isAvailable: () => true,
         emit: (p) => `STEALTH_GLOBAL(${p.code})`,
         helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#stealth_globalcode',
