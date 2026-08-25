@@ -24,7 +24,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
-import { hasErrorMarkers, onMarkersChanged } from '../config/dccex-validators'
+import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers } from '../config/dccex-validators'
 import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
@@ -80,6 +80,23 @@ export class Workspace {
 
     get automationFileIndex(): number {
         return this.state.configFiles.findIndex(f => f.name === 'myAutomation.h')
+    }
+
+    get generalWifiHasError(): boolean {
+        return this.fileHasError('config.h') || this.fileHasError('myConfig.h')
+    }
+
+    get startupHasError(): boolean {
+        return this.fileHasError('myStartup.h')
+    }
+
+    /** Accessories is a slice of myAutomation.h (the HAL Devices block) — same underlying model. */
+    get accessoriesHasError(): boolean {
+        return this.fileHasError('myAutomation.h')
+    }
+
+    get automationHasError(): boolean {
+        return this.fileHasError('myAutomation.h')
     }
 
     selectGeneralWifi(): void {
@@ -155,6 +172,8 @@ export class Workspace {
     strictCompile = false
     /** Live mirror of hasErrorMarkers(), kept current via onMarkersChanged() (see binding()/detaching()) — only consulted when strictCompile is on. */
     hasBlockingErrors = false
+    /** Live mirror of filesWithErrorMarkers(), kept current via onMarkersChanged() — drives the error dot in the file list, independent of strictCompile. */
+    filesWithErrors: Set<string> = new Set()
     private _unsubMarkersChanged: IDisposable | null = null
 
     // ── Serial connection — the actual open/closed state of the port ─────────
@@ -281,8 +300,10 @@ export class Workspace {
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
         this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
         this.hasBlockingErrors = hasErrorMarkers()
+        this.filesWithErrors = filesWithErrorMarkers()
         this._unsubMarkersChanged = onMarkersChanged(() => {
             this.hasBlockingErrors = hasErrorMarkers()
+            this.filesWithErrors = filesWithErrorMarkers()
         })
         // Fire-and-forget: a git call that can be slow (or fail entirely
         // offline) and must never block the rest of the view from rendering.
@@ -1303,6 +1324,11 @@ export class Workspace {
         if (!d || !d.fqbn || !d.port) return false
         if (this.strictCompile && this.hasBlockingErrors) return false
         return true
+    }
+
+    /** True if the named config file's Monaco model currently has an error marker — drives the file-list error dot. */
+    fileHasError(filename: string): boolean {
+        return this.filesWithErrors.has(filename)
     }
 
     get productName(): string {

@@ -46,6 +46,8 @@ function makeWorkspace(opts: {
     useLatestProdVersion?: boolean
     strictCompile?: boolean
     hasBlockingErrors?: boolean
+    filesWithErrors?: Set<string>
+    configFiles?: { name: string; content: string }[]
 } = {}) {
     const workspace = Object.create(Workspace.prototype) as Workspace
 
@@ -62,7 +64,7 @@ function makeWorkspace(opts: {
     Object.assign(workspace, {
         state: {
             selectedDevice: opts.device === undefined ? { ...DEVICE } : opts.device,
-            configFiles: [{ name: 'config.h', content: '' }],
+            configFiles: opts.configFiles ?? [{ name: 'config.h', content: '' }],
             scratchPath: '/scratch',
             sourceFolder: null,
             savedConfigurations: [],
@@ -98,6 +100,7 @@ function makeWorkspace(opts: {
         showMonitorOnConnect: opts.showMonitorOnConnect ?? true,
         strictCompile: opts.strictCompile ?? false,
         hasBlockingErrors: opts.hasBlockingErrors ?? false,
+        filesWithErrors: opts.filesWithErrors ?? new Set<string>(),
         activeSection: 'config',
         activeBottomTab: 'output',
         isCompiling: false,
@@ -530,6 +533,52 @@ describe('Workspace.canCompile', () => {
     it('stays false for an incomplete device selection regardless of strictCompile', () => {
         const { workspace } = makeWorkspace({ device: null, strictCompile: false, hasBlockingErrors: false })
         expect(workspace.canCompile).toBe(false)
+    })
+})
+
+// ── fileHasError() and the Device Settings row *HasError getters — the file-list error dot ──
+
+describe('Workspace.fileHasError', () => {
+    it('is false for a filename not present in filesWithErrors', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(workspace.fileHasError('mySensors.h')).toBe(false)
+    })
+
+    it('is true for a filename present in filesWithErrors', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(workspace.fileHasError('myRoster.h')).toBe(true)
+    })
+})
+
+describe('Workspace Device Settings row *HasError getters', () => {
+    it('generalWifiHasError is true when either config.h or myConfig.h has an error', () => {
+        const { workspace: a } = makeWorkspace({ filesWithErrors: new Set(['config.h']) })
+        expect(a.generalWifiHasError).toBe(true)
+
+        const { workspace: b } = makeWorkspace({ filesWithErrors: new Set(['myConfig.h']) })
+        expect(b.generalWifiHasError).toBe(true)
+
+        const { workspace: c } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(c.generalWifiHasError).toBe(false)
+    })
+
+    it('startupHasError tracks myStartup.h', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myStartup.h']) })
+        expect(workspace.startupHasError).toBe(true)
+    })
+
+    it('accessoriesHasError and automationHasError both track myAutomation.h, since Accessories is a slice of it', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myAutomation.h']) })
+        expect(workspace.accessoriesHasError).toBe(true)
+        expect(workspace.automationHasError).toBe(true)
+    })
+
+    it('all *HasError getters are false when filesWithErrors is empty', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set() })
+        expect(workspace.generalWifiHasError).toBe(false)
+        expect(workspace.startupHasError).toBe(false)
+        expect(workspace.accessoriesHasError).toBe(false)
+        expect(workspace.automationHasError).toBe(false)
     })
 })
 
