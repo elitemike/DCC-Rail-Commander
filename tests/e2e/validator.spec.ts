@@ -133,6 +133,13 @@ test.describe('Validators', () => {
             ].join('\n'))
             await expectNoErrorSquiggle(page)
         })
+
+        test('unrecognised macro name (not just a case mismatch) — error squiggle', async ({ workspacePage: page }) => {
+            await openRawRoster(page)
+            // "Ros" isn't ROSTER under any casing — a genuinely unknown command, not a typo Monaco can case-fix.
+            await setMonacoContent(page, 'Ros("")')
+            await expectErrorSquiggle(page)
+        })
     })
 
     // ── SERVO_TURNOUT validator tests ─────────────────────────────────────────
