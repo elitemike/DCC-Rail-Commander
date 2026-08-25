@@ -97,7 +97,7 @@
                         </div>
 
                         <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                            <exrail-block-canvas component.ref="blockCanvas" kind="route" initial-body.bind="selectedRoute.body" defined.bind="defined"
+                            <exrail-block-canvas component.ref="blockCanvas" kind="ROUTE" initial-body.bind="selectedRoute.body" defined.bind="defined"
                                 header-id.bind="selectedRoute.id" header-alias.bind="selectedRouteAlias" header-description.bind="selectedRoute.description"
                                 on-body-change.bind="makeBodyChangeHandler(selectedRoute.id)"
                                 on-id-change.bind="makeIdChangeHandler(selectedRoute.id)"

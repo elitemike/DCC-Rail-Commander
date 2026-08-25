@@ -20,7 +20,7 @@ import { AutomationEditorCustomElement } from '../../src/renderer/src/components
 
 function makeConfigEditorState(configFiles: Array<{ name: string; content: string }>): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'sequences', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {

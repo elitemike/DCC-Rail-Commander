@@ -41,6 +41,7 @@ import { SensorsEditorCustomElement } from './components/visual-editors/sensors-
 import { SignalsEditorCustomElement } from './components/visual-editors/signals-editor'
 import { RoutesEditorCustomElement } from './components/visual-editors/routes-editor'
 import { SequencesEditorCustomElement } from './components/visual-editors/sequences-editor'
+import { EventHandlersEditorCustomElement } from './components/visual-editors/event-handlers-editor'
 import { AliasesEditorCustomElement } from './components/visual-editors/aliases-editor'
 import { ExrailBlockCanvasCustomElement } from './components/visual-editors/exrail-block-canvas'
 
@@ -108,6 +109,7 @@ new Aurelia()
         SignalsEditorCustomElement,
         RoutesEditorCustomElement,
         SequencesEditorCustomElement,
+        EventHandlersEditorCustomElement,
         AliasesEditorCustomElement,
         ExrailBlockCanvasCustomElement,
         CompileProgressCustomElement,

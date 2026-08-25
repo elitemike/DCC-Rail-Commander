@@ -57,7 +57,7 @@ export class RoutesEditorCustomElement {
     }
 
     canUseBlocks(r: RouteEntry): boolean {
-        return parseBody(r.body, 'route', BLOCK_REGISTRY).ok
+        return parseBody(r.body, 'ROUTE', BLOCK_REGISTRY).ok
     }
 
     private static readonly ROUTE_HEADER_RE = /^ROUTE\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*$/

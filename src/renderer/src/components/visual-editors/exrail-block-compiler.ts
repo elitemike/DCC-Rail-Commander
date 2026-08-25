@@ -32,6 +32,14 @@ export interface BlockParamDef {
     kind: BlockParamKind
     label: string
     optional?: boolean
+    /**
+     * Marks the LAST param in a block's `params` as a free-text catch-all for a variadic EXRAIL
+     * signature (e.g. `SET(vpin, count...)`, `IF_ALL(vpinList...)`) — `BlockParamDef` has no
+     * concept of a repeating socket, so the whole comma-separated tail is captured verbatim as one
+     * string field instead (see parseBody's arity check and value-assignment loop below, and
+     * emit()'s own handling in each such registry entry). Only meaningful on the final param.
+     */
+    variadic?: boolean
 }
 
 /** Object collections the registry's `isAvailable()` filters palette blocks against. */
@@ -66,6 +74,20 @@ export interface BlockTypeDef {
      */
     category: string
     params: BlockParamDef[]
+    /**
+     * Only meaningful when `shape === 'hat'`. `true` marks a param-flavored hat — a task entry
+     * point with real typed params on its own block face (e.g. ONSENSOR) and no id/alias/
+     * description concept at all. Omitted/false is the id/alias-flavored shape (ROUTE/SEQUENCE):
+     * `params` is `[]`, and the block instead gets the editable ID/ALIAS fields wired through
+     * `ExrailBlockCanvasCustomElement`'s headerId/headerAlias/headerDescription bindables.
+     *
+     * This can't be inferred from `params.length > 0` alone — a zero-arg event handler (e.g.
+     * ONRAILSYNCON) is still param-flavored (no id/alias), just with an empty params array, so it
+     * would otherwise be indistinguishable from ROUTE/SEQUENCE. See jsonFor() (exrail-blockly-
+     * blocks.ts), buildGraphFromWorkspace() (exrail-blockly-bridge.ts), and
+     * ExrailBlockCanvasCustomElement's `_isParamFlavoredHat()`, which all key off this flag.
+     */
+    paramFlavoredHat?: boolean
     isAvailable(defined: DefinedObjects): boolean
     /**
      * EXRAIL text for this node's own header line, given resolved param values.
@@ -273,17 +295,69 @@ export function isPlainInt(s: string): boolean {
 }
 
 /**
- * Parses a route/sequence `body` string (the raw text between `ROUTE(...)`/`SEQUENCE(...)` and
- * the next block/EOF, as produced by `parseRoutesFromFile`/`parseSequencesFromFile` in
+ * Parses one command's parenthesized argument text against its registry param list — shared by
+ * parseBody's per-line loop and parseEventHandlerBlock's header-line parsing below, since a
+ * param-flavored hat's header (`ONSENSOR(200)`) is parsed exactly the same way a body statement's
+ * line is. `commandName` is only used to word the arity-mismatch error.
+ */
+export function parseArgsForParams(
+    commandName: string,
+    argsRaw: string | undefined,
+    params: BlockParamDef[],
+): { ok: true; values: Record<string, string | number> } | { ok: false; reason: string } {
+    const argValues = argsRaw !== undefined ? splitArgs(argsRaw) : []
+    // A variadic last param (see BlockParamDef.variadic) absorbs every arg from its own
+    // position onward as one joined string, so the fixed prefix just needs *at least*
+    // enough args to fill every param before it — the usual exact-count check still applies
+    // when there's no variadic param.
+    const isVariadic = params.length > 0 && params[params.length - 1].variadic === true
+    const minArgs = isVariadic ? params.length - 1 : params.length
+    if (isVariadic ? argValues.length < minArgs : argValues.length !== params.length) {
+        const expected = isVariadic ? `at least ${minArgs}` : `${params.length}`
+        return { ok: false, reason: `"${commandName}" expects ${expected} argument(s) but found ${argValues.length}.` }
+    }
+
+    const values: Record<string, string | number> = {}
+    params.forEach((p, i) => {
+        if (isVariadic && i === params.length - 1) {
+            // The variadic tail is stored verbatim (rejoined, not re-parsed) — it may itself
+            // contain a mix of quoted strings and bare numbers/refs (e.g. IFLOCO("Thomas",
+            // 6211)), which no single BlockParamKind coercion could handle correctly.
+            values[p.name] = argValues.slice(i).join(', ')
+            return
+        }
+        const value = argValues[i]
+        if (p.kind === 'string') {
+            values[p.name] = stripQuotes(value)
+        } else if (REF_KINDS.has(p.kind)) {
+            // A ref arg is either a raw numeric ID or an ALIAS(name) identifier —
+            // e.g. THROW(mysidingpoint). Number()-coercing the latter produced NaN.
+            values[p.name] = isPlainInt(value) ? Number(value) : value
+        } else {
+            values[p.name] = Number(value)
+        }
+    })
+    return { ok: true, values }
+}
+
+/**
+ * Parses a route/sequence/event-handler `body` string (the raw text between the header line —
+ * `ROUTE(...)`/`SEQUENCE(...)`/etc. — and the next block/EOF, as produced by
+ * `parseRoutesFromFile`/`parseSequencesFromFile`/`parseEventHandlersFromFile` in
  * myAutomationParser.ts — including a trailing top-level `DONE` line when the file has one) into
  * a block graph. A top-level `DONE` parses like any other cap-shaped command: it becomes an
  * ordinary node at the end of the chain, same as one nested inside a branch.
+ *
+ * `kind` is the literal hat block-type id from the registry (`'ROUTE'`, `'SEQUENCE'`, or a
+ * param-flavored hat like `'ONSENSOR'`) used to seed the synthetic root node when `bodyText` is
+ * empty — see BLOCK_REGISTRY and exrail-block-canvas.ts's `kind` bindable, which is this
+ * function's only caller for that value.
  *
  * Never partially compiles: any unrecognized line, casing mismatch, unbalanced IF/ENDIF, or
  * comment returns `{ ok: false, reason }` instead of a best-effort graph, so a hand-edited body
  * that doesn't fit the block model is never silently corrupted.
  */
-export function parseBody(bodyText: string, kind: 'route' | 'sequence', registry: BlockTypeDef[]): ParseResult {
+export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef[]): ParseResult {
     const registryById = new Map(registry.map((b) => [b.id, b]))
     const lines = bodyText.split('\n')
 
@@ -333,26 +407,10 @@ export function parseBody(bodyText: string, kind: 'route' | 'sequence', registry
         if (!def) return { ok: false, reason: `"${rawCommand}" isn't supported in Blocks mode yet — edit as Text.` }
         if (def.shape === 'hat') return { ok: false, reason: `Unexpected "${rawCommand}" inside a body.` }
 
-        const argValues = argsRaw !== undefined ? splitArgs(argsRaw) : []
-        if (argValues.length !== def.params.length) {
-            return { ok: false, reason: `"${rawCommand}" expects ${def.params.length} argument(s) but found ${argValues.length}.` }
-        }
+        const parsed = parseArgsForParams(rawCommand, argsRaw, def.params)
+        if (!parsed.ok) return parsed
 
-        const paramValues: Record<string, string | number> = {}
-        def.params.forEach((p, i) => {
-            const value = argValues[i]
-            if (p.kind === 'string') {
-                paramValues[p.name] = stripQuotes(value)
-            } else if (REF_KINDS.has(p.kind)) {
-                // A ref arg is either a raw numeric ID or an ALIAS(name) identifier —
-                // e.g. THROW(mysidingpoint). Number()-coercing the latter produced NaN.
-                paramValues[p.name] = isPlainInt(value) ? Number(value) : value
-            } else {
-                paramValues[p.name] = Number(value)
-            }
-        })
-
-        const stmt: StmtNode = { blockTypeId: rawCommand, paramValues }
+        const stmt: StmtNode = { blockTypeId: rawCommand, paramValues: parsed.values }
         currentList().push(stmt)
 
         if (def.shape === 'branch') {
@@ -387,7 +445,7 @@ export function parseBody(bodyText: string, kind: 'route' | 'sequence', registry
     const hatNodeId = 'hat'
     nodes.push({
         id: hatNodeId,
-        info: { blockTypeId: kind === 'route' ? 'ROUTE' : 'SEQUENCE', paramValues: {} },
+        info: { blockTypeId: kind, paramValues: {} },
     })
     const firstBodyId = emitChain(root)
     if (firstBodyId !== undefined) {
@@ -445,4 +503,59 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
 
     walk(nextIdOf(graph.hatNodeId, graph.connectors), 0)
     return lines.join('\n')
+}
+
+// ── Event-handler blocks: header-line-plus-body <-> graph ────────────────
+
+/**
+ * Parses a full event-handler block — header line (`ONSENSOR(200)`) *and* body, unlike
+ * `parseBody()` which only ever receives the post-header body text for ROUTE/SEQUENCE (their
+ * id/description live in RouteEntry/SequenceEntry, not the block). A param-flavored hat
+ * (`def.params.length > 0`) has no such separate structured home for its arguments — they're
+ * edited directly on the hat block's own face, so this wrapper parses the header with the exact
+ * same per-line logic (`parseArgsForParams`) a body statement uses, then hands the remainder to
+ * the unchanged `parseBody()` and overwrites its (always-`{}`) hat paramValues with the parsed
+ * header args. See exrail-block-canvas.ts's `_loadGraph()`, the only caller.
+ */
+export function parseEventHandlerBlock(fullText: string, registry: BlockTypeDef[]): ParseResult {
+    const registryById = new Map(registry.map((b) => [b.id, b]))
+    const newlineIdx = fullText.indexOf('\n')
+    const headerLine = (newlineIdx === -1 ? fullText : fullText.slice(0, newlineIdx)).trim()
+    const restText = newlineIdx === -1 ? '' : fullText.slice(newlineIdx + 1)
+
+    const m = headerLine.match(LINE_RE)
+    if (!m) return { ok: false, reason: `Couldn't parse header line: "${headerLine}".` }
+    const [, command, argsRaw] = m
+
+    const def = registryById.get(command)
+    if (!def || def.shape !== 'hat' || !def.paramFlavoredHat) {
+        return { ok: false, reason: `"${command}" isn't a recognized event-handler command.` }
+    }
+
+    const parsed = parseArgsForParams(command, argsRaw, def.params)
+    if (!parsed.ok) return parsed
+
+    const bodyResult = parseBody(restText, command, registry)
+    if (!bodyResult.ok) return bodyResult
+
+    const hatNode = bodyResult.graph.nodes.find((n) => n.id === bodyResult.graph.hatNodeId)
+    if (hatNode) hatNode.info.paramValues = parsed.values
+    return bodyResult
+}
+
+/**
+ * Mirror of parseEventHandlerBlock() — compiles a param-flavored hat's graph back into the full
+ * on-disk block (header line + body), unlike `compileBody()` which deliberately never emits the
+ * hat node (ROUTE/SEQUENCE's header is composed separately by the host from RouteEntry/
+ * SequenceEntry fields — see compileBody's own doc comment). Here the hat node's paramValues
+ * *are* the entry's only source of truth for its header args, so `hatDef.emit()` — the exact same
+ * contract every stack block already uses — produces the header line directly.
+ */
+export function compileEventHandlerBlock(graph: ParsedGraph, registry: BlockTypeDef[]): string {
+    const registryById = new Map(registry.map((b) => [b.id, b]))
+    const hatNode = graph.nodes.find((n) => n.id === graph.hatNodeId)
+    const hatDef = hatNode ? registryById.get(hatNode.info.blockTypeId) : undefined
+    const headerLine = hatDef ? hatDef.emit(hatNode!.info.paramValues) : ''
+    const body = compileBody(graph, registry)
+    return `${headerLine}\n${body}`
 }

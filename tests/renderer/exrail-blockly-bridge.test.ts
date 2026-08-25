@@ -21,7 +21,7 @@ const DEFINED: DefinedObjects = {
     signals: [],
 }
 
-function roundTrip(body: string, kind: 'route' | 'sequence' = 'route'): string {
+function roundTrip(body: string, kind: string = 'ROUTE'): string {
     const parsed = parseBody(body, kind, BLOCK_REGISTRY)
     if (!parsed.ok) throw new Error(`expected parse to succeed, got: ${parsed.reason}`)
 
@@ -88,6 +88,6 @@ describe('buildWorkspaceFromGraph / buildGraphFromWorkspace round-trip', () => {
 
     it('round-trips a sequence body (SEQUENCE hat, not ROUTE)', () => {
         const body = 'THROW(200)\nDELAY(250)'
-        expect(roundTrip(body, 'sequence')).toBe(body)
+        expect(roundTrip(body, 'SEQUENCE')).toBe(body)
     })
 })

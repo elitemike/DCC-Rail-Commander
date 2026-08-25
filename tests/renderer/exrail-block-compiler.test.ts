@@ -12,7 +12,7 @@ describe('definedTracksFor', () => {
     })
 })
 
-function parseOk(body: string, kind: 'route' | 'sequence' = 'route'): ParsedGraph {
+function parseOk(body: string, kind: string = 'ROUTE'): ParsedGraph {
     const result = parseBody(body, kind, BLOCK_REGISTRY)
     if (!result.ok) throw new Error(`expected parse to succeed, got: ${result.reason}`)
     return result.graph
@@ -121,43 +121,43 @@ describe('parseBody / compileBody round-trip', () => {
 
 describe('parseBody failure modes', () => {
     it('rejects an unbalanced ENDIF', () => {
-        const result = parseBody('THROW(200)\nENDIF', 'route', BLOCK_REGISTRY)
+        const result = parseBody('THROW(200)\nENDIF', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ENDIF/)
     })
 
     it('rejects a stray ELSE', () => {
-        const result = parseBody('ELSE\nTHROW(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('ELSE\nTHROW(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ELSE/)
     })
 
     it('rejects an unknown command', () => {
-        const result = parseBody('FROBNICATE(1)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('FROBNICATE(1)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/FROBNICATE/)
     })
 
     it('rejects a missing ENDIF', () => {
-        const result = parseBody('IF(1)\n  THROW(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('IF(1)\n  THROW(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ENDIF/)
     })
 
     it('rejects mis-cased commands rather than silently correcting them', () => {
-        const result = parseBody('Throw(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('Throw(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/case-sensitive/)
     })
 
     it('rejects a wrong argument count', () => {
-        const result = parseBody('THROW(200, 201)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('THROW(200, 201)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/THROW/)
     })
 
     it('rejects a body containing a comment rather than dropping it silently', () => {
-        const result = parseBody('THROW(200) // yard switch', 'route', BLOCK_REGISTRY)
+        const result = parseBody('THROW(200) // yard switch', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/omment/)
     })
@@ -186,7 +186,7 @@ describe('parseBody failure modes', () => {
         for (let i = 0; i < 300; i++) {
             const body = randomBody()
             let result: ReturnType<typeof parseBody>
-            expect(() => { result = parseBody(body, Math.random() < 0.5 ? 'route' : 'sequence', BLOCK_REGISTRY) }).not.toThrow()
+            expect(() => { result = parseBody(body, Math.random() < 0.5 ? 'ROUTE' : 'SEQUENCE', BLOCK_REGISTRY) }).not.toThrow()
             expect(typeof result!.ok).toBe('boolean')
             if (!result!.ok) expect(typeof result!.reason).toBe('string')
         }

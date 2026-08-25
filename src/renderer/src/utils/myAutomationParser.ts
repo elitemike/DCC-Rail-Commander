@@ -147,6 +147,23 @@ export interface AutomationEntry {
     body: string;
 }
 
+/**
+ * ONSENSOR(200)/ONACTIVATE(100, 4)/ONRAILSYNCON/... — an EXRAIL event-handler block: a task entry
+ * point like ROUTE/SEQUENCE, but with real typed arguments on its header line instead of an
+ * id/description, and no participation in the shared ROUTE/AUTOMATION/SEQUENCE id pool. Unlike
+ * RouteEntry/SequenceEntry, `text` is the *entire* on-disk block including the header line — a
+ * param-flavored hat has no separate structured home for its header args (they're edited directly
+ * on the hat block's own face — see exrail-block-compiler.ts's parseEventHandlerBlock()/
+ * compileEventHandlerBlock()), so there's nothing to split header from body for at this layer.
+ * `command` is fixed at creation (which BLOCK_REGISTRY hat this is) and is otherwise redundant
+ * with `text`'s own first line — kept as its own field purely so the list editor can group/label
+ * entries without re-parsing `text` on every render.
+ */
+export interface EventHandlerEntry {
+    command: string;
+    text: string;
+}
+
 export interface AliasEntry {
     name: string;
     value: string;
@@ -191,18 +208,40 @@ export function parseAliasNumericValue(value: string): number | null {
  * EXRAIL/macro command names — see https://dcc-ex.com/exrail/exrail-command-reference.html.
  * An alias name colliding with one of these compiles into a broken redefinition.
  */
+// Every command name in exrail-block-registry.ts's BLOCK_REGISTRY, plus the object-definition
+// commands that intentionally have no registry entry (TURNOUT/SIGNAL/ROSTER/HAL/ALIAS/AUTOMATION —
+// see exrail-block-registry.ts's own doc comment on why those are out of scope for the block
+// canvas), plus structural EXRAIL keywords (ELSE/ENDIF) and IFOCCUPIED (a real EXRAIL command with
+// no registry entry). This module doesn't import the registry (kept framework/UI-free — see the
+// top-of-file doc comment), so the list is transcribed here rather than derived; regenerate it by
+// extracting every `id: '...'` from BLOCK_REGISTRY if the registry grows further.
 const EXRAIL_RESERVED_WORDS = new Set([
-    'ALIAS', 'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT',
-    'SEQUENCE', 'ROUTE', 'AUTOMATION', 'AUTOSTART',
-    'THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'ONTHROW', 'ONCLOSE',
-    'SETLOCO', 'SENDLOCO', 'START', 'FOLLOW',
-    'IFOCCUPIED', 'IF', 'ELSE', 'ENDIF', 'AT', 'AFTER',
-    'FWD', 'REV', 'STOP', 'SPEED', 'ESTOP', 'POWERON', 'POWEROFF', 'AFTEROVERLOAD',
-    'DELAY', 'DELAYMINS', 'DELAYRANDOM', 'RESERVE', 'FREE', 'SET', 'RESET',
-    'BLINK', 'RED', 'AMBER', 'GREEN', 'ONBUTTON', 'ONSENSOR',
-    'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED',
-    'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE', 'IFROUTE_HIDDEN', 'IFROUTE_DISABLED',
-    'ROUTE_CAPTION', 'PRINT', 'DONE',
+    'ROUTE', 'SEQUENCE', 'THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'IFCLOSED', 'IFTHROWN', 'SETLOCO',
+    'FWD', 'REV', 'SPEED', 'STOP', 'ESTOP', 'FON', 'FOFF', 'XFON',
+    'XFOFF', 'RED', 'AMBER', 'GREEN', 'IF', 'IFNOT', 'AT', 'AFTER',
+    'AFTEROVERLOAD', 'DELAY', 'DELAYMINS', 'DONE', 'FOLLOW', 'ACTIVATE', 'ACTIVATEL', 'DEACTIVATE',
+    'DEACTIVATEL', 'ASPECT', 'IFRED', 'IFAMBER', 'IFGREEN', 'WAIT_WHILE_RED', 'ATTIMEOUT', 'ATGTE',
+    'ATLT', 'LATCH', 'UNLATCH', 'IF_ALL', 'IF_ANY', 'IFGTE', 'IFLT', 'IFRE',
+    'IFRANDOM', 'IFTIMEOUT', 'IFBITMAP_ALL', 'IFBITMAP_ANY', 'IFLOCO', 'IFRESERVE', 'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE',
+    'IFROUTE_HIDDEN', 'IFROUTE_DISABLED', 'IFSTASH', 'IFSTASHED_HERE', 'IFTTPOSITION', 'SPEEDUP', 'SLOWDOWN', 'SPEED_REL',
+    'ESTOPALL', 'ESTOP_PAUSE', 'ESTOP_RESUME', 'SAVE_SPEED', 'RESTORE_SPEED', 'FORGET', 'INVERT_DIRECTION', 'MOMENTUM',
+    'FTOGGLE', 'XFTOGGLE', 'BUILD_CONSIST', 'BREAK_CONSIST', 'XFWD', 'XREV', 'XSAVE_SPEED', 'XRESTORE_SPEED',
+    'POM', 'XPOM', 'READ_LOCO', 'CALL', 'RETURN', 'START', 'START_SHARED', 'START_SEND',
+    'SENDLOCO', 'RANDOM_CALL', 'RANDOM_FOLLOW', 'AUTOSTART', 'PAUSE', 'RESUME', 'KILLALL', 'ENDTASK',
+    'DELAYRANDOM', 'RESERVE', 'FREE', 'FREEALL', 'POWERON', 'POWEROFF', 'SET_TRACK', 'SET_POWER',
+    'SETFREQ', 'JOIN', 'UNJOIN', 'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED', 'ROUTE_CAPTION',
+    'ROTATE', 'ROTATE_DCC', 'MOVETT', 'WAITFORTT', 'SERVO', 'SERVO2', 'CONFIGURE_SERVO', 'FADE',
+    'WAITFOR', 'SET', 'RESET', 'BLINK', 'ANOUT', 'NEOPIXEL', 'BITMAP_AND', 'BITMAP_OR',
+    'BITMAP_XOR', 'BITMAP_SET', 'BITMAP_INC', 'BITMAP_DEC', 'STASH', 'PICKUP_STASH', 'CLEAR_STASH', 'CLEAR_ALL_STASH',
+    'CLEAR_ANY_STASH', 'MESSAGE', 'BROADCAST', 'PRINT', 'LCD', 'SCREEN', 'SERIAL', 'SERIAL1',
+    'SERIAL2', 'SERIAL3', 'SERIAL4', 'SERIAL5', 'SERIAL6', 'PARSE', 'WITHROTTLE', 'PLAY_TRACK',
+    'PLAY_REPEAT', 'PLAY_FOLDER', 'PLAY_VOLUME', 'PLAY_EQ', 'PLAY_PAUSE', 'PLAY_RESUME', 'PLAY_STOP', 'PLAY_RESET',
+    'LCC', 'LCCX', 'ACON', 'ACOF', 'STEALTH', 'STEALTH_GLOBAL', 'ONSENSOR', 'ONCHANGE',
+    'ONBUTTON', 'ONBITMAP', 'ONBLOCKENTER', 'ONBLOCKEXIT', 'ONACTIVATE', 'ONACTIVATEL', 'ONDEACTIVATE', 'ONDEACTIVATEL',
+    'ONCLOSE', 'ONTHROW', 'ONRED', 'ONAMBER', 'ONGREEN', 'ONRAILSYNCON', 'ONRAILSYNCOFF', 'ONCLOCKTIME',
+    'ONCLOCKMINS', 'ONTIME', 'ONOVERLOAD', 'ONROTATE', 'ONACON', 'ONACOF', 'ONLCC', 'ALIAS',
+    'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
+    'ENDIF', 'IFOCCUPIED',
 ]);
 
 const ALIAS_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -460,6 +499,41 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
         lines.push('');
     }
     return lines.join('\n').trim();
+}
+
+/**
+ * Scans for top-level EXRAIL event-handler blocks (ONSENSOR(200), ONACTIVATE(100, 4),
+ * ONRAILSYNCON, ...) in `fileContent` (designed for myEvents.h, mirroring parseRoutesFromFile's/
+ * parseSequencesFromFile's own dedicated-file scope) — matched by the `ON*` naming convention
+ * EXRAIL itself uses for every event handler, not by importing BLOCK_REGISTRY, so this module
+ * stays framework/UI-free (see its own top-of-file doc comment). `text` captures the header line
+ * and everything through the next block/EOF, via the same scanBlockBody() helper routes/sequences
+ * use — see EventHandlerEntry's own doc comment for why the header line is part of `text` here,
+ * unlike RouteEntry.body/SequenceEntry.body.
+ */
+export function parseEventHandlersFromFile(fileContent: string): EventHandlerEntry[] {
+    const lines = fileContent.split('\n');
+    const out: EventHandlerEntry[] = [];
+    const handlerStart = /^(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*$/;
+    let i = 0;
+    while (i < lines.length) {
+        const m = lines[i].match(handlerStart);
+        if (m) {
+            const command = m[1];
+            const headerLine = lines[i];
+            const { body, next } = scanBlockBody(lines, i + 1, handlerStart);
+            i = next;
+            const text = body ? `${headerLine}\n${body}` : headerLine;
+            out.push({ command, text });
+            continue;
+        }
+        i++;
+    }
+    return out;
+}
+
+export function serializeEventHandlersToFile(handlers: EventHandlerEntry[]): string {
+    return handlers.map(h => h.text.trim()).join('\n\n');
 }
 
 // ─── ROUTE/AUTOMATION/SEQUENCE ID rules ──────────────────────────────────────

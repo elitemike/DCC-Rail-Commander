@@ -22,6 +22,7 @@ export class FileEditorPanelCustomElement {
     genericEditor?: MonacoEditorCustomElement
     routesEditorEl?: { flushPending(): void }
     sequencesEditorEl?: { flushPending(): void }
+    eventHandlersEditorEl?: { flushPending(): void }
 
     /**
      * Force any pending debounced Monaco edit into the bound file content.
@@ -35,6 +36,7 @@ export class FileEditorPanelCustomElement {
         this.genericEditor?.flush()
         this.routesEditorEl?.flushPending()
         this.sequencesEditorEl?.flushPending()
+        this.eventHandlersEditorEl?.flushPending()
     }
 
     get activeFile(): { name: string; content: string } | null {
@@ -47,7 +49,7 @@ export class FileEditorPanelCustomElement {
      * Single discriminant — exactly one branch in the template reads from this,
      * so it is structurally impossible for two panes to be visible at the same time.
      */
-    get currentView(): 'configH' | 'roster' | 'turnouts' | 'automation' | 'startup' | 'sensors' | 'signals' | 'routes' | 'sequences' | 'aliases' | 'generic' | 'none' {
+    get currentView(): 'configH' | 'roster' | 'turnouts' | 'automation' | 'startup' | 'sensors' | 'signals' | 'routes' | 'sequences' | 'eventHandlers' | 'aliases' | 'generic' | 'none' {
         const name = this.activeFile?.name
         // Debug: surface current view and active filename to console to aid troubleshooting
         try { console.debug('FileEditorPanel currentView check', { name }) } catch { /* ignore */ }
@@ -61,6 +63,7 @@ export class FileEditorPanelCustomElement {
         if (name === 'mySignals.h') return 'signals'
         if (name === 'myRoutes.h') return 'routes'
         if (name === 'mySequences.h') return 'sequences'
+        if (name === 'myEvents.h') return 'eventHandlers'
         if (name === 'myAliases.h') return 'aliases'
         return 'generic'
     }

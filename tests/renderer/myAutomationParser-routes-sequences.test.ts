@@ -5,6 +5,8 @@ import {
     serializeRoutesToFile,
     parseSequencesFromFile,
     serializeSequencesToFile,
+    parseEventHandlersFromFile,
+    serializeEventHandlersToFile,
 } from '../../src/renderer/src/utils/myAutomationParser'
 
 describe('parseRoutesFromFile / serializeRoutesToFile — DONE handling', () => {
@@ -92,5 +94,35 @@ describe('parseSequencesFromFile / serializeSequencesToFile — DONE handling', 
             { id: 1, description: '', body: 'THROW(200)' },
             { id: 2, description: '', body: 'CLOSE(201)\nDONE' },
         ])
+    })
+})
+
+describe('parseEventHandlersFromFile / serializeEventHandlersToFile', () => {
+    it('parses a header line plus body — text includes the header line, unlike RouteEntry.body', () => {
+        const handlers = parseEventHandlersFromFile('ONSENSOR(200)\nTHROW(201)\nDONE\n')
+        expect(handlers).toEqual([{ command: 'ONSENSOR', text: 'ONSENSOR(200)\nTHROW(201)\nDONE' }])
+    })
+
+    it('parses a zero-arg header line with no parens', () => {
+        const handlers = parseEventHandlersFromFile('ONRAILSYNCON\nPOWERON\nDONE\n')
+        expect(handlers).toEqual([{ command: 'ONRAILSYNCON', text: 'ONRAILSYNCON\nPOWERON\nDONE' }])
+    })
+
+    it('finds the boundary between two handlers correctly, even with no DONE at all', () => {
+        const file = ['ONSENSOR(200)', 'THROW(201)', '', 'ONACTIVATE(100, 4)', 'CLOSE(202)', 'DONE'].join('\n')
+        const handlers = parseEventHandlersFromFile(file)
+        expect(handlers).toEqual([
+            { command: 'ONSENSOR', text: 'ONSENSOR(200)\nTHROW(201)' },
+            { command: 'ONACTIVATE', text: 'ONACTIVATE(100, 4)\nCLOSE(202)\nDONE' },
+        ])
+    })
+
+    it('round-trips a multi-handler file end to end, preserving each block exactly', () => {
+        const handlers = [
+            { command: 'ONSENSOR', text: 'ONSENSOR(200)\nTHROW(201)\nDONE' },
+            { command: 'ONRAILSYNCON', text: 'ONRAILSYNCON\nPOWERON' },
+        ]
+        const file = serializeEventHandlersToFile(handlers)
+        expect(parseEventHandlersFromFile(file)).toEqual(handlers)
     })
 })

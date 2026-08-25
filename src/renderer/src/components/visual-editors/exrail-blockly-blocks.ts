@@ -317,13 +317,19 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
     }
     if (def.helpUrl) json.helpUrl = def.helpUrl
 
-    if (def.shape === 'hat') {
+    if (def.shape === 'hat' && !def.paramFlavoredHat) {
         // The hat block's own id/alias isn't an EXRAIL emit param (compileBody() never emits the
         // hat node — see exrail-block-compiler.ts's walk()) — these two fields are editable
         // directly on the block, but what they edit (RouteEntry.id/myAliases.h) lives in
         // ConfigEditorState, not the compiled body. ExrailBlockCanvasCustomElement seeds them from
         // its headerId/headerAlias bindables and reports edits back out via onIdChange/
         // onAliasChange — see that file's _applyHeaderFields()/_onWorkspaceEvent().
+        //
+        // This is the ROUTE/SEQUENCE-only shape — a `paramFlavoredHat` (e.g. ONSENSOR, or a
+        // zero-arg one like ONRAILSYNCON) has no id/alias concept at all and falls through to the
+        // ordinary params-driven branch below, exactly like a stack block; see
+        // exrail-block-compiler.ts's parseEventHandlerBlock()/compileEventHandlerBlock() for how
+        // those params round-trip to/from the header line.
         json.message0 = `${def.label} #%1 alias %2`
         json.args0 = [
             { type: EXRAIL_ID_FIELD_TYPE, name: 'ID', value: MIN_SEQUENCE_ID },

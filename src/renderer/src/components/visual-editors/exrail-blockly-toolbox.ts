@@ -23,8 +23,14 @@ import type { BlockTypeDef, DefinedObjects } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { optionsForRefKind, REF_KINDS } from './exrail-block-compiler'
 
-/** First available option per ref-kind param, so a freshly dragged block (e.g. THROW) starts pointing at a real turnout instead of blank — mirrors the old canvas's _defaultParamValues()/_firstAvailableId(). */
-function defaultFieldsFor(def: BlockTypeDef, defined: DefinedObjects): Record<string, string> {
+/**
+ * First available option per ref-kind param, so a freshly dragged block (e.g. THROW) starts
+ * pointing at a real turnout instead of blank — mirrors the old canvas's
+ * _defaultParamValues()/_firstAvailableId(). Exported for exrail-block-canvas.ts's `emptyRoot()`,
+ * which reuses it to seed a brand-new param-flavored hat's (e.g. ONSENSOR) own fields the same
+ * way a toolbox flyout preview block seeds its ref-kind params.
+ */
+export function defaultFieldsFor(def: BlockTypeDef, defined: DefinedObjects): Record<string, string> {
     const fields: Record<string, string> = {}
     for (const p of def.params) {
         if (!REF_KINDS.has(p.kind)) continue

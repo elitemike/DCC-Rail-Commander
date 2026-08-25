@@ -618,6 +618,14 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         completions: [EXRAIL_BLOCK_COMPLETIONS[0], ...EXRAIL_BODY_COMPLETIONS],
     },
 
+    'myEvents.h': {
+        friendlyName: 'Event Handlers',
+        // Body-only completions — an event handler's own header line (ONSENSOR(...), etc.) is
+        // edited via the block canvas's Add control, not typed as a Monaco snippet, so no block
+        // starters are listed here (mirrors myStartup.h's own completions comment).
+        completions: [...EXRAIL_BODY_COMPLETIONS],
+    },
+
     'myAliases.h': {
         friendlyName: 'Aliases',
         completions: [

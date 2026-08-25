@@ -97,7 +97,7 @@
                         </div>
 
                         <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                            <exrail-block-canvas component.ref="blockCanvas" kind="sequence" initial-body.bind="selectedSequence.body" defined.bind="defined"
+                            <exrail-block-canvas component.ref="blockCanvas" kind="SEQUENCE" initial-body.bind="selectedSequence.body" defined.bind="defined"
                                 header-id.bind="selectedSequence.id" header-alias.bind="selectedSequenceAlias" header-description.bind="selectedSequence.description"
                                 on-body-change.bind="makeBodyChangeHandler(selectedSequence.id)"
                                 on-id-change.bind="makeIdChangeHandler(selectedSequence.id)"
