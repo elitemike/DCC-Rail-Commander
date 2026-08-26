@@ -64,7 +64,7 @@ export function deriveDefineGroups(roster: Roster[]): { groups: DefineGroup[]; u
 }
 
 export type TurnoutProfile = 'Instant' | 'Fast' | 'Medium' | 'Slow' | 'Bounce';
-export type TurnoutType = 'SERVO' | 'DCC' | 'PIN';
+export type TurnoutType = 'SERVO' | 'DCC' | 'DCCL' | 'PIN' | 'VIRTUAL';
 export type TurnoutDefaultState = 'CLOSED' | 'THROWN';
 
 interface TurnoutBase { id: number; description: string; comment?: string; defaultState: TurnoutDefaultState; }
@@ -78,11 +78,17 @@ export interface ServoTurnout extends TurnoutBase {
     profile: TurnoutProfile;
 }
 
-/** TURNOUT(id, addr, subAddr[, "desc"]) — DCC accessory decoder */
+/** TURNOUT(id, addr, subAddr[, "desc"]) — DCC accessory decoder, legacy addr/subAddr pair */
 export interface DccTurnout extends TurnoutBase {
     type: 'DCC';
     addr: number;
     subAddr: number;
+}
+
+/** TURNOUTL(id, addr[, "desc"]) — DCC accessory decoder, single linear address */
+export interface DccLinearTurnout extends TurnoutBase {
+    type: 'DCCL';
+    addr: number;
 }
 
 /** PIN_TURNOUT(id, pin[, "desc"]) — GPIO pin-driven */
@@ -91,7 +97,12 @@ export interface PinTurnout extends TurnoutBase {
     pin: number;
 }
 
-export type Turnout = ServoTurnout | DccTurnout | PinTurnout;
+/** VIRTUAL_TURNOUT(id[, "desc"]) — no hardware, driven entirely by ONCLOSE/ONTHROW handlers */
+export interface VirtualTurnout extends TurnoutBase {
+    type: 'VIRTUAL';
+}
+
+export type Turnout = ServoTurnout | DccTurnout | DccLinearTurnout | PinTurnout | VirtualTurnout;
 
 export interface AutomationData {
     roster: Roster[];
@@ -107,12 +118,25 @@ export interface SensorEntry {
     description: string;
 }
 
-export interface SignalEntry {
+/** SIGNAL(redPin, amberPin, greenPin) — three GPIO/HAL pins driving LEDs directly */
+export interface PinSignal {
+    type: 'PIN';
     red: number;
     amber: number;
     green: number;
     description?: string;
 }
+
+/** DCC_SIGNAL(id, addr, subAddr) — DCC accessory decoder-controlled signal */
+export interface DccSignal {
+    type: 'DCC';
+    id: number;
+    addr: number;
+    subAddr: number;
+    description?: string;
+}
+
+export type SignalEntry = PinSignal | DccSignal;
 
 export interface RouteEntry {
     id: number;
@@ -361,6 +385,22 @@ export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
     while ((m = sensorRe.exec(uncommented)) !== null) {
         out.push({ id: parseInt(m[1], 10), pin: parseInt(m[2], 10), description: m[3] });
     }
+
+    // ── JMRI_SENSOR(vpin, count) — bulk-declares `count` sensors starting at `vpin`, each
+    // addressable by its own pin number, exactly as if declared individually via
+    // SENSOR(pin, pin, ""). Expanded here into individual entries rather than kept as one
+    // union variant — the resulting rows are structurally identical to SENSOR-declared ones
+    // (id === pin), so every existing consumer (editor, VPin allocation, validators) needs no
+    // changes to handle them.
+    const jmriRe = /JMRI_SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = jmriRe.exec(uncommented)) !== null) {
+        const start = parseInt(m[1], 10);
+        const count = parseInt(m[2], 10);
+        for (let i = 0; i < count; i++) {
+            out.push({ id: start + i, pin: start + i, description: '' });
+        }
+    }
+
     return out;
 }
 
@@ -373,36 +413,53 @@ export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const sigRe = /SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    const sigRe = /(?<![A-Za-z_])SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
     const out: SignalEntry[] = [];
     let m: RegExpExecArray | null;
     while ((m = sigRe.exec(uncommented)) !== null) {
-        out.push({ red: parseInt(m[1], 10), amber: parseInt(m[2], 10), green: parseInt(m[3], 10), description: m[4] || '' });
+        out.push({ type: 'PIN', red: parseInt(m[1], 10), amber: parseInt(m[2], 10), green: parseInt(m[3], 10), description: m[4] || '' });
     }
+
+    // ── DCC_SIGNAL(id, addr, subAddr) — DCC accessory decoder ─────────────────
+    const dccSigRe = /DCC_SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = dccSigRe.exec(uncommented)) !== null) {
+        out.push({ type: 'DCC', id: parseInt(m[1], 10), addr: parseInt(m[2], 10), subAddr: parseInt(m[3], 10), description: m[4] || '' });
+    }
+
     return out;
 }
 
 export function serializeSignalsToFile(signals: SignalEntry[]): string {
-    return signals.map(s => `SIGNAL(${s.red}, ${s.amber}, ${s.green})`).join('\n');
+    return signals.map(s => (
+        s.type === 'DCC' ? `DCC_SIGNAL(${s.id}, ${s.addr}, ${s.subAddr})` : `SIGNAL(${s.red}, ${s.amber}, ${s.green})`
+    )).join('\n');
 }
+
+/** Matches a bare DONE or RETURN line — the two statements EX-RAIL treats as terminal within a
+ *  block body (DONE halts the task; RETURN pops back to the CALL site — see scanBlockBody doc). */
+const BLOCK_TERMINATOR = /^(?:DONE|RETURN)\s*$/;
 
 /**
  * Scans forward from `start` collecting a ROUTE/SEQUENCE block's body lines, stopping at
- * whichever comes first: a bare (unindented) DONE line, the start of the next block, or EOF.
- * A DONE line found this way is kept as the last body line rather than discarded — DONE is
- * real, user-editable body content (the block canvas renders it as an ordinary block), not a
- * sentinel this parser hides and silently re-adds. Stopping at the next block's own header (not
- * just at DONE) means a body legitimately WITHOUT a DONE — because the user removed it — never
- * swallows the following block's content while scanning for a terminator that isn't there.
+ * whichever comes first: a bare (unindented) DONE or RETURN line, the start of the next block,
+ * or EOF. RETURN is EX-RAIL's own way to end a SEQUENCE invoked via CALL (it returns to the
+ * caller rather than halting the task outright), so it terminates a body exactly as tightly as
+ * DONE does — a SEQUENCE ending in RETURN with no trailing DONE must not bleed into whatever
+ * follows. The terminator line found this way is kept as the last body line rather than
+ * discarded — it's real, user-editable body content (the block canvas renders it as an ordinary
+ * block), not a sentinel this parser hides and silently re-adds. Stopping at the next block's own
+ * header (not just at a terminator) means a body legitimately WITHOUT one — because the user
+ * removed it — never swallows the following block's content while scanning for a terminator that
+ * isn't there.
  */
 function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { body: string; next: number } {
     const bodyLines: string[] = [];
     let i = start;
-    while (i < lines.length && !/^DONE\s*$/.test(lines[i]) && !blockStart.test(lines[i])) {
+    while (i < lines.length && !BLOCK_TERMINATOR.test(lines[i]) && !blockStart.test(lines[i])) {
         bodyLines.push(lines[i]);
         i++;
     }
-    if (i < lines.length && /^DONE\s*$/.test(lines[i])) {
+    if (i < lines.length && BLOCK_TERMINATOR.test(lines[i])) {
         bodyLines.push(lines[i]);
         i++;
     }
@@ -856,7 +913,9 @@ export function commentInvalidTurnoutLines(text: string): { processedText: strin
     // the Monaco validator handles individual argument errors via squiggles.
     const validServo = /^\s*SERVO_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\w+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
     const validDcc = /^\s*TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
+    const validDccL = /^\s*TURNOUTL\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
     const validPin = /^\s*PIN_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
+    const validVirtual = /^\s*VIRTUAL_TURNOUT\s*\(\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
 
     const invalidLines: string[] = [];
     const processedLines = text.split('\n').map(line => {
@@ -871,7 +930,16 @@ export function commentInvalidTurnoutLines(text: string): { processedText: strin
             if (!validPin.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
             return line;
         }
-        // Plain TURNOUT — guard against matching the suffix of SERVO_/PIN_ (handled above)
+        if (/\bVIRTUAL_TURNOUT\s*\(/.test(line)) {
+            if (!validVirtual.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
+            return line;
+        }
+        if (/\bTURNOUTL\s*\(/.test(line)) {
+            if (!validDccL.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
+            return line;
+        }
+        // Plain TURNOUT — guard against matching the suffix of SERVO_/PIN_/TURNOUTL (handled above;
+        // the lookbehind alone is enough since "TURNOUT\s*\(" never matches inside "TURNOUTL(")
         if (/(?<![A-Za-z_])TURNOUT\s*\(/.test(line)) {
             if (!validDcc.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
             return line;
@@ -939,6 +1007,31 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
         });
     }
 
+    // ── TURNOUTL(id, addr[, "desc"]) — DCC accessory, linear address ──────────
+    const dccLRe = /TURNOUTL\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = dccLRe.exec(uncommentedContent)) !== null) {
+        entries.push({
+            type: 'DCCL',
+            id: parseInt(m[1], 10),
+            addr: parseInt(m[2], 10),
+            description: m[3] || '',
+            comment: m[4] ? m[4].trim() : '',
+            defaultState: 'CLOSED',
+        });
+    }
+
+    // ── VIRTUAL_TURNOUT(id[, "desc"]) — no hardware ───────────────────────────
+    const virtualRe = /VIRTUAL_TURNOUT\s*\(\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = virtualRe.exec(uncommentedContent)) !== null) {
+        entries.push({
+            type: 'VIRTUAL',
+            id: parseInt(m[1], 10),
+            description: m[2] || '',
+            comment: m[3] ? m[3].trim() : '',
+            defaultState: 'CLOSED',
+        });
+    }
+
     return entries;
 }
 
@@ -950,8 +1043,16 @@ export function serializeTurnoutToFile(turnouts: Turnout[]): string {
             line = `TURNOUT(${t.id}, ${t.addr}, ${t.subAddr}`;
             if (t.description) line += `, "${t.description}"`;
             line += ')';
+        } else if (t.type === 'DCCL') {
+            line = `TURNOUTL(${t.id}, ${t.addr}`;
+            if (t.description) line += `, "${t.description}"`;
+            line += ')';
         } else if (t.type === 'PIN') {
             line = `PIN_TURNOUT(${t.id}, ${t.pin}`;
+            if (t.description) line += `, "${t.description}"`;
+            line += ')';
+        } else if (t.type === 'VIRTUAL') {
+            line = `VIRTUAL_TURNOUT(${t.id}`;
             if (t.description) line += `, "${t.description}"`;
             line += ')';
         } else {

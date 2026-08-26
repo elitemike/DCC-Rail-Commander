@@ -437,17 +437,97 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
     }
 }
 
+// ── TURNOUTL validator ────────────────────────────────────────────────────────
+
+/**
+ * TURNOUTL(id, addr, "description") — DCC accessory decoder, single linear address.
+ */
+function validateTurnoutL(text: string, out: monaco.editor.IMarkerData[]): void {
+    for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, 'TURNOUTL')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+        if (args.length !== 3) {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                `TURNOUTL expects 3 arguments (id, addr, "desc") but got ${args.length}.`,
+            ))
+            continue
+        }
+
+        const intChecks: Array<{ idx: number; label: string; min: number; max: number }> = [
+            { idx: 0, label: 'ID', min: 0, max: 32767 },
+            // Linear address = addr*4 + subAddr + 1 over TURNOUT's own DCC address (0-511) /
+            // sub-address (0-3) range, i.e. the same address space expressed as one number.
+            { idx: 1, label: 'linear address', min: 1, max: 2048 },
+        ]
+        for (const { idx, label, min, max } of intChecks) {
+            const a = args[idx]
+            if (!isInt(a.value)) {
+                out.push(makeMarker(text, a.start, a.end,
+                    `${label} must be an integer, got: ${a.value || '(empty)'}.`,
+                ))
+            } else {
+                const n = Number(a.value)
+                if (n < min || n > max) {
+                    out.push(makeMarker(text, a.start, a.end,
+                        `${label} value ${n} is out of range (${min}–${max}).`,
+                        monaco.MarkerSeverity.Warning,
+                    ))
+                }
+            }
+        }
+
+        const desc = args[2]
+        if (!isQuotedString(desc.value)) {
+            out.push(makeMarker(text, desc.start, desc.end,
+                `Description must be a double-quoted string, e.g. "Yard Exit".`,
+            ))
+        }
+    }
+}
+
+// ── VIRTUAL_TURNOUT validator ─────────────────────────────────────────────────
+
+/**
+ * VIRTUAL_TURNOUT(id, "description") — no hardware, driven by ONCLOSE/ONTHROW handlers.
+ */
+function validateVirtualTurnout(text: string, out: monaco.editor.IMarkerData[]): void {
+    for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, 'VIRTUAL_TURNOUT')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+        if (args.length !== 2) {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                `VIRTUAL_TURNOUT expects 2 arguments (id, "desc") but got ${args.length}.`,
+            ))
+            continue
+        }
+
+        const idArg = args[0]
+        if (!isInt(idArg.value)) {
+            out.push(makeMarker(text, idArg.start, idArg.end,
+                `ID must be an integer, got: ${idArg.value || '(empty)'}.`,
+            ))
+        }
+
+        const desc = args[1]
+        if (!isQuotedString(desc.value)) {
+            out.push(makeMarker(text, desc.start, desc.end,
+                `Description must be a double-quoted string, e.g. "Siding".`,
+            ))
+        }
+    }
+}
+
 // ── Turnout ID uniqueness (myTurnouts.h) ──────────────────────────────────────
 
 /**
- * SERVO_TURNOUT/TURNOUT/PIN_TURNOUT all share one ID namespace (see
- * `collectObjectIdReferences` — a Turnout is matched purely on `id`, regardless
- * of which of the three macros defined it). Flags the 2nd+ occurrence of any ID.
+ * SERVO_TURNOUT/TURNOUT/TURNOUTL/PIN_TURNOUT/VIRTUAL_TURNOUT all share one ID
+ * namespace (see `collectObjectIdReferences` — a Turnout is matched purely on
+ * `id`, regardless of which macro defined it). Flags the 2nd+ occurrence of any ID.
  */
 function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerData[]): void {
     const seen = new Set<number>()
 
-    for (const macroName of ['SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT']) {
+    for (const macroName of ['SERVO_TURNOUT', 'TURNOUT', 'TURNOUTL', 'PIN_TURNOUT', 'VIRTUAL_TURNOUT']) {
         for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, macroName)) {
             if (macroName === 'TURNOUT' && m.index > 0 && /\w/.test(text[m.index - 1])) continue
 
@@ -598,7 +678,7 @@ function isValidExrailReference(value: string, targetTypes: ExrailRefKind[], dat
                 case 'Sensor': return (data.sensors ?? []).some((s) => s.id === n)
                 case 'Route': return (data.routes ?? []).some((r) => r.id === n)
                 case 'Sequence': return (data.sequences ?? []).some((s) => s.id === n)
-                case 'Signal': return (data.signals ?? []).some((s) => s.red === n)
+                case 'Signal': return (data.signals ?? []).some((s) => (s.type === 'DCC' ? s.id === n : s.red === n))
                 default: return false
             }
         })
@@ -905,7 +985,7 @@ function validateTrailingLineGarbage(text: string, filename: string, out: monaco
  */
 const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType }> = {
     'myRoster.h': { source: '\\bROSTER\\s*\\(\\s*(\\d+)', type: 'Roster' },
-    'myTurnouts.h': { source: '\\b(?:SERVO_TURNOUT|TURNOUT|PIN_TURNOUT)\\s*\\(\\s*(\\d+)', type: 'Turnout' },
+    'myTurnouts.h': { source: '\\b(?:SERVO_TURNOUT|TURNOUTL|TURNOUT|PIN_TURNOUT|VIRTUAL_TURNOUT)\\s*\\(\\s*(\\d+)', type: 'Turnout' },
     'mySensors.h': { source: '\\bSENSOR\\s*\\(\\s*(\\d+)', type: 'Sensor' },
     'myRoutes.h': { source: '\\bROUTE\\s*\\(\\s*(\\d+)', type: 'Route' },
     'mySequences.h': { source: '\\bSEQUENCE\\s*\\(\\s*(\\d+)', type: 'Sequence' },
@@ -954,7 +1034,9 @@ const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerD
     'myTurnouts.h': (text, out) => {
         validateServoTurnout(text, out)
         validateTurnout(text, out)
+        validateTurnoutL(text, out)
         validatePinTurnout(text, out)
+        validateVirtualTurnout(text, out)
         validateTurnoutIdUniqueness(text, out)
     },
 }

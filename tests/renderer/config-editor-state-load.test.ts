@@ -30,7 +30,7 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
         ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
 
         expect(state.sensors).toEqual([{ id: 1, pin: 30, description: 'Occupancy' }])
-        expect(state.signals).toEqual([{ red: 22, amber: 23, green: 24, description: '' }])
+        expect(state.signals).toEqual([{ type: 'PIN', red: 22, amber: 23, green: 24, description: '' }])
         expect(state.routes).toEqual([{ id: 1, description: 'Main to Siding', body: 'DONE' }])
         expect(state.sequences).toEqual([{ id: 1, description: '', body: 'DONE' }])
     })

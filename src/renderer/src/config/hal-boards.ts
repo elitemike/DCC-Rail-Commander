@@ -89,6 +89,22 @@ export const HAL_BOARD_CATALOG: HalBoardDefinition[] = [
         defaultAddress: 0x22,
     },
     {
+        id: 'mcp23017_generic',
+        label: 'MCP23017',
+        vendor: 'Generic',
+        chip: 'MCP23017',
+        pinCount: 16,
+        pinRole: 'sensor',
+        isMultiplexer: false,
+        addressMode: 'fixed-list',
+        // Same 3-bit address-pin scheme as PCA9555 (A0-A2 -> 0x20-0x27). 0x20/0x21 are the two
+        // MCP23017s EX-CommandStation pre-registers internally at boot (see pca9555_sh's comment
+        // above) — safe here only because, like rt_dcd_16, this is expected to sit behind a
+        // multiplexer sub-bus; a directly-wired board at 0x20/0x21 would collide.
+        addressOptions: PCA9555_ADDRESS_OPTIONS,
+        defaultAddress: 0x22,
+    },
+    {
         id: 'pca9685_sh',
         label: 'PCA9685',
         vendor: 'Generic',

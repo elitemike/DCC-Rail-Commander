@@ -168,7 +168,10 @@ export function optionsForRefKind(
             ]
             break
         case 'signalRef':
-            options = defined.signals.map((s) => ({ value: s.red, label: s.description ? `${s.description} (${s.red})` : `Signal ${s.red}` }))
+            options = defined.signals.map((s) => {
+                const id = s.type === 'DCC' ? s.id : s.red
+                return { value: id, label: s.description ? `${s.description} (${id})` : `Signal ${id}` }
+            })
             break
         case 'trackRef':
             options = defined.tracks ?? []

@@ -15,7 +15,7 @@
  * this file on load so the block round-trips byte-for-byte.
  */
 import type { Turnout, SensorEntry, SignalEntry } from '../utils/myAutomationParser'
-import { getHalBoard, type HalBoardDefinition } from './hal-boards'
+import { getHalBoard, HAL_BOARD_CATALOG, type HalBoardDefinition, type HalChipType } from './hal-boards'
 
 export interface HalDeviceInstance {
     instanceId: string
@@ -90,9 +90,20 @@ export function generateHalDevicesBlock(devices: HalDeviceInstance[]): string {
         .join('\n')
 }
 
-const HAL_MUX_COMMENT_RE = /^\/\/\s*HAL-MUX\(board=([\w-]+),\s*address=(0x[0-9a-fA-F]+),\s*label="((?:[^"\\]|\\.)*)"\)\s*$/
-const HAL_DEVICE_COMMENT_RE = /^\/\/\s*HAL\(board=([\w-]+),\s*label="((?:[^"\\]|\\.)*)"\)\s*$/
-const HAL_LINE_RE = /^HAL\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(?:(0x[0-9a-fA-F]+)|\{\s*I2CMux_(\d+)\s*,\s*SubBus_(\d+)\s*,\s*(0x[0-9a-fA-F]+)\s*\})\s*\)\s*$/
+// Exported so callers outside this file (the existing-project importer) can classify a line the
+// same way this parser does, without re-deriving the pattern — e.g. to tell a bare HAL(...) line
+// this parser resolved from one it left untouched (ambiguous/unrecognized chip+pinCount).
+export const HAL_MUX_COMMENT_RE = /^\/\/\s*HAL-MUX\(board=([\w-]+),\s*address=(0x[0-9a-fA-F]+),\s*label="((?:[^"\\]|\\.)*)"\)\s*$/
+export const HAL_DEVICE_COMMENT_RE = /^\/\/\s*HAL\(board=([\w-]+),\s*label="((?:[^"\\]|\\.)*)"\)\s*$/
+export const HAL_LINE_RE = /^HAL\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(?:(0x[0-9a-fA-F]+)|\{\s*I2CMux_(\d+)\s*,\s*SubBus_(\d+)\s*,\s*(0x[0-9a-fA-F]+)\s*\})\s*\)\s*$/
+
+/** True when a bare, untagged `HAL(chip, vpin, pinCount, addr)` line's (chip, pinCount) pair
+ *  resolves to exactly one catalog board — the same test `parseHalDevicesFromAutomation`'s own
+ *  bare-line pass uses. An ambiguous or unrecognized chip is left for the caller to treat as
+ *  unrecognized/leftover content rather than guessed at. */
+export function hasUniqueHalCandidate(chip: string, pinCount: number): boolean {
+    return HAL_BOARD_CATALOG.filter(b => b.chip === chip && b.pinCount === pinCount && !b.isMultiplexer).length === 1
+}
 
 /** Parses the managed HAL Devices block body back into instances. */
 export function parseHalDevicesFromAutomation(content: string): HalDeviceInstance[] {
@@ -148,6 +159,75 @@ export function parseHalDevicesFromAutomation(content: string): HalDeviceInstanc
         })
     }
 
+    // Third pass: bare, untagged HAL(...) lines — no DCC-Rail-Commander comment tag at all (the
+    // normal case for a hand-written project, e.g. importing an existing one). Resolved only
+    // when (chip, pinCount) matches exactly one catalog board — see hal-boards.ts's own note on
+    // chip+pinCount ambiguity (PCA9555 alone maps to two different catalog boards). An
+    // unrecognized chip or an ambiguous match is left unparsed here rather than guessed at; it
+    // stays as plain text the caller is free to treat as unrecognized/leftover content.
+    for (let i = 0; i < lines.length; i++) {
+        const hm = HAL_LINE_RE.exec(lines[i])
+        if (!hm) continue
+        const prevLine = lines[i - 1]
+        if (prevLine && HAL_DEVICE_COMMENT_RE.test(prevLine)) continue // already handled above
+
+        const chip = hm[1] as HalChipType
+        const pinCount = parseInt(hm[3], 10)
+        const candidates = HAL_BOARD_CATALOG.filter(b => b.chip === chip && b.pinCount === pinCount && !b.isMultiplexer)
+        if (candidates.length !== 1) continue
+        const board = candidates[0]
+
+        const vpinStart = parseInt(hm[2], 10)
+        let address: number
+        let parentMuxInstanceId: string | undefined
+        let muxChannel: number | undefined
+
+        if (hm[4]) {
+            address = parseInt(hm[4], 16)
+        } else {
+            const muxIndex = parseInt(hm[5], 10)
+            muxChannel = parseInt(hm[6], 10)
+            address = parseInt(hm[7], 16)
+            const muxAddress = 0x70 + muxIndex
+            // No comment tag means no record of the multiplexer's own identity either (DCC-EX
+            // needs no HAL(...) line at all for a mux — it's auto-detected — so there's nothing
+            // in the file for an untagged project to have recorded it under). Losing this link
+            // isn't harmless, though — generateHalDeviceLine only emits the {I2CMux_N,SubBus_M,addr}
+            // form when parentMuxInstanceId resolves to a real parent, so leaving it undefined
+            // would silently flatten the device back to a bare address and change the wiring
+            // topology (which sub-bus it's actually on) on the very next regeneration. There's
+            // exactly one multiplexer board in the whole catalog today, so — unlike the
+            // chip+pinCount ambiguity above — synthesizing one here from muxAddress alone is a
+            // confident inference, not a guess; only skip it if the catalog ever grows a second
+            // multiplexer type, at which point which one it is genuinely can't be known.
+            let parent = devices.find(d => d.address === muxAddress && getHalBoard(d.boardId)?.isMultiplexer)
+            if (!parent) {
+                const muxBoards = HAL_BOARD_CATALOG.filter(b => b.isMultiplexer)
+                if (muxBoards.length === 1) {
+                    parent = {
+                        instanceId: parsedInstanceId(muxBoards[0].id, muxAddress, devices.length),
+                        boardId: muxBoards[0].id,
+                        label: muxBoards[0].label,
+                        address: muxAddress,
+                        vpinStart: null,
+                    }
+                    devices.push(parent)
+                }
+            }
+            parentMuxInstanceId = parent?.instanceId
+        }
+
+        devices.push({
+            instanceId: parsedInstanceId(board.id, address, devices.length),
+            boardId: board.id,
+            label: board.label,
+            address,
+            vpinStart,
+            parentMuxInstanceId,
+            muxChannel,
+        })
+    }
+
     return devices
 }
 
@@ -188,6 +268,8 @@ export function computeVpinAllocations(
     }
 
     for (const sig of signals) {
+        // DCC_SIGNAL is a DCC accessory address, not a VPin-driven device — nothing to allocate.
+        if (sig.type === 'DCC') continue
         const aspects: Array<[string, number]> = [['red', sig.red], ['amber', sig.amber], ['green', sig.green]]
         for (const [role, pin] of aspects) {
             if (pin > 0) {
