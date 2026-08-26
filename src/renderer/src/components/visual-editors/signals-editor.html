@@ -43,17 +43,43 @@
                     <div repeat.for="s of state.signals"
                         class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
                         <div class="flex flex-col gap-1">
-                            <label class="text-[10px] font-semibold text-red-400 uppercase tracking-wide">Red</label>
-                            <vpin-picker value.two-way="s.red" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Kind</label>
+                            <select value.bind="s.type" change.trigger="changeSignalType($index, s.type)"
+                                class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors">
+                                <option repeat.for="k of signalKinds" value.bind="k.value">${k.label}</option>
+                            </select>
                         </div>
-                        <div class="flex flex-col gap-1">
-                            <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wide">Amber</label>
-                            <vpin-picker value.two-way="s.amber" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <label class="text-[10px] font-semibold text-green-400 uppercase tracking-wide">Green</label>
-                            <vpin-picker value.two-way="s.green" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
-                        </div>
+                        <template if.bind="s.type === 'PIN'">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-red-400 uppercase tracking-wide">Red</label>
+                                <vpin-picker value.two-way="s.red" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wide">Amber</label>
+                                <vpin-picker value.two-way="s.amber" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-green-400 uppercase tracking-wide">Green</label>
+                                <vpin-picker value.two-way="s.green" on-commit.bind="makeSignalCommitHandler($index)"></vpin-picker>
+                            </div>
+                        </template>
+                        <template if.bind="s.type === 'DCC'">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">ID</label>
+                                <input type="number" value.bind="s.id" blur.trigger="updateSignal($index, s)"
+                                    class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Address</label>
+                                <input type="number" value.bind="s.addr" blur.trigger="updateSignal($index, s)"
+                                    class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Sub-Address</label>
+                                <input type="number" value.bind="s.subAddr" blur.trigger="updateSignal($index, s)"
+                                    class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                            </div>
+                        </template>
                         <div class="flex flex-col gap-1 flex-1">
                             <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
                             <input type="text" value.two-way="s.description" blur.trigger="updateSignal($index, s)" placeholder="Description"

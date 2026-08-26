@@ -3,6 +3,8 @@ import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SignalEntry } from '../../utils/myAutomationParser'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
+type SignalKind = SignalEntry['type']
+
 export class SignalsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
@@ -45,8 +47,13 @@ export class SignalsEditorCustomElement {
         this.state.setSignalsFromRaw(text)
     }
 
+    readonly signalKinds: { value: SignalKind; label: string }[] = [
+        { value: 'PIN', label: 'Pins (red/amber/green)' },
+        { value: 'DCC', label: 'DCC accessory' },
+    ]
+
     addSignal() {
-        this.state.signals = [...this.state.signals, { red: 0, amber: 0, green: 0, description: '' }]
+        this.state.signals = [...this.state.signals, { type: 'PIN', red: 0, amber: 0, green: 0, description: '' }]
         this.state.syncAll()
     }
 
@@ -58,6 +65,20 @@ export class SignalsEditorCustomElement {
     updateSignal(idx: number, s: SignalEntry) {
         this.state.signals = this.state.signals.map((v, i) => i === idx ? { ...s } : v)
         this.state.syncAll()
+    }
+
+    /**
+     * Switches a row's kind, converting to that kind's shape with fresh defaults for any
+     * newly-required fields, preserving only `description` (PIN and DCC share no other field).
+     */
+    changeSignalType(idx: number, type: SignalKind): void {
+        const current = this.state.signals[idx]
+        if (!current || current.type === type) return
+        const description = current.description
+        const next: SignalEntry = type === 'DCC'
+            ? { type: 'DCC', id: 0, addr: 0, subAddr: 0, description }
+            : { type: 'PIN', red: 0, amber: 0, green: 0, description }
+        this.updateSignal(idx, next)
     }
 
     /** Passed to <vpin-picker on-commit.bind>, which needs a zero-arg callback rather than an event to trigger. */

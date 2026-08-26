@@ -738,6 +738,17 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
                 },
             },
             {
+                label: 'TURNOUTL',
+                detail: 'TURNOUTL(id, addr, "desc")',
+                documentation: 'Define a DCC accessory turnout with a single linear address.',
+                insertText: 'TURNOUTL(${1:id}, ${2:addr}, "${3:description}")',
+                hover: {
+                    title: 'TURNOUTL Macro',
+                    description: 'Define a DCC accessory decoder-controlled turnout using one linear address instead of an addr/subAddr pair.',
+                    example: 'TURNOUTL(1, 401, "Yard Exit")',
+                },
+            },
+            {
                 label: 'PIN_TURNOUT',
                 detail: 'PIN_TURNOUT(id, pin, "desc")',
                 documentation: 'Define a GPIO-pin-driven turnout.',
@@ -746,6 +757,17 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
                     title: 'PIN_TURNOUT Macro',
                     description: 'Define a turnout driven directly by a GPIO pin.',
                     example: 'PIN_TURNOUT(2, 22, "Siding")',
+                },
+            },
+            {
+                label: 'VIRTUAL_TURNOUT',
+                detail: 'VIRTUAL_TURNOUT(id, "desc")',
+                documentation: 'Define a turnout with no hardware, driven by ONCLOSE/ONTHROW handlers.',
+                insertText: 'VIRTUAL_TURNOUT(${1:id}, "${2:description}")',
+                hover: {
+                    title: 'VIRTUAL_TURNOUT Macro',
+                    description: 'Define a virtual turnout with no hardware — simulate it with ONCLOSE/ONTHROW event handlers.',
+                    example: 'VIRTUAL_TURNOUT(3, "Simulated Siding")',
                 },
             },
         ],

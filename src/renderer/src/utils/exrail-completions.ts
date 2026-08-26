@@ -130,16 +130,20 @@ function getObjectSuggestionsForType(type: ExrailRefKind, data: ExrailCompletion
                 sortText: `1-${String(entry.id).padStart(6, '0')}`,
             }))
         case 'Signal':
-            // Signals have no id of their own — RED(...)/AMBER(...)/GREEN(...) address a signal by
-            // its red pin, matching exrail-block-compiler.ts's optionsForRefKind() convention.
-            return (data.signals ?? []).map(entry => ({
-                label: String(entry.red),
-                insertText: String(entry.red),
-                detail: `Signal ID - ${entry.description || `Signal ${entry.red}`}`,
-                documentation: `Use signal ID ${entry.red}${entry.description ? ` (${entry.description})` : ''}.`,
-                kind: 'id',
-                sortText: `1-${String(entry.red).padStart(6, '0')}`,
-            }))
+            // A PIN signal has no id of its own — RED(...)/AMBER(...)/GREEN(...) address it by
+            // its red pin, matching exrail-block-compiler.ts's optionsForRefKind() convention. A
+            // DCC_SIGNAL has a real id, used the same way.
+            return (data.signals ?? []).map(entry => {
+                const id = entry.type === 'DCC' ? entry.id : entry.red
+                return {
+                    label: String(id),
+                    insertText: String(id),
+                    detail: `Signal ID - ${entry.description || `Signal ${id}`}`,
+                    documentation: `Use signal ID ${id}${entry.description ? ` (${entry.description})` : ''}.`,
+                    kind: 'id' as const,
+                    sortText: `1-${String(id).padStart(6, '0')}`,
+                }
+            })
         case 'Track':
             // Not alias-eligible (no ALIAS mechanism covers tracks) and not a numeric id — a bare
             // letter (A/B/C/D), so it sorts/sanitizes differently from every other ref kind here.
