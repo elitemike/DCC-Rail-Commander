@@ -13,7 +13,7 @@ import type { BlockParamKind, RefOption } from '../components/visual-editors/exr
 
 export interface ExrailCompletionData extends ObjectIdCollections {
     aliases: AliasEntry[]
-    /** Only Roster/Turnout/Sensor/Route/Sequence can be an ALIAS target (see AliasTargetType) — signals and tracks have no alias mechanism, so they're plain live-object lists here, not part of ObjectIdCollections. */
+    /** Only Roster/Turnout/Sensor/Route/Sequence/Automation can be an ALIAS target (see AliasTargetType) — signals and tracks have no alias mechanism, so they're plain live-object lists here, not part of ObjectIdCollections. */
     signals?: SignalEntry[]
     tracks?: RefOption[]
 }
@@ -126,6 +126,15 @@ function getObjectSuggestionsForType(type: ExrailRefKind, data: ExrailCompletion
                 insertText: String(entry.id),
                 detail: `Sequence ID - ${entry.description || `Sequence ${entry.id}`}`,
                 documentation: `Use sequence ID ${entry.id}${entry.description ? ` (${entry.description})` : ''}.`,
+                kind: 'id',
+                sortText: `1-${String(entry.id).padStart(6, '0')}`,
+            }))
+        case 'Automation':
+            return (data.automations ?? []).map(entry => ({
+                label: String(entry.id),
+                insertText: String(entry.id),
+                detail: `Automation ID - ${entry.description || `Automation ${entry.id}`}`,
+                documentation: `Use automation ID ${entry.id}${entry.description ? ` (${entry.description})` : ''}.`,
                 kind: 'id',
                 sortText: `1-${String(entry.id).padStart(6, '0')}`,
             }))

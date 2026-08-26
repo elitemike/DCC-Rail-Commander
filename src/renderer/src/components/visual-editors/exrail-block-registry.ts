@@ -40,6 +40,17 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         emit: () => 'SEQUENCE',
     },
     {
+        id: 'AUTOMATION',
+        shape: 'hat',
+        label: 'Automation',
+        description: 'Defines an automatic sequence, startable from a throttle or at power-on, distinct from a Route.',
+        color: '#2c3e50',
+        category: '', // never placed from the toolbox
+        params: [],
+        isAvailable: () => true,
+        emit: () => 'AUTOMATION',
+    },
+    {
         id: 'THROW',
         shape: 'stack',
         label: 'Throw turnout',
@@ -287,7 +298,8 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         category: 'Sensors',
         params: [
             { name: 'sensorId', label: 'Sensor', kind: 'sensorRef' },
-            { name: 'timer', label: 'Timeout (ms)', kind: 'number' },
+            // DCC-EX docs: "AFTER(vpin,timer...)" — timer is optional, defaulting to 500ms.
+            { name: 'timer', label: 'Timeout (ms)', kind: 'number', optional: true, default: 500 },
         ],
         isAvailable: hasSensors,
         emit: (p) => `AFTER(${p.sensorId}, ${p.timer})`,

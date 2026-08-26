@@ -290,6 +290,7 @@ describe('ConfigEditorState — which existing objects need an alias', () => {
             roster: [],
             routes: [],
             sequences: [],
+            automations: [],
         }
         expect(getViaPrototype(state, 'filesNeedingAlias')).toEqual(new Set(['mySensors.h']))
     })

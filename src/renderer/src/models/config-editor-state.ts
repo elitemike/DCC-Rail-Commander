@@ -30,6 +30,8 @@ import {
     validateAliasName,
     validateAliasValue,
     parseAutomationsFromFile,
+    serializeAutomationsToFile,
+    extractAutomations,
     validateSequenceIds,
     type Roster,
     type Turnout,
@@ -469,6 +471,32 @@ export class ConfigEditorState {
         this._syncToInstallerState()
     }
 
+    // ── myAutomations.h ───────────────────────────────────────────────────
+    // Structurally identical to routes above — AUTOMATION shares ROUTE's exact shape. Not to be
+    // confused with myAutomation.h (singular): that file's role stays the #include block, HAL
+    // Devices managed block, and free-form custom EXRAIL code — see the "Device Settings nav"
+    // section of CLAUDE.md. A pre-existing project's hand-typed AUTOMATION(...) blocks (wherever
+    // they were living — myAutomation.h's own free-form content, or a custom file created via the
+    // "+" button) are moved into this collection by a one-time migration in
+    // loadFromInstallerState(), mirroring the existing myStartup.h split-migration below.
+    @observable automations: AutomationEntry[] = []
+
+    get automationsRaw(): string {
+        const header = buildGeneratorHeader('myAutomations.h', this.installerState.appVersion)
+        const serialized = serializeAutomationsToFile(this.automations)
+        return `${header}\n${serialized}`
+    }
+
+    setAutomationsFromRaw(text: string): void {
+        try {
+            this.automations = parseAutomationsFromFile(text)
+            this.hasChanges = true
+        } catch {
+            // keep existing automations if parse fails
+        }
+        this._syncToInstallerState()
+    }
+
     // ── mySequences.h ─────────────────────────────────────────────────────
     @observable sequences: SequenceEntry[] = []
 
@@ -568,6 +596,11 @@ export class ConfigEditorState {
         return new Set(this.sequences.filter(s => !getPrimaryAliasForId(this.aliases, s.id, 'Sequence')).map(s => s.id))
     }
 
+    get automationIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.automations.filter(a => !getPrimaryAliasForId(this.aliases, a.id, 'Automation')).map(a => a.id))
+    }
+
     /** Filenames (matching state.configFiles' `name`) of every alias-eligible file with at
      *  least one un-aliased object — drives the file-list warning dot in workspace.html.
      *  Independent of Monaco: correct on load even before that file's editor has ever
@@ -580,6 +613,7 @@ export class ConfigEditorState {
         if (this.rosterAddressesNeedingAlias.size > 0) files.add('myRoster.h')
         if (this.routeIdsNeedingAlias.size > 0) files.add('myRoutes.h')
         if (this.sequenceIdsNeedingAlias.size > 0) files.add('mySequences.h')
+        if (this.automationIdsNeedingAlias.size > 0) files.add('myAutomations.h')
         return files
     }
 
@@ -590,6 +624,7 @@ export class ConfigEditorState {
             sensors: this.sensors,
             routes: this.routes,
             sequences: this.sequences,
+            automations: this.automations,
         })
     }
 
@@ -602,7 +637,7 @@ export class ConfigEditorState {
      * value resolves to.
      */
     getAvailableAliasTargetIds(type: AliasTargetType): { id: number; label: string }[] {
-        const collections = { roster: this.roster, turnouts: this.turnouts, sensors: this.sensors, routes: this.routes, sequences: this.sequences }
+        const collections = { roster: this.roster, turnouts: this.turnouts, sensors: this.sensors, routes: this.routes, sequences: this.sequences, automations: this.automations }
         const used = new Set<number>()
         for (const alias of this.aliases) {
             const numericValue = parseAliasNumericValue(alias.value)
@@ -618,7 +653,7 @@ export class ConfigEditorState {
         // type) — but the id must belong to *some* configured object, or the alias would
         // resolve to nothing.
         if (this.getObjectIdReferences(id).length === 0) {
-            return { ok: false, reason: `Alias value ${id} does not match any configured Roster/Turnout/Sensor/Route/Sequence ID.` }
+            return { ok: false, reason: `Alias value ${id} does not match any configured Roster/Turnout/Sensor/Route/Sequence/Automation ID.` }
         }
         return { ok: true }
     }
@@ -777,13 +812,6 @@ export class ConfigEditorState {
     // ── Preserved content (non-ROSTER/TURNOUT lines from imported myAutomation.h)
     preservedAutomationContent = ''
 
-    /** AUTOMATION(id, "desc") blocks found in myAutomation.h's free-form content — see
-     *  AutomationEntry doc comment. There is no visual editor for these; this exists so
-     *  automation ids participate in getSequenceIdViolations() below. */
-    get automations(): AutomationEntry[] {
-        return parseAutomationsFromFile(this.preservedAutomationContent)
-    }
-
     /** Combined ROUTE/AUTOMATION/SEQUENCE id list for validateSequenceIds() — see that
      *  function's doc comment for the range/uniqueness rules being checked. */
     get sequenceIdEntries(): SequenceIdEntry[] {
@@ -861,6 +889,7 @@ export class ConfigEditorState {
         'myEvents.h',
         'myAliases.h',
         'myAutomation.h',
+        'myAutomations.h',
         'myStartup.h',
     ])
 
@@ -921,7 +950,7 @@ export class ConfigEditorState {
             if (!f) return false
             return f.content.split('\n').some(l => l.trim() && !l.trim().startsWith('//'))
         }
-        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myEvents.h', 'myAliases.h']) {
+        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myAutomations.h', 'myEvents.h', 'myAliases.h']) {
             if (hasUserContent(name)) includes.push(`#include "${name}"`)
         }
 
@@ -991,6 +1020,7 @@ export class ConfigEditorState {
         this.sensors = []
         this.signals = []
         this.routes = []
+        this.automations = []
         this.sequences = []
         this.eventHandlers = []
         this.aliases = []
@@ -1015,6 +1045,8 @@ export class ConfigEditorState {
                 this.signals = parseSignalsFromFile(f.content)
             } else if (f.name === 'myRoutes.h') {
                 this.routes = parseRoutesFromFile(f.content)
+            } else if (f.name === 'myAutomations.h') {
+                this.automations = parseAutomationsFromFile(f.content)
             } else if (f.name === 'mySequences.h') {
                 this.sequences = parseSequencesFromFile(f.content)
             } else if (f.name === 'myEvents.h') {
@@ -1094,6 +1126,32 @@ export class ConfigEditorState {
             }
         }
 
+        // ── Migration: pull any pre-existing hand-typed AUTOMATION(...) blocks out of wherever
+        // they were living before this structured type existed — myAutomation.h's own free-form
+        // content, or a custom file created via the Configuration list's + button (the only two
+        // places CLAUDE.md's own documented model says custom EXRAIL code could go) — into the
+        // new myAutomations.h. Mirrors the myStartup.h split-migration just above; sets `migrated`
+        // the same way so the move is visible in the next Save's diff, not applied silently.
+        const migratedAutomations: AutomationEntry[] = []
+        const fromAutomationFile = extractAutomations(this.preservedAutomationContent)
+        if (fromAutomationFile.automations.length > 0) {
+            migratedAutomations.push(...fromAutomationFile.automations)
+            this.preservedAutomationContent = fromAutomationFile.remainder
+        }
+        for (const f of files) {
+            if (!this.isCustomFile(f.name)) continue
+            const extracted = extractAutomations(f.content)
+            if (extracted.automations.length === 0) continue
+            migratedAutomations.push(...extracted.automations)
+            f.content = extracted.remainder
+        }
+        if (migratedAutomations.length > 0) {
+            this.automations = [...this.automations, ...migratedAutomations]
+            const af = files.find(f => f.name === 'myAutomation.h')
+            if (af) af.content = this.automationPreview
+            migrated = true
+        }
+
         this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = migrated
         // Ensure myRoster.h + myTurnouts.h always appear in the file list
@@ -1113,6 +1171,13 @@ export class ConfigEditorState {
         }
         if (!names.includes('myRoutes.h')) {
             files.push({ name: 'myRoutes.h', content: buildGeneratorHeader('myRoutes.h', this.installerState.appVersion) + '\n' })
+        }
+        if (!names.includes('myAutomations.h')) {
+            // Uses automationsRaw (not a blank generator-header stub, unlike the other builtins
+            // just above) because the migration pass above can have already populated
+            // this.automations with real content pulled out of another file this same load —
+            // a blank stub here would silently drop it until something else triggers a resync.
+            files.push({ name: 'myAutomations.h', content: this.automationsRaw })
         }
         if (!names.includes('mySequences.h')) {
             files.push({ name: 'mySequences.h', content: buildGeneratorHeader('mySequences.h', this.installerState.appVersion) + '\n' })
@@ -1170,6 +1235,8 @@ export class ConfigEditorState {
                 f.content = this.signalsRaw
             } else if (f.name === 'myRoutes.h') {
                 f.content = this.routesRaw
+            } else if (f.name === 'myAutomations.h') {
+                f.content = this.automationsRaw
             } else if (f.name === 'mySequences.h') {
                 f.content = this.sequencesRaw
             } else if (f.name === 'myEvents.h') {
@@ -1201,6 +1268,7 @@ export class ConfigEditorState {
             hasBuiltInContent('mySensors.h') ||
             hasBuiltInContent('myRoutes.h') ||
             hasBuiltInContent('mySequences.h') ||
+            hasBuiltInContent('myAutomations.h') ||
             hasBuiltInContent('myEvents.h') ||
             hasBuiltInContent('myAliases.h')
         if (!hasAutomation && needsIt) {

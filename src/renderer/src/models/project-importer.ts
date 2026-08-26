@@ -20,13 +20,12 @@
  *    existing numeric-value-match heuristic (`inferAliasTypes`). Confident results get tagged;
  *    anything ambiguous is still imported untouched but flagged for manual review rather than
  *    guessed at.
- * 3. Content this app has no structured editor for at all (turntables, `#define` macros,
- *    `AUTOMATION(...)` bodies — never round-tripped by design) or couldn't confidently resolve
- *    (an ambiguous bare `HAL(...)` line) must not be silently dropped. `computeLeftover()`
- *    identifies exactly the text no structured parser consumed, per old file, and that becomes
- *    one new custom file per old file that still has something left in it — the same
- *    already-`#include`d, always-raw "custom file" mechanism a user gets from the Configuration
- *    list's own + button (see `ConfigEditorState.addCustomFile`).
+ * 3. Content this app has no structured editor for at all (turntables, `#define` macros) or
+ *    couldn't confidently resolve (an ambiguous bare `HAL(...)` line) must not be silently
+ *    dropped. `computeLeftover()` identifies exactly the text no structured parser consumed, per
+ *    old file, and that becomes one new custom file per old file that still has something left
+ *    in it — the same already-`#include`d, always-raw "custom file" mechanism a user gets from
+ *    the Configuration list's own + button (see `ConfigEditorState.addCustomFile`).
  */
 import {
     parseAliasesFromFile,
@@ -47,6 +46,8 @@ import {
     serializeRoutesToFile,
     parseSequencesFromFile,
     serializeSequencesToFile,
+    parseAutomationsFromFile,
+    serializeAutomationsToFile,
     parseEventHandlersFromFile,
     serializeEventHandlersToFile,
     type AliasEntry,
@@ -57,6 +58,7 @@ import {
     type SignalEntry,
     type RouteEntry,
     type SequenceEntry,
+    type AutomationEntry,
     type EventHandlerEntry,
     type ObjectIdCollections,
 } from '../utils/myAutomationParser'
@@ -76,14 +78,14 @@ export interface ImportFile {
     content: string
 }
 
-/** Every role a scan of the project's actual EX-RAIL usage can assign to an alias name. Only
- *  the first five have a matching `AliasTargetType` this app's `// type: X` comment understands
- *  — the rest (Block/Latch/Automation/Signal) are real, confidently-determined roles with no
- *  taggable representation, not gaps. */
-type UsageRole = AliasTargetType | 'SequenceOrRoute' | 'Block' | 'Latch' | 'Automation' | 'Signal'
+/** Every role a scan of the project's actual EX-RAIL usage can assign to an alias name.
+ *  `AliasTargetType` covers everything with a matching `// type: X` comment this app's alias
+ *  editor understands — the rest (Block/Latch/Signal) are real, confidently-determined roles
+ *  with no taggable representation, not gaps. */
+type UsageRole = AliasTargetType | 'SequenceOrRoute' | 'Block' | 'Latch' | 'Signal'
 
-const TAGGABLE_ROLES: ReadonlySet<UsageRole> = new Set<UsageRole>(['Roster', 'Turnout', 'Sensor', 'Route', 'Sequence'])
-const UNTAGGABLE_ROLES: ReadonlySet<UsageRole> = new Set<UsageRole>(['Block', 'Latch', 'Automation', 'Signal'])
+const TAGGABLE_ROLES: ReadonlySet<UsageRole> = new Set<UsageRole>(['Roster', 'Turnout', 'Sensor', 'Route', 'Sequence', 'Automation'])
+const UNTAGGABLE_ROLES: ReadonlySet<UsageRole> = new Set<UsageRole>(['Block', 'Latch', 'Signal'])
 
 export interface AliasReviewItem {
     name: string
@@ -106,7 +108,7 @@ export interface ImportFileReport {
 }
 
 export interface ImportConflict {
-    kind: 'Roster' | 'Turnout' | 'Sensor' | 'Signal' | 'Route' | 'Sequence'
+    kind: 'Roster' | 'Turnout' | 'Sensor' | 'Signal' | 'Route' | 'Sequence' | 'Automation'
     id: number
     files: string[]
 }
@@ -290,8 +292,8 @@ function classifyAlias(
         return { questionable: true, reason: `Used inconsistently across more than one role: ${untaggableObserved.join(', ')}.` }
     }
     if (untaggableObserved.length === 1 && !ambiguousCallTarget) {
-        // A confident, real classification — Block/Latch/Automation/Signal just have no
-        // matching AliasTargetType to tag, so this is correct output, not a gap.
+        // A confident, real classification — Block/Latch/Signal just have no matching
+        // AliasTargetType to tag, so this is correct output, not a gap.
         return { questionable: false }
     }
     if (ambiguousCallTarget && untaggableObserved.length === 0) {
@@ -314,14 +316,10 @@ function classifyAlias(
 
 // ── Leftover text — whatever no structured parser consumed ─────────────────
 
-// Only ROUTE/SEQUENCE get merged into a canonical file — AUTOMATION(...) is deliberately never
-// round-tripped anywhere in this app (see Phase 1's note), so its blocks must NOT be marked
-// consumed here or they'd vanish entirely (nowhere to merge them to, and no longer left as
-// leftover either). ANY_BLOCK_HEADER_RE additionally stops a ROUTE/SEQUENCE body scan at an
-// AUTOMATION header the same way scanBlockBody stops at the next block's own header — it's just
-// never the trigger for starting a new consumed span itself.
-const MERGEABLE_BLOCK_HEADER_RE = /^\s*(?:ROUTE|SEQUENCE)\s*\(/
-const ANY_BLOCK_HEADER_RE = /^\s*(?:ROUTE|SEQUENCE|AUTOMATION)\s*\(/
+// ROUTE/SEQUENCE/AUTOMATION all get merged into a canonical file (myRoutes.h/mySequences.h/
+// myAutomations.h) — a body scan started at any one of them must stop at any of the other two's
+// own header, the same way scanBlockBody stops a live-editor parse at the next block's header.
+const MERGEABLE_BLOCK_HEADER_RE = /^\s*(?:ROUTE|SEQUENCE|AUTOMATION)\s*\(/
 const BLOCK_TERMINATOR_RE = /^\s*(?:DONE|RETURN)\s*$/
 // Lenient — a macro-name-only check, not full argument validation. ROSTER/TURNOUT get precise
 // invalid-line exclusion below (the app already has that machinery); ALIAS/SENSOR/JMRI_SENSOR/
@@ -356,7 +354,7 @@ function computeLeftover(originalContent: string, resolvedContent: string): stri
             let j = i
             consumed[j] = true
             j++
-            while (j < resolvedLines.length && !BLOCK_TERMINATOR_RE.test(resolvedLines[j]) && !ANY_BLOCK_HEADER_RE.test(resolvedLines[j])) {
+            while (j < resolvedLines.length && !BLOCK_TERMINATOR_RE.test(resolvedLines[j]) && !MERGEABLE_BLOCK_HEADER_RE.test(resolvedLines[j])) {
                 consumed[j] = true
                 j++
             }
@@ -430,7 +428,7 @@ function isEffectivelyEmpty(content: string): boolean {
  *  these (a hand-rolled project's own `config.h`/`myAutomation.h` are the common real cases). */
 const CANONICAL_OUTPUT_NAMES: ReadonlySet<string> = new Set([
     'config.h', 'myConfig.h', 'myRoster.h', 'myTurnouts.h', 'mySignals.h', 'mySensors.h',
-    'myRoutes.h', 'mySequences.h', 'myEvents.h', 'myAliases.h', 'myAutomation.h', 'myStartup.h',
+    'myRoutes.h', 'myAutomations.h', 'mySequences.h', 'myEvents.h', 'myAliases.h', 'myAutomation.h', 'myStartup.h',
 ])
 
 /** Appends `_imported` before the extension if `name` collides with one of this app's own
@@ -482,6 +480,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
     const signals: SignalEntry[] = []
     const routes: RouteEntry[] = []
     const sequences: SequenceEntry[] = []
+    const automations: AutomationEntry[] = []
     const eventHandlers: EventHandlerEntry[] = []
     const halDevices: HalDeviceInstance[] = []
     const conflicts: ImportConflict[] = []
@@ -492,6 +491,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
     const signalSeen = new Map<number, string>()
     const routeSeen = new Map<number, string>()
     const sequenceSeen = new Map<number, string>()
+    const automationSeen = new Map<number, string>()
     const halSeen = new Map<number, string>() // keyed by vpinStart (devices) or -address (multiplexers, negative to not collide with real vpins)
     // Files that structurally contained at least one recognized declaration — distinguishes
     // "nothing here migrated at all" (fully-leftover) from "some of this migrated" (partial).
@@ -504,6 +504,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
         const signalEntries = parseSignalsFromFile(f.content)
         const routeEntries = parseRoutesFromFile(f.content)
         const sequenceEntries = parseSequencesFromFile(f.content)
+        const automationEntries = parseAutomationsFromFile(f.content)
         const eventEntries = parseEventHandlersFromFile(f.content)
         const halEntries = parseHalDevicesFromAutomation(f.content)
 
@@ -513,6 +514,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
         mergeByKey('Signal', signals, signalSeen, signalEntries, f.name, s => (s.type === 'DCC' ? s.id : s.red), conflicts)
         mergeByKey('Route', routes, routeSeen, routeEntries, f.name, r => r.id, conflicts)
         mergeByKey('Sequence', sequences, sequenceSeen, sequenceEntries, f.name, s => s.id, conflicts)
+        mergeByKey('Automation', automations, automationSeen, automationEntries, f.name, a => a.id, conflicts)
         eventHandlers.push(...eventEntries)
         for (const d of halEntries) {
             const key = d.vpinStart ?? -d.address
@@ -527,7 +529,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
         if (
             rosterEntries.length > 0 || turnoutEntries.length > 0 || sensorEntries.length > 0 ||
             signalEntries.length > 0 || routeEntries.length > 0 || sequenceEntries.length > 0 ||
-            eventEntries.length > 0 || halEntries.length > 0
+            automationEntries.length > 0 || eventEntries.length > 0 || halEntries.length > 0
         ) {
             contributingFiles.add(f.name)
         }
@@ -538,7 +540,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
 
     // Step 2 — classify every alias by usage context, combined with the value-match heuristic.
     const usageRoles = scanUsageRoles(files)
-    const objectIds: ObjectIdCollections = { roster, turnouts, sensors, routes, sequences }
+    const objectIds: ObjectIdCollections = { roster, turnouts, sensors, routes, sequences, automations }
     const aliasReview: AliasReviewItem[] = []
     const aliasEntries: AliasEntry[] = []
     for (const [name, occurrences] of aliasOccurrences) {
@@ -595,6 +597,7 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
     configFiles.push({ name: 'mySensors.h', content: serializeSensorsToFile(sensors) })
     configFiles.push({ name: 'mySignals.h', content: serializeSignalsToFile(signals) })
     configFiles.push({ name: 'myRoutes.h', content: serializeRoutesToFile(routes) })
+    configFiles.push({ name: 'myAutomations.h', content: serializeAutomationsToFile(automations) })
     configFiles.push({ name: 'mySequences.h', content: serializeSequencesToFile(sequences) })
     configFiles.push({ name: 'myEvents.h', content: serializeEventHandlersToFile(eventHandlers) })
     configFiles.push({ name: 'myAliases.h', content: serializeAliasesToFile(aliasEntries) })

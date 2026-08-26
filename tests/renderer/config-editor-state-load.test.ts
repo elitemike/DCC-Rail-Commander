@@ -22,8 +22,11 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             routes: [],
             sequences: [],
             aliases: [],
+            automations: [],
+            preservedAutomationContent: '',
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
+            isCustomFile: ConfigEditorState.prototype.isCustomFile,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 
@@ -50,8 +53,11 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             routes: [{ id: 1, description: 'stale', body: '' }],
             sequences: [{ id: 1, body: 'stale' }],
             aliases: [],
+            automations: [],
+            preservedAutomationContent: '',
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
+            isCustomFile: ConfigEditorState.prototype.isCustomFile,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 

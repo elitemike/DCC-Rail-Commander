@@ -8,6 +8,7 @@ import {
     parseSignalsFromFile,
     parseRoutesFromFile,
     parseSequencesFromFile,
+    parseAutomationsFromFile,
     parseAliasesFromFile,
 } from '../../src/renderer/src/utils/myAutomationParser'
 
@@ -199,12 +200,13 @@ describe('importExistingProject — leftover content and file status', () => {
         expect(configFile(result, 'hal.h')).toContain('HAL(PCA9555, 276, 16, 0x20)')
     })
 
-    it('preserves an AUTOMATION(...) block verbatim in the leftover file — never round-tripped by design', () => {
+    it('merges an AUTOMATION(...) block into myAutomations.h, not a leftover file', () => {
         const files = [fileOf('atm.h', 'AUTOMATION(1, "Test")\nPRINT("hi")\nDONE')]
         const result = importExistingProject(files)
-        const leftover = configFile(result, 'atm.h')
-        expect(leftover).toContain('AUTOMATION(1, "Test")')
-        expect(leftover).toContain('PRINT("hi")')
+        expect(parseAutomationsFromFile(configFile(result, 'myAutomations.h')!)).toEqual([
+            { id: 1, description: 'Test', body: 'PRINT("hi")\nDONE' },
+        ])
+        expect(configFile(result, 'atm.h')).toBeUndefined()
     })
 
     it('migrates a ROUTE that merely calls ROTATE_DCC inside its body — only the turntable declarations are unrecognized', () => {
