@@ -1,0 +1,11 @@
+#define IP_PORT 2560
+
+#define MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874
+#define OLED_DRIVER 132,64
+#define SCROLLMODE 1
+#define WIFI_HOSTNAME "dccex"
+#define WIFI_SSID "TestDCCEX"
+#define WIFI_PASSWORD "Password12345"
+#define ENABLE_WIFI true
+#define DISABLE_EEPROM
+

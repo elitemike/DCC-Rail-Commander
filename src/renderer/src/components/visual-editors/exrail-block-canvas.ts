@@ -399,7 +399,7 @@ export class ExrailBlockCanvasCustomElement {
 
     private _applyHeaderFields(): void {
         if (!this.workspace || this._isParamFlavoredHat()) return
-        const hat = this.workspace.getTopBlocks(true).find((b) => b.type === 'ROUTE' || b.type === 'SEQUENCE')
+        const hat = this.workspace.getTopBlocks(true).find((b) => b.type === 'ROUTE' || b.type === 'SEQUENCE' || b.type === 'AUTOMATION')
         if (!hat) return
         if (String(hat.getFieldValue('ID') ?? '') !== String(this.headerId)) hat.setFieldValue(String(this.headerId), 'ID')
         if ((hat.getFieldValue('ALIAS') ?? '') !== this.headerAlias) hat.setFieldValue(this.headerAlias, 'ALIAS')
@@ -492,7 +492,7 @@ export class ExrailBlockCanvasCustomElement {
         // headerDescription is optional on SequenceEntry (undefined, not ''), so this can arrive
         // unset despite the class field's own default.
         const description = (this.headerDescription ?? '').trim()
-        if (this.kind === 'ROUTE') return `ROUTE(${this.headerId}, "${description}")`
+        if (this.kind === 'ROUTE' || this.kind === 'AUTOMATION') return `${this.kind}(${this.headerId}, "${description}")`
         return `SEQUENCE(${this.headerId})${description ? ` // ${description}` : ''}`
     }
 

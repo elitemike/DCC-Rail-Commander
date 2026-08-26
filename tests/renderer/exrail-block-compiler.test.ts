@@ -158,15 +158,15 @@ describe('parseBody / compileBody round-trip', () => {
             expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
         })
 
-        it('a multi-line statement containing a // comment still gracefully falls back to Raw mode, not a crash or a mis-parse', () => {
-            // Comments inside a Blocks-mode body are a separate, pre-existing, documented
-            // limitation (see the "Comments inside a route/sequence body" rejection below) — the
-            // multi-line fix must not accidentally make this parse "successfully" into a graph
-            // that's silently wrong; it must still cleanly reject and defer to Raw mode.
+        it('a comment nested inside a multi-line statement\'s own parens stays part of the captured code, not mistaken for a top-level EXRAIL comment', () => {
+            // The `//` here sits at paren-depth > 0 (inside STEALTH's still-open outer paren, and
+            // inside `if (x) {`'s own nesting) — real embedded C++, not an EXRAIL-level comment
+            // terminating the statement early. It must survive verbatim in the captured code.
             const body = 'STEALTH(if (x) {\n  // a comment\n  digitalWrite(30, HIGH);\n})'
-            const result = parseBody(body, 'ROUTE', BLOCK_REGISTRY)
-            expect(result.ok).toBe(false)
-            if (!result.ok) expect(result.reason).toMatch(/Comments/)
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('if (x) {\n  // a comment\n  digitalWrite(30, HIGH);\n}')
+            expect(node?.info.comment).toBeUndefined()
         })
 
         it('handles a statement whose parens balance across more than two lines', () => {
@@ -223,10 +223,24 @@ describe('parseBody failure modes', () => {
         if (!result.ok) expect(result.reason).toMatch(/THROW/)
     })
 
-    it('rejects a body containing a comment rather than dropping it silently', () => {
-        const result = parseBody('THROW(200) // yard switch', 'ROUTE', BLOCK_REGISTRY)
-        expect(result.ok).toBe(false)
-        if (!result.ok) expect(result.reason).toMatch(/omment/)
+    it('preserves a trailing comment as the statement\'s own comment, rather than rejecting or dropping it', () => {
+        const graph = parseOk('THROW(200) // yard switch')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        expect(node?.info.comment).toBe('yard switch')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe('THROW(200) // yard switch')
+    })
+
+    it('attaches a standalone comment line to the statement immediately following it', () => {
+        const graph = parseOk('// yard switch\nTHROW(200)')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        expect(node?.info.comment).toBe('yard switch')
+    })
+
+    it('does not mistake a quoted string containing // for a comment', () => {
+        const graph = parseOk('PRINT("a // b")')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'PRINT')
+        expect(node?.info.comment).toBeUndefined()
+        expect(node?.info.paramValues.msg).toBe('a // b')
     })
 
     // Fuzz coverage for "an unknown word must never crash the parser" — see

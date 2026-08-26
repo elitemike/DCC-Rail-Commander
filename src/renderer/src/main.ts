@@ -40,6 +40,7 @@ import { CompileOutputTerminalCustomElement } from './components/compile-output-
 import { SensorsEditorCustomElement } from './components/visual-editors/sensors-editor'
 import { SignalsEditorCustomElement } from './components/visual-editors/signals-editor'
 import { RoutesEditorCustomElement } from './components/visual-editors/routes-editor'
+import { AutomationsEditorCustomElement } from './components/visual-editors/automations-editor'
 import { SequencesEditorCustomElement } from './components/visual-editors/sequences-editor'
 import { EventHandlersEditorCustomElement } from './components/visual-editors/event-handlers-editor'
 import { AliasesEditorCustomElement } from './components/visual-editors/aliases-editor'
@@ -108,6 +109,7 @@ new Aurelia()
         SensorsEditorCustomElement,
         SignalsEditorCustomElement,
         RoutesEditorCustomElement,
+        AutomationsEditorCustomElement,
         SequencesEditorCustomElement,
         EventHandlersEditorCustomElement,
         AliasesEditorCustomElement,

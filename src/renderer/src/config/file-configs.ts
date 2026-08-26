@@ -684,6 +684,11 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         completions: [EXRAIL_BLOCK_COMPLETIONS[0], ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
     },
 
+    'myAutomations.h': {
+        friendlyName: 'Automations',
+        completions: [EXRAIL_BLOCK_COMPLETIONS[2], ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
+    },
+
     'myEvents.h': {
         friendlyName: 'Event Handlers',
         // Includes the generated ON* header-line snippets (ONSENSOR(...), etc.) alongside every

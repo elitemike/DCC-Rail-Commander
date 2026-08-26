@@ -8,7 +8,7 @@ import { ConfigEditorState } from '../../src/renderer/src/models/config-editor-s
 // leaves a non-writable placeholder on the prototype that Object.create alone doesn't upgrade.
 function makeConfigEditorState(configFiles: Array<{ name: string; content: string }>): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'sequences', 'eventHandlers', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {

@@ -36,7 +36,12 @@ export interface BlockParamDef {
     name: string
     kind: BlockParamKind
     label: string
+    /** Marks this param, and every param after it, as omittable from the tail of the argument
+     *  list (e.g. `AFTER(vpin, timer...)` — DCC-EX's own docs give `timer` a default of 500 when
+     *  left out). Only meaningful on trailing params — see parseArgsForParams. */
     optional?: boolean
+    /** Value substituted when `optional` is true and the caller omitted this argument entirely. */
+    default?: string | number
     /**
      * Marks the LAST param in a block's `params` as a free-text catch-all for a variadic EXRAIL
      * signature (e.g. `SET(vpin, count...)`, `IF_ALL(vpinList...)`) — `BlockParamDef` has no
@@ -229,6 +234,10 @@ export interface CanvasNodeInfo {
     thenChildFirstId?: string
     /** Branch nodes only — id of the first node in the optional "else" chain. */
     elseChildFirstId?: string
+    /** A trailing `// ...` comment on this statement's line, or a standalone comment line
+     *  immediately preceding it with nothing else in between — see parseBody's comment
+     *  handling. Re-emitted by compileBody so it survives a parse/edit/recompile round trip. */
+    comment?: string
 }
 
 export interface GraphConnector {
@@ -254,6 +263,7 @@ interface StmtNode {
     paramValues: Record<string, string | number>
     then?: StmtNode[]
     else?: StmtNode[]
+    comment?: string
 }
 
 const LINE_RE = /^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([\s\S]*)\))?\s*$/
@@ -315,6 +325,35 @@ function netParenDelta(line: string): number {
     return depth
 }
 
+/** Splits `line` into its code portion and trailing `//` comment (if any), respecting quoted
+ *  strings so `PRINT("a // b")` isn't mistaken for a comment start, and paren depth so a `//`
+ *  nested inside a still-open argument list is left alone. That second guard matters for a
+ *  multi-line statement (e.g. STEALTH embedding real C++): its own internal comments sit at
+ *  depth > 0 relative to the statement's outer parens and must stay part of the captured code,
+ *  not get mistaken for a top-level EXRAIL comment terminating the statement early. `comment` is
+ *  `undefined` when there is none. */
+function splitTrailingComment(line: string): { code: string; comment?: string } {
+    let inStr = false
+    let esc = false
+    let depth = 0
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '(') { depth++; continue }
+        if (ch === ')') { depth--; continue }
+        if (depth === 0 && ch === '/' && line[i + 1] === '/') {
+            return { code: line.slice(0, i).trim(), comment: line.slice(i + 2).trim() }
+        }
+    }
+    return { code: line }
+}
+
 function stripQuotes(value: string): string {
     if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
         return value.slice(1, -1)
@@ -347,9 +386,19 @@ export function parseArgsForParams(
     // enough args to fill every param before it — the usual exact-count check still applies
     // when there's no variadic param.
     const isVariadic = params.length > 0 && params[params.length - 1].variadic === true
-    const minArgs = isVariadic ? params.length - 1 : params.length
-    if (isVariadic ? argValues.length < minArgs : argValues.length !== params.length) {
-        const expected = isVariadic ? `at least ${minArgs}` : `${params.length}`
+    // Optional params (see BlockParamDef.optional) are only meaningful trailing — count how many
+    // consecutive params at the end are marked optional to get the true minimum arg count (e.g.
+    // AFTER(vpin, timer...) needs only `vpin`; DCC-EX defaults `timer` to 500 when omitted).
+    let requiredCount = params.length
+    if (!isVariadic) {
+        while (requiredCount > 0 && params[requiredCount - 1].optional === true) requiredCount--
+    }
+    const minArgs = isVariadic ? params.length - 1 : requiredCount
+    const maxArgs = isVariadic ? Infinity : params.length
+    if (argValues.length < minArgs || argValues.length > maxArgs) {
+        const expected = isVariadic
+            ? `at least ${minArgs}`
+            : (minArgs === maxArgs ? `${minArgs}` : `${minArgs}-${maxArgs}`)
         return { ok: false, reason: `"${commandName}" expects ${expected} argument(s) but found ${argValues.length}.` }
     }
 
@@ -360,6 +409,11 @@ export function parseArgsForParams(
             // contain a mix of quoted strings and bare numbers/refs (e.g. IFLOCO("Thomas",
             // 6211)), which no single BlockParamKind coercion could handle correctly.
             values[p.name] = argValues.slice(i).join(', ')
+            return
+        }
+        if (i >= argValues.length) {
+            // Optional trailing param the caller omitted entirely.
+            values[p.name] = p.default ?? (p.kind === 'string' ? '' : 0)
             return
         }
         const value = argValues[i]
@@ -389,16 +443,30 @@ export function parseArgsForParams(
  * empty — see BLOCK_REGISTRY and exrail-block-canvas.ts's `kind` bindable, which is this
  * function's only caller for that value.
  *
- * Never partially compiles: any unrecognized line, casing mismatch, unbalanced IF/ENDIF, or
- * comment returns `{ ok: false, reason }` instead of a best-effort graph, so a hand-edited body
- * that doesn't fit the block model is never silently corrupted.
+ * Never partially compiles: any unrecognized line, casing mismatch, or unbalanced IF/ENDIF
+ * returns `{ ok: false, reason }` instead of a best-effort graph, so a hand-edited body that
+ * doesn't fit the block model is never silently corrupted. C-style block comments are stripped
+ * outright before parsing (hand-written EXRAIL uses them almost exclusively to keep old,
+ * disabled code around for reference — see the doc comment on the strip below); a trailing `//`
+ * comment on a statement's own line, or a standalone `//` line immediately before one, is instead
+ * preserved as that statement's `comment` (see CanvasNodeInfo.comment) and re-emitted by
+ * compileBody, so it survives a parse/edit/recompile round trip rather than being rejected.
  */
 export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef[]): ParseResult {
     const registryById = new Map(registry.map((b) => [b.id, b]))
-    const lines = bodyText.split('\n')
+    // Block comments can span many lines and legally contain text that looks like statements
+    // (commented-out code) — stripped wholesale before line-based parsing even starts, the same
+    // way myAutomationParser.ts's own parsers pre-strip comments rather than handling them inline.
+    // Non-greedy so multiple separate /* */ spans in one body don't collapse into one.
+    const lines = bodyText.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')
 
     const root: StmtNode[] = []
     const frameStack: Array<{ node: StmtNode; target: 'then' | 'else' }> = []
+    // A standalone comment line (nothing but `//...`) attaches to whichever real statement comes
+    // next, on the common assumption that a comment describes the code below it — reset once
+    // consumed. A comment with no following statement at all (trailing at the very end of a body)
+    // has nowhere to attach and is dropped; every other case is preserved.
+    let pendingComment: string | undefined
 
     const currentList = (): StmtNode[] => {
         if (frameStack.length === 0) return root
@@ -423,14 +491,28 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
             depth += netParenDelta(lines[i])
         }
 
-        const withoutStrings = line.replace(/"[^"]*"/g, '')
-        if (withoutStrings.includes('//')) {
-            return { ok: false, reason: 'Comments inside a route/sequence body are not supported in Blocks mode yet — edit as Text.' }
+        const { code, comment: trailingComment } = splitTrailingComment(line)
+        if (code === '') {
+            // A standalone comment line — nothing to attach it to yet, carry it forward.
+            if (trailingComment !== undefined) {
+                pendingComment = pendingComment !== undefined ? `${pendingComment}\n${trailingComment}` : trailingComment
+            }
+            continue
         }
+        line = code
 
         const m = line.match(LINE_RE)
         if (!m) return { ok: false, reason: `Couldn't parse line: "${line}".` }
         const [, rawCommand, argsRaw] = m
+
+        // ELSE/ENDIF create no node of their own — a comment riding on one of these lines has
+        // nowhere to attach yet, so it carries forward to whatever real statement comes next
+        // (pendingComment is left untouched; only trailingComment, this line's own, needs folding in).
+        if (rawCommand === 'ELSE' || rawCommand === 'ENDIF') {
+            if (trailingComment !== undefined) {
+                pendingComment = pendingComment !== undefined ? `${pendingComment}\n${trailingComment}` : trailingComment
+            }
+        }
 
         if (rawCommand === 'ELSE') {
             if (frameStack.length === 0 || frameStack[frameStack.length - 1].target !== 'then') {
@@ -448,6 +530,11 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
             continue
         }
 
+        const comment = pendingComment !== undefined && trailingComment !== undefined
+            ? `${pendingComment}\n${trailingComment}`
+            : (pendingComment ?? trailingComment)
+        pendingComment = undefined
+
         if (rawCommand !== rawCommand.toUpperCase()) {
             return { ok: false, reason: `EXRAIL commands are case-sensitive — found "${rawCommand}", expected "${rawCommand.toUpperCase()}".` }
         }
@@ -459,7 +546,7 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
         const parsed = parseArgsForParams(rawCommand, argsRaw, def.params)
         if (!parsed.ok) return parsed
 
-        const stmt: StmtNode = { blockTypeId: rawCommand, paramValues: parsed.values }
+        const stmt: StmtNode = { blockTypeId: rawCommand, paramValues: parsed.values, comment }
         currentList().push(stmt)
 
         if (def.shape === 'branch') {
@@ -480,7 +567,7 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
         let prevId: string | undefined
         for (const stmt of list) {
             const id = nextNodeId()
-            const info: CanvasNodeInfo = { blockTypeId: stmt.blockTypeId, paramValues: stmt.paramValues }
+            const info: CanvasNodeInfo = { blockTypeId: stmt.blockTypeId, paramValues: stmt.paramValues, comment: stmt.comment }
             nodes.push({ id, info })
             if (firstId === undefined) firstId = id
             if (prevId !== undefined) connectors.push({ id: `c_${prevId}_${id}`, sourceID: prevId, targetID: id })
@@ -523,6 +610,18 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
     const nodeById = new Map(graph.nodes.map((n) => [n.id, n.info]))
     const lines: string[] = []
 
+    // A multi-line comment (accumulated from several standalone `//` lines before this
+    // statement — see parseBody's pendingComment) can't be represented as one trailing `//`,
+    // since EXRAIL's own comment syntax only runs to end of line: every line but the last is
+    // re-emitted as its own standalone comment line immediately above the statement, and the
+    // last rides trailing on the statement's own line, exactly reconstructing what parseBody saw.
+    function commentLines(comment: string | undefined, pad: string): { leading: string[]; trailing?: string } {
+        if (comment === undefined) return { leading: [] }
+        const parts = comment.split('\n')
+        const trailing = parts.pop()
+        return { leading: parts.map((p) => `${pad}// ${p}`), trailing }
+    }
+
     function walk(id: string | undefined, depth: number): void {
         if (id === undefined) return
         const info = nodeById.get(id)
@@ -531,9 +630,11 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
         if (!def) return
 
         const pad = '  '.repeat(depth)
+        const { leading, trailing } = commentLines(info.comment, pad)
+        lines.push(...leading)
 
         if (def.shape === 'branch') {
-            lines.push(pad + def.emit(info.paramValues))
+            lines.push(pad + def.emit(info.paramValues) + (trailing ? ` // ${trailing}` : ''))
             walk(info.thenChildFirstId, depth + 1)
             if (info.elseChildFirstId !== undefined) {
                 lines.push(pad + 'ELSE')
@@ -544,7 +645,7 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
             return
         }
 
-        lines.push(pad + def.emit(info.paramValues))
+        lines.push(pad + def.emit(info.paramValues) + (trailing ? ` // ${trailing}` : ''))
         if (def.shape !== 'cap') {
             walk(nextIdOf(id, graph.connectors), depth)
         }

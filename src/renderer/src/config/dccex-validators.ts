@@ -551,6 +551,11 @@ function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerDat
 const SEQUENCE_ID_MACRO: Record<string, { macroName: 'ROUTE' | 'SEQUENCE' | 'AUTOMATION'; kind: SequenceObjectKind }> = {
     'myRoutes.h': { macroName: 'ROUTE', kind: 'Route' },
     'mySequences.h': { macroName: 'SEQUENCE', kind: 'Sequence' },
+    'myAutomations.h': { macroName: 'AUTOMATION', kind: 'Automation' },
+    // myAutomation.h (singular) is the pre-existing includes/HAL/custom-code file — kept here too
+    // since a hand-typed AUTOMATION(...) block can still legally sit in its free-form content
+    // (the one-time load migration in ConfigEditorState moves *existing* ones out to
+    // myAutomations.h, but doesn't stop a new one being typed there directly afterward).
     'myAutomation.h': { macroName: 'AUTOMATION', kind: 'Automation' },
 }
 
@@ -979,9 +984,11 @@ function validateTrailingLineGarbage(text: string, filename: string, out: monaco
 
 /**
  * Which macro(s) define an alias-eligible object in each file, and which AliasTargetType
- * they define. Drives validateAliasRequired() below — the closed-vocabulary object-
- * definition files only (myAutomation.h/myRoutes.h/mySequences.h reference these ids, they
- * don't define new ones, so they're not in this table).
+ * they define. Drives validateAliasRequired() below — myAutomation.h (singular) is deliberately
+ * not in this table: it's the includes/HAL/custom-code file, not a closed-vocabulary
+ * object-definition file, so a stray AUTOMATION(...) still sitting in its free-form content
+ * (see SEQUENCE_ID_MACRO's own comment on that) isn't strict-alias-enforced the way one in
+ * myAutomations.h is.
  */
 const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType }> = {
     'myRoster.h': { source: '\\bROSTER\\s*\\(\\s*(\\d+)', type: 'Roster' },
@@ -989,6 +996,7 @@ const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetTy
     'mySensors.h': { source: '\\bSENSOR\\s*\\(\\s*(\\d+)', type: 'Sensor' },
     'myRoutes.h': { source: '\\bROUTE\\s*\\(\\s*(\\d+)', type: 'Route' },
     'mySequences.h': { source: '\\bSEQUENCE\\s*\\(\\s*(\\d+)', type: 'Sequence' },
+    'myAutomations.h': { source: '\\bAUTOMATION\\s*\\(\\s*(\\d+)', type: 'Automation' },
 }
 
 /**
