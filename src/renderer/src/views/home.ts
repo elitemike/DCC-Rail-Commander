@@ -345,6 +345,13 @@ export class Home {
         const summaryOutcome = await dialog.closed
         if (summaryOutcome.status !== 'ok') return // user reviewed and cancelled
 
+        // The summary dialog's own "Enforce aliases on this project" checkbox — see its own doc
+        // comment on why it defaults off. Stored on this project's own SavedConfiguration below
+        // (SavedConfiguration.strictAliases), NOT the app-wide preference — this project makes its
+        // own choice from here on, without changing the default new/other projects use.
+        const strictAliasesChoice = (summaryOutcome as any).value as boolean
+        this.configEditorState.strictAliases = strictAliasesChoice
+
         const destFolder = await this.files.selectDirectory()
         if (!destFolder) return
 
@@ -435,6 +442,7 @@ export class Home {
             configFiles,
             lastModified: new Date().toISOString(),
             sourceFolder: resolvedSourceFolder ?? undefined,
+            strictAliases: strictAliasesChoice,
         }
 
         const existing = Array.isArray(this.state.savedConfigurations) ? this.state.savedConfigurations : []

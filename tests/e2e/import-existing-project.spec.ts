@@ -60,10 +60,10 @@ interface ImportFixtures {
     homePage: Page
     sourceFolder: string
     destFolder: string
+    testDataDir: string
 }
 
-async function launchBareApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
-    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-import-e2e-'))
+async function launchBareApp(testDataDir: string): Promise<ElectronApplication> {
     const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })
     writeFileSync(
@@ -77,8 +77,14 @@ async function launchBareApp(): Promise<{ app: ElectronApplication; testDataDir:
         `--test-data-dir=${testDataDir}`,
         '--disable-gpu', '--no-sandbox', '--js-flags=--no-expose-wasm',
     ]
-    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
-    return { app, testDataDir }
+    return electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+}
+
+/** Reads back the persisted preferences JSON — used to assert an import's per-project
+ *  strictAliases choice landed on the SavedConfiguration, not the app-wide 'strictAliases' key. */
+function readPreferences(testDataDir: string): Record<string, unknown> {
+    const path = join(testDataDir, 'app-preferences', 'dcc-rail-commander-preferences.json')
+    return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
 /** Intercepts `files:select-directory` to return a fixed path once, bypassing the native OS
@@ -94,11 +100,16 @@ async function mockSelectDirectory(app: ElectronApplication, folder: string): Pr
 
 const test = base.extend<ImportFixtures>({
     // eslint-disable-next-line no-empty-pattern
-    electronApp: async ({ }, use) => {
-        const { app, testDataDir } = await launchBareApp()
+    testDataDir: async ({ }, use) => {
+        const dir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-import-e2e-'))
+        await use(dir)
+        cleanupDir(dir)
+    },
+
+    electronApp: async ({ testDataDir }, use) => {
+        const app = await launchBareApp(testDataDir)
         await use(app)
         await app.close()
-        cleanupDir(testDataDir)
     },
 
     homePage: async ({ electronApp }, use) => {
@@ -196,5 +207,36 @@ test.describe('Import Existing Project', () => {
         await expect(homePage.getByText('Import Summary')).not.toBeVisible()
         await expect(homePage.getByText('Import Existing Project').first()).toBeVisible()
         expect(readdirSync(destFolder)).toEqual([])
+    })
+
+    test('the import summary\'s "Enforce aliases" checkbox defaults off and applies to just this project, not the app-wide default', async ({ electronApp, homePage, sourceFolder, destFolder, testDataDir }) => {
+        seedSourceProject(sourceFolder)
+
+        await mockSelectDirectory(electronApp, sourceFolder)
+        await homePage.getByText('Import Existing Project').first().click()
+        await expect(homePage.getByText('Import Summary')).toBeVisible({ timeout: 10_000 })
+
+        // Defaults unchecked, even though the app's own out-of-the-box Strict aliases default is on.
+        const strictCheckbox = homePage.getByTestId('import-summary-strict-aliases')
+        await expect(strictCheckbox).not.toBeChecked()
+        await strictCheckbox.check({ force: true })
+        await expect(strictCheckbox).toBeChecked()
+
+        await mockSelectDirectory(electronApp, destFolder)
+        await homePage.getByTestId('import-summary-continue-button').click()
+        await expect(homePage.getByText('Roster', { exact: true })).toBeVisible({ timeout: 15_000 })
+
+        // The choice made on the summary dialog is reflected for this project...
+        await homePage.getByTestId('settings-button').click()
+        await expect(homePage.getByTestId('settings-strict-aliases')).toBeChecked()
+        await homePage.getByRole('button', { name: 'Done' }).click()
+
+        // ...but landed on the imported project's own SavedConfiguration, not the app-wide
+        // 'strictAliases' preference key — a brand-new/other project must still default to on.
+        const prefs = readPreferences(testDataDir)
+        expect(prefs.strictAliases).toBeUndefined()
+        const savedConfigs = prefs.savedConfigurations as Array<{ strictAliases?: boolean }>
+        expect(savedConfigs).toHaveLength(1)
+        expect(savedConfigs[0].strictAliases).toBe(true)
     })
 })
