@@ -36,6 +36,11 @@ function _remove(el: HTMLElement): void {
 export function showToast(options: ToastOptions = {}): void {
     const container = _getContainer()
 
+    // Only one toast on screen at a time — a bulk operation (e.g. strict-alias
+    // validation across many rows) can otherwise fire several of these back to
+    // back and stack the whole screen with duplicates.
+    while (container.firstChild) _remove(container.firstChild as HTMLElement)
+
     const toast = document.createElement('div')
     toast.className = ['e-toast', options.cssClass].filter(Boolean).join(' ')
     toast.setAttribute('role', 'alert')
