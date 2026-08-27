@@ -97,6 +97,18 @@ test.describe('Event Handlers editor', () => {
         await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(0)
         await expect(page.getByText('No event handlers.', { exact: false }).first()).toBeVisible()
     })
+
+    test('the Turnouts palette offers "Also on ..." trigger-marker blocks for stacking multiple triggers onto one shared body', async ({ workspacePage: page }) => {
+        await openEventHandlersEditor(page)
+        await addHandler(page, 'ONTHROW')
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        const palette = page.locator('exrail-block-canvas nav')
+        await palette.getByRole('button', { name: 'Turnouts', exact: false }).click()
+        const flyout = page.locator('.blocklyFlyout')
+        await expect(flyout.getByText('Also: On turnout thrown', { exact: false })).toBeVisible()
+        await expect(flyout.getByText('Also: On turnout closed', { exact: false })).toBeVisible()
+    })
 })
 
 test.describe('Block palette regression — new categories from this session render', () => {
@@ -111,5 +123,17 @@ test.describe('Block palette regression — new categories from this session ren
 
         await palette.getByRole('button', { name: 'Messages', exact: false }).click()
         await expect(page.locator('.blocklyFlyout').getByText('Print diagnostic message', { exact: false })).toBeVisible()
+    })
+
+    test('Routes editor Turnouts palette does NOT offer event-handler trigger markers — they only make sense under a hat', async ({ workspacePage: page }) => {
+        await page.getByText('Routes', { exact: true }).first().click()
+        await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+
+        const palette = page.locator('exrail-block-canvas nav')
+        await palette.getByRole('button', { name: 'Turnouts', exact: false }).click()
+        const flyout = page.locator('.blocklyFlyout')
+        await expect(flyout.getByText('Throw turnout', { exact: false })).toBeVisible()
+        await expect(flyout.getByText('Also:', { exact: false })).toHaveCount(0)
     })
 })

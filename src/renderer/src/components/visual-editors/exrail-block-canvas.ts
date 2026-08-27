@@ -223,7 +223,7 @@ export class ExrailBlockCanvasCustomElement {
         if (!this.workspace) return
         setWorkspaceDefined(this.workspace, this.defined)
         this._rebuildPaletteTree()
-        this.workspace.updateToolbox(flatToolboxForPath(this.selectedLeafPath, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
+        this.workspace.updateToolbox(flatToolboxForPath(this.selectedLeafPath, this.defined, this._isParamFlavoredHat()) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
         this._normalizeExistingBlocks()
     }
 
@@ -236,8 +236,9 @@ export class ExrailBlockCanvasCustomElement {
      * workspace exists yet.
      */
     private _rebuildPaletteTree(): void {
-        this.paletteTree = buildCategoryTree(this.defined)
-        const stillValid = this.selectedLeafPath !== '' && BLOCK_REGISTRY.some((b) => b.category === this.selectedLeafPath && b.shape !== 'hat' && this.defined && b.isAvailable(this.defined))
+        this.paletteTree = buildCategoryTree(this.defined, this._isParamFlavoredHat())
+        const allowTriggerMarkers = this._isParamFlavoredHat()
+        const stillValid = this.selectedLeafPath !== '' && BLOCK_REGISTRY.some((b) => b.category === this.selectedLeafPath && b.shape !== 'hat' && (allowTriggerMarkers || b.triggerMarkerFor === undefined) && this.defined && b.isAvailable(this.defined))
         if (!stillValid) this.selectedLeafPath = firstLeafPath(this.paletteTree)
         const parentPath = this.selectedLeafPath.includes('/') ? this.selectedLeafPath.slice(0, this.selectedLeafPath.lastIndexOf('/')) : ''
         if (parentPath !== '' && !this.expandedCategoryPaths.includes(parentPath)) {
@@ -275,7 +276,7 @@ export class ExrailBlockCanvasCustomElement {
             return
         }
         this.selectedLeafPath = node.path
-        this.workspace?.updateToolbox(flatToolboxForPath(node.path, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
+        this.workspace?.updateToolbox(flatToolboxForPath(node.path, this.defined, this._isParamFlavoredHat()) as unknown as Blockly.utils.toolbox.ToolboxDefinition)
     }
 
     private _build(): void {
@@ -288,7 +289,7 @@ export class ExrailBlockCanvasCustomElement {
             // in exrail-block-canvas.html) is entirely our own, not Blockly's — see
             // exrail-blockly-toolbox.ts for why. onCategoryClick() swaps this flyout's contents via
             // updateToolbox().
-            toolbox: flatToolboxForPath(this.selectedLeafPath, this.defined) as unknown as Blockly.utils.toolbox.ToolboxDefinition,
+            toolbox: flatToolboxForPath(this.selectedLeafPath, this.defined, this._isParamFlavoredHat()) as unknown as Blockly.utils.toolbox.ToolboxDefinition,
             // Served from src/renderer/public/blockly-media/ (Vite's publicDir, copied verbatim
             // into the build output) — without this, Blockly defaults to fetching its icon/sound
             // sprites from static.blockly.com, which the app's CSP blocks (img-src/connect-src

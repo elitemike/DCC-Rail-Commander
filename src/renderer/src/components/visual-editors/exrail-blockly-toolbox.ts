@@ -60,14 +60,20 @@ export interface PaletteCategoryNode {
     expanded: boolean
 }
 
-/** Builds the nested category tree for every currently-available (non-hat) block, grouped by `category`. */
-export function buildCategoryTree(defined: DefinedObjects | null): PaletteCategoryNode[] {
+/** Builds the nested category tree for every currently-available (non-hat) block, grouped by
+ *  `category`. `allowTriggerMarkers` gates the "Also on ..." marker blocks (BlockTypeDef.
+ *  triggerMarkerFor) — they only make sense stacked under a param-flavored hat (event handlers),
+ *  never a ROUTE/SEQUENCE/AUTOMATION body, where there'd be nothing for them to structurally
+ *  connect to (see exrail-blockly-blocks.ts's jsonFor() connection checks) — so they're kept out
+ *  of the palette entirely rather than shown but silently undroppable. */
+export function buildCategoryTree(defined: DefinedObjects | null, allowTriggerMarkers = false): PaletteCategoryNode[] {
     const root: PaletteCategoryNode = { name: '', path: '', children: [], expanded: false }
     if (!defined) return root.children
     const byPath = new Map<string, PaletteCategoryNode>([['', root]])
 
     for (const def of BLOCK_REGISTRY) {
         if (def.shape === 'hat') continue
+        if (def.triggerMarkerFor !== undefined && !allowTriggerMarkers) continue
         if (!def.isAvailable(defined)) continue
         const parts = def.category.split('/')
         let parentPath = ''
@@ -87,11 +93,12 @@ export function buildCategoryTree(defined: DefinedObjects | null): PaletteCatego
     return root.children
 }
 
-/** Flyout-only toolbox JSON for every currently-available block whose `category` is exactly `path` (a leaf). */
-export function flatToolboxForPath(path: string, defined: DefinedObjects | null): Record<string, unknown> {
+/** Flyout-only toolbox JSON for every currently-available block whose `category` is exactly `path`
+ *  (a leaf) — see buildCategoryTree()'s `allowTriggerMarkers` for what that flag gates here too. */
+export function flatToolboxForPath(path: string, defined: DefinedObjects | null, allowTriggerMarkers = false): Record<string, unknown> {
     if (!defined || path === '') return { contents: [] }
     const contents = BLOCK_REGISTRY
-        .filter((b) => b.shape !== 'hat' && b.category === path && b.isAvailable(defined))
+        .filter((b) => b.shape !== 'hat' && (allowTriggerMarkers || b.triggerMarkerFor === undefined) && b.category === path && b.isAvailable(defined))
         .map((def) => ({ kind: 'block', type: def.id, fields: defaultFieldsFor(def, defined) }))
     return { contents }
 }

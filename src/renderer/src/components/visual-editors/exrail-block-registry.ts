@@ -16,7 +16,7 @@ const hasRoster = (d: DefinedObjects) => d.roster.length > 0
 const hasRouteOrSequence = (d: DefinedObjects) => (d.routes?.length ?? 0) + (d.sequences?.length ?? 0) > 0
 const hasTracks = (d: DefinedObjects) => (d.tracks ?? []).length > 0
 
-export const BLOCK_REGISTRY: BlockTypeDef[] = [
+const BASE_BLOCK_REGISTRY: BlockTypeDef[] = [
     {
         id: 'ROUTE',
         shape: 'hat',
@@ -2552,4 +2552,37 @@ export const BLOCK_REGISTRY: BlockTypeDef[] = [
         emit: (p) => `ONLCC(${p.sender}, ${p.event})`,
         helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#onlccsenderevent',
     },
+]
+
+/**
+ * A synthetic "Also on ..." trigger-marker block for one param-flavored hat — see
+ * BlockTypeDef.triggerMarkerFor's own doc comment for the EXRAIL fallthrough idiom this
+ * reproduces. `params`/`isAvailable`/`emit`/`helpUrl` are reused verbatim from `hat`: dropping one
+ * of these under ONTHROW's hat and giving it a different turnout id emits a second, independent
+ * `ONTHROW(otherId)` header line, exactly as if that block WAS the hat — the only thing distinct
+ * about it is `shape: 'stack'` (so it can chain via ordinary previousStatement/nextStatement) and
+ * `triggerMarkerFor` (which restricts, via jsonFor()'s connection checks in
+ * exrail-blockly-blocks.ts, where it's structurally allowed to connect at all).
+ */
+function alsoTriggerVariant(hat: BlockTypeDef): BlockTypeDef {
+    return {
+        id: `${hat.id}__ALSO`,
+        shape: 'stack',
+        label: `Also: ${hat.label}`,
+        description: `Adds another trigger that shares the task above's body — ${hat.description ?? hat.label} Stack more of these (same event or a different one) directly under the hat, before the real body.`,
+        color: hat.color,
+        category: hat.category,
+        params: hat.params,
+        triggerMarkerFor: hat.id,
+        isAvailable: hat.isAvailable,
+        emit: hat.emit,
+        helpUrl: hat.helpUrl,
+    }
+}
+
+export const BLOCK_REGISTRY: BlockTypeDef[] = [
+    ...BASE_BLOCK_REGISTRY,
+    ...BASE_BLOCK_REGISTRY
+        .filter((def) => def.shape === 'hat' && def.paramFlavoredHat === true)
+        .map(alsoTriggerVariant),
 ]

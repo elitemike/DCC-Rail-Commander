@@ -106,6 +106,19 @@ export interface BlockTypeDef {
     emit(paramValues: Record<string, string | number>): string
     /** DCC-EX command-reference URL shown via Blockly's right-click "Help" menu item, if set. */
     helpUrl?: string
+    /**
+     * Only set on a synthetic "Also on ..." trigger-marker block (see exrail-block-registry.ts's
+     * `alsoTriggerVariant()`) — the id of the param-flavored hat this marker adds another trigger
+     * for (its `emit()` is literally the hat's own `emit()`, reused verbatim). EXRAIL compiles
+     * several `ON*()` header lines stacked back to back with nothing between them as one shared
+     * body — each empty one just falls through to the next label in the compiled bytecode — so a
+     * run of these markers dropped directly under a hat (or under each other) reproduces that
+     * idiom visually: hat header, then each marker's own header line, then the real body.
+     * `shape: 'stack'` (not 'hat') — see `triggerMarkerFor`'s own connection-check handling in
+     * exrail-blockly-blocks.ts's jsonFor(), which is what actually restricts these to only ever
+     * sitting in that leading run, never mid-body or inside a branch.
+     */
+    triggerMarkerFor?: string
 }
 
 // ── Ref-kind param options ────────────────────────────────────────────────
@@ -669,6 +682,10 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
  */
 export function parseEventHandlerBlock(fullText: string, registry: BlockTypeDef[]): ParseResult {
     const registryById = new Map(registry.map((b) => [b.id, b]))
+    // Trigger-marker block types (see BlockTypeDef.triggerMarkerFor), keyed by the ON* command
+    // their header line reuses (e.g. 'ONTHROW' -> the 'ONTHROW__ALSO' marker's own def).
+    const markerDefByCommand = new Map(registry.filter((b) => b.triggerMarkerFor !== undefined).map((b) => [b.triggerMarkerFor!, b]))
+
     const newlineIdx = fullText.indexOf('\n')
     const headerLine = (newlineIdx === -1 ? fullText : fullText.slice(0, newlineIdx)).trim()
     const restText = newlineIdx === -1 ? '' : fullText.slice(newlineIdx + 1)
@@ -685,11 +702,51 @@ export function parseEventHandlerBlock(fullText: string, registry: BlockTypeDef[
     const parsed = parseArgsForParams(command, argsRaw, def.params)
     if (!parsed.ok) return parsed
 
-    const bodyResult = parseBody(restText, command, registry)
+    // Peel off a leading run of stacked ON*() header lines (EXRAIL's own fallthrough idiom for
+    // sharing one body across several triggers — see BlockTypeDef.triggerMarkerFor) into synthetic
+    // marker nodes, before handing the true remainder to parseBody(). Stops at the first line that
+    // isn't itself a recognized param-flavored hat's header — that's where the real body starts.
+    const restLines = restText.split('\n')
+    const markerNodes: ParsedGraph['nodes'] = []
+    let bodyStart = 0
+    while (bodyStart < restLines.length) {
+        const trimmed = restLines[bodyStart].trim()
+        if (trimmed === '') break
+        const lm = trimmed.match(LINE_RE)
+        if (!lm) break
+        const [, markerCommand, markerArgsRaw] = lm
+        const hatDefForMarker = registryById.get(markerCommand)
+        if (!hatDefForMarker || hatDefForMarker.shape !== 'hat' || !hatDefForMarker.paramFlavoredHat) break
+        const markerDef = markerDefByCommand.get(markerCommand)
+        if (!markerDef) break
+        const markerParsed = parseArgsForParams(markerCommand, markerArgsRaw, hatDefForMarker.params)
+        if (!markerParsed.ok) break
+        markerNodes.push({ id: `m${markerNodes.length + 1}`, info: { blockTypeId: markerDef.id, paramValues: markerParsed.values } })
+        bodyStart++
+    }
+    const remainderText = restLines.slice(bodyStart).join('\n')
+
+    const bodyResult = parseBody(remainderText, command, registry)
     if (!bodyResult.ok) return bodyResult
 
     const hatNode = bodyResult.graph.nodes.find((n) => n.id === bodyResult.graph.hatNodeId)
     if (hatNode) hatNode.info.paramValues = parsed.values
+
+    if (markerNodes.length > 0) {
+        const { graph } = bodyResult
+        const oldFirstConnector = graph.connectors.find((c) => c.sourceID === graph.hatNodeId)
+        graph.connectors = graph.connectors.filter((c) => c.sourceID !== graph.hatNodeId)
+        graph.nodes.push(...markerNodes)
+        let prevId = graph.hatNodeId
+        for (const marker of markerNodes) {
+            graph.connectors.push({ id: `c_${prevId}_${marker.id}`, sourceID: prevId, targetID: marker.id })
+            prevId = marker.id
+        }
+        if (oldFirstConnector) {
+            graph.connectors.push({ id: `c_${prevId}_${oldFirstConnector.targetID}`, sourceID: prevId, targetID: oldFirstConnector.targetID })
+        }
+    }
+
     return bodyResult
 }
 
