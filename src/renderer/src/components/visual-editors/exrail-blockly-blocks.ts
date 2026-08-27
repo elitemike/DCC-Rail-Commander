@@ -15,6 +15,14 @@
  *            input and a fixed ELSE statement input (not a togglable
  *            mutator — EXRAIL only ever needs one condition + optional single
  *            else, never controls_if's arbitrary N-way if/elseif/else)
+ *
+ * A param-flavored hat's nextStatement, plus every trigger-marker block's own previous/next
+ * (BlockTypeDef.triggerMarkerFor — see exrail-block-registry.ts's alsoTriggerVariant()), use
+ * Blockly connection *checks* (EXRAIL_TRIGGER_CHECK/EXRAIL_BODY_CHECK below) rather than `null`
+ * (accept-anything): a marker's previousStatement only advertises the trigger check, so it can
+ * only ever connect directly under the hat or under another marker, never mid-body or inside a
+ * branch's THEN/ELSE — no mutator bubble needed, ordinary stacking already gives Blockly's own
+ * n-input mechanism for free here.
  */
 import * as Blockly from 'blockly/core'
 import * as BlocklyEnMsg from 'blockly/msg/en'
@@ -464,6 +472,10 @@ class ExrailCodeField extends Blockly.FieldTextInput {
     }
 }
 
+/** See the "connection checks" note atop this file's own doc comment. */
+const EXRAIL_BODY_CHECK = 'ExrailBody'
+const EXRAIL_TRIGGER_CHECK = 'ExrailTrigger'
+
 const EXRAIL_REF_FIELD_TYPE = 'field_exrail_ref'
 const EXRAIL_ID_FIELD_TYPE = 'field_exrail_id'
 const EXRAIL_ALIAS_FIELD_TYPE = 'field_exrail_alias'
@@ -519,14 +531,28 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
 
     if (def.shape === 'branch') {
         json.message1 = '%1'
-        json.args1 = [{ type: 'input_statement', name: 'THEN' }]
+        json.args1 = [{ type: 'input_statement', name: 'THEN', check: EXRAIL_BODY_CHECK }]
         json.message2 = 'else'
         json.message3 = '%1'
-        json.args3 = [{ type: 'input_statement', name: 'ELSE' }]
+        json.args3 = [{ type: 'input_statement', name: 'ELSE', check: EXRAIL_BODY_CHECK }]
     }
 
-    if (def.shape !== 'hat') json.previousStatement = null
-    if (def.shape !== 'cap') json.nextStatement = null
+    // A trigger-marker's previousStatement only advertises EXRAIL_TRIGGER_CHECK — it can only ever
+    // connect under the hat's own nextStatement or another marker's, never under a plain body
+    // block's nextStatement (which only advertises EXRAIL_BODY_CHECK) or inside a branch's
+    // THEN/ELSE (checked above). Its nextStatement advertises both, so either another marker or
+    // the real body can follow it.
+    if (def.shape !== 'hat') {
+        json.previousStatement = def.triggerMarkerFor !== undefined ? EXRAIL_TRIGGER_CHECK : EXRAIL_BODY_CHECK
+    }
+    if (def.shape !== 'cap') {
+        json.nextStatement = def.triggerMarkerFor !== undefined ? [EXRAIL_TRIGGER_CHECK, EXRAIL_BODY_CHECK] : EXRAIL_BODY_CHECK
+    }
+    // A param-flavored hat's nextStatement additionally accepts a leading marker; an id/alias-
+    // flavored hat (ROUTE/SEQUENCE/AUTOMATION) has no marker concept at all, so stays body-only.
+    if (def.shape === 'hat' && def.paramFlavoredHat) {
+        json.nextStatement = [EXRAIL_TRIGGER_CHECK, EXRAIL_BODY_CHECK]
+    }
 
     return json
 }

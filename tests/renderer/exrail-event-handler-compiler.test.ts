@@ -81,6 +81,41 @@ describe('parseEventHandlerBlock / compileEventHandlerBlock', () => {
         const result = parseEventHandlerBlock('ONACTIVATE(100)\nDONE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
     })
+
+    it('peels a leading run of stacked ON* headers into trigger-marker nodes sharing the hat body', () => {
+        const text = 'ONTHROW(1)\nONTHROW(2)\nONTHROW(3)\nTHROW(9)\nDONE'
+        const result = parseEventHandlerBlock(text, BLOCK_REGISTRY)
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        const hat = result.graph.nodes.find((n) => n.id === result.graph.hatNodeId)
+        expect(hat?.info.paramValues).toEqual({ turnoutId: 1 })
+        const markers = result.graph.nodes.filter((n) => n.info.blockTypeId === 'ONTHROW__ALSO')
+        expect(markers.map((n) => n.info.paramValues)).toEqual([{ turnoutId: 2 }, { turnoutId: 3 }])
+    })
+
+    it('round-trips stacked ON* headers back to the exact same text', () => {
+        const text = 'ONTHROW(1)\nONTHROW(2)\nONTHROW(3)\nTHROW(9)\nDONE'
+        const result = parseEventHandlerBlock(text, BLOCK_REGISTRY)
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(compileEventHandlerBlock(result.graph, BLOCK_REGISTRY)).toBe(text)
+    })
+
+    it('round-trips stacked headers of two different event types sharing one body', () => {
+        const text = 'ONTHROW(1)\nONCLOSE(2)\nTHROW(9)\nDONE'
+        const result = parseEventHandlerBlock(text, BLOCK_REGISTRY)
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(compileEventHandlerBlock(result.graph, BLOCK_REGISTRY)).toBe(text)
+    })
+
+    it('treats a lone stacked header with no further body as a marker chain ending the task', () => {
+        const text = 'ONTHROW(1)\nONTHROW(2)\nDONE'
+        const result = parseEventHandlerBlock(text, BLOCK_REGISTRY)
+        expect(result.ok).toBe(true)
+        if (!result.ok) return
+        expect(compileEventHandlerBlock(result.graph, BLOCK_REGISTRY)).toBe(text)
+    })
 })
 
 describe('event-handler hat through the Blockly bridge', () => {
@@ -96,6 +131,66 @@ describe('event-handler hat through the Blockly bridge', () => {
             buildWorkspaceFromGraph(workspace, parsed.graph, BLOCK_REGISTRY)
             const rebuilt = buildGraphFromWorkspace(workspace, BLOCK_REGISTRY)
             expect(compileEventHandlerBlock(rebuilt, BLOCK_REGISTRY)).toBe(text)
+        } finally {
+            workspace.dispose()
+        }
+    })
+
+    it('connects a trigger-marker block directly under the hat, then round-trips through the workspace', () => {
+        const text = 'ONTHROW(1)\nONTHROW(2)\nTHROW(9)\nDONE'
+        const parsed = parseEventHandlerBlock(text, BLOCK_REGISTRY)
+        expect(parsed.ok).toBe(true)
+        if (!parsed.ok) return
+
+        const workspace = new Blockly.Workspace()
+        setWorkspaceDefined(workspace, DEFINED)
+        try {
+            buildWorkspaceFromGraph(workspace, parsed.graph, BLOCK_REGISTRY)
+            const hatBlock = workspace.getTopBlocks(true).find((b) => b.type === 'ONTHROW')
+            const markerBlock = hatBlock?.getNextBlock()
+            expect(markerBlock?.type).toBe('ONTHROW__ALSO')
+            const rebuilt = buildGraphFromWorkspace(workspace, BLOCK_REGISTRY)
+            expect(compileEventHandlerBlock(rebuilt, BLOCK_REGISTRY)).toBe(text)
+        } finally {
+            workspace.dispose()
+        }
+    })
+
+    it('refuses to connect a trigger-marker block inside a branch\'s THEN input', () => {
+        const workspace = new Blockly.Workspace()
+        setWorkspaceDefined(workspace, DEFINED)
+        try {
+            const marker = workspace.newBlock('ONTHROW__ALSO')
+            const branch = workspace.newBlock('IF')
+            const thenConnection = branch.getInput('THEN')!.connection!
+            const checker = thenConnection.getConnectionChecker()
+            expect(checker.canConnect(thenConnection, marker.previousConnection, false)).toBe(false)
+        } finally {
+            workspace.dispose()
+        }
+    })
+
+    it('refuses to connect a trigger-marker block after an ordinary body block', () => {
+        const workspace = new Blockly.Workspace()
+        setWorkspaceDefined(workspace, DEFINED)
+        try {
+            const marker = workspace.newBlock('ONTHROW__ALSO')
+            const throwBlock = workspace.newBlock('THROW')
+            const checker = throwBlock.nextConnection!.getConnectionChecker()
+            expect(checker.canConnect(throwBlock.nextConnection, marker.previousConnection, false)).toBe(false)
+        } finally {
+            workspace.dispose()
+        }
+    })
+
+    it('allows connecting a trigger-marker directly under a param-flavored hat', () => {
+        const workspace = new Blockly.Workspace()
+        setWorkspaceDefined(workspace, DEFINED)
+        try {
+            const marker = workspace.newBlock('ONTHROW__ALSO')
+            const hat = workspace.newBlock('ONTHROW')
+            const checker = hat.nextConnection!.getConnectionChecker()
+            expect(checker.canConnect(hat.nextConnection, marker.previousConnection, false)).toBe(true)
         } finally {
             workspace.dispose()
         }
