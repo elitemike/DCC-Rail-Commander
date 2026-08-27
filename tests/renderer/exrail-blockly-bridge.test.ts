@@ -86,6 +86,26 @@ describe('buildWorkspaceFromGraph / buildGraphFromWorkspace round-trip', () => {
         expect(roundTrip(body)).toBe(body)
     })
 
+    it('round-trips a trailing comment on a statement', () => {
+        const body = 'THROW(200) // note'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a leading standalone comment attached to the next statement', () => {
+        const body = '// setting up\nTHROW(200)'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a multi-line comment (leading lines plus a trailing line)', () => {
+        const body = '// line one\n// line two\nTHROW(200) // line three'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a comment on a statement nested inside IF/ENDIF', () => {
+        const body = 'IF(1)\n  THROW(200) // note\nENDIF'
+        expect(roundTrip(body)).toBe(body)
+    })
+
     it('round-trips an empty body', () => {
         expect(roundTrip('')).toBe('')
     })

@@ -543,9 +543,15 @@ export function parseBody(bodyText: string, kind: string, registry: BlockTypeDef
             continue
         }
 
-        const comment = pendingComment !== undefined && trailingComment !== undefined
-            ? `${pendingComment}\n${trailingComment}`
-            : (pendingComment ?? trailingComment)
+        // A trailing empty segment (`${pendingComment}\n`) marks "every line here is a leading
+        // standalone comment, none of them rode on the statement's own line" — see commentLines()
+        // in compileBody, the only reader of that convention. Without it, a single standalone
+        // leading comment (pendingComment set, no trailingComment) is indistinguishable from a
+        // same-line trailing one once both collapse to a single-line string, and compileBody would
+        // wrongly re-emit it as `STATEMENT() // comment` instead of `// comment` above the statement.
+        const comment = pendingComment !== undefined
+            ? (trailingComment !== undefined ? `${pendingComment}\n${trailingComment}` : `${pendingComment}\n`)
+            : trailingComment
         pendingComment = undefined
 
         if (rawCommand !== rawCommand.toUpperCase()) {
@@ -631,6 +637,13 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
     function commentLines(comment: string | undefined, pad: string): { leading: string[]; trailing?: string } {
         if (comment === undefined) return { leading: [] }
         const parts = comment.split('\n')
+        // A trailing empty segment is parseBody's marker for "no same-line comment — every line
+        // here is leading" (see the `comment` construction there); drop it and treat every
+        // remaining part as a leading line, with no trailing comment on the statement's own line.
+        if (parts[parts.length - 1] === '') {
+            parts.pop()
+            return { leading: parts.map((p) => `${pad}// ${p}`) }
+        }
         const trailing = parts.pop()
         return { leading: parts.map((p) => `${pad}// ${p}`), trailing }
     }
@@ -666,6 +679,67 @@ export function compileBody(graph: ParsedGraph, registry: BlockTypeDef[]): strin
 
     walk(nextIdOf(graph.hatNodeId, graph.connectors), 0)
     return lines.join('\n')
+}
+
+/** Collapses whitespace runs outside double-quoted strings to a single space and trims the
+ *  ends, leaving quoted content untouched — used by exrailBodiesEquivalent() below so a source
+ *  string like `PARSE("<S 172 172 0>")` keeps its internal spaces while indentation and
+ *  pre-comment padding (never preserved by compileBody()) don't count as a real difference. */
+function collapseWhitespaceOutsideQuotes(s: string): string {
+    let out = ''
+    let inStr = false
+    let esc = false
+    let lastWasSpace = false
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i]
+        if (inStr) {
+            out += ch
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            lastWasSpace = false
+            continue
+        }
+        if (ch === '"') { inStr = true; out += ch; lastWasSpace = false; continue }
+        if (/\s/.test(ch)) {
+            if (!lastWasSpace) out += ' '
+            lastWasSpace = true
+            continue
+        }
+        out += ch
+        lastWasSpace = false
+    }
+    return out.trim()
+}
+
+/**
+ * True if `a` and `b` are the same EXRAIL modulo the formatting compileBody()/
+ * compileEventHandlerBlock() always normalize regardless of source style — indentation depth,
+ * and whitespace runs outside string literals (so `// comment` vs `   // comment` don't count).
+ * Blank lines are ignored on both sides. Anything else — a dropped/reordered statement, a
+ * changed argument, comment text that differs — counts as a real difference.
+ *
+ * Used as a load-time self-check (see exrail-block-canvas.ts's `_loadGraph()`) so opening
+ * Blocks mode on an existing body never silently produces something that would rewrite the
+ * file differently on save, before the user has touched anything: parse the body, immediately
+ * recompile it, and compare against the original with this function rather than trusting a
+ * successful parse alone.
+ */
+export function exrailBodiesEquivalent(a: string, b: string): boolean {
+    const normalize = (text: string): string[] =>
+        text
+            .split('\n')
+            .map((line) => {
+                const { code, comment } = splitTrailingComment(line)
+                const normCode = collapseWhitespaceOutsideQuotes(code)
+                const normComment = comment !== undefined ? collapseWhitespaceOutsideQuotes(comment) : undefined
+                return normComment !== undefined ? `${normCode}//${normComment}` : normCode
+            })
+            .filter((line) => line !== '')
+    const na = normalize(a)
+    const nb = normalize(b)
+    if (na.length !== nb.length) return false
+    return na.every((line, i) => line === nb[i])
 }
 
 // ── Event-handler blocks: header-line-plus-body <-> graph ────────────────
