@@ -38,4 +38,15 @@ export interface SavedConfiguration {
      * user's source folder stays in sync with edits made in the workspace.
      */
     sourceFolder?: string
+    /**
+     * Per-project override for the "Strict aliases" enforcement setting — undefined means "use
+     * the app-wide preference" (Settings dialog / PreferencesService's own 'strictAliases' key),
+     * same as every project before this field existed. Set explicitly by the existing-project
+     * importer's summary dialog (which defaults it off — a hand-rolled project rarely has full
+     * alias coverage yet) so that choice sticks to just this project rather than silently
+     * overwriting the app-wide default new/other projects also use. Once set, workspace.ts's
+     * Settings dialog toggle updates this field instead of the app-wide preference for as long as
+     * this project stays open — see workspace.ts's binding()/setStrictAliases().
+     */
+    strictAliases?: boolean
 }

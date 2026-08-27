@@ -1,5 +1,6 @@
 import { IDialogController, IDialogCustomElementViewModel } from '@aurelia/dialog'
 import { resolve } from 'aurelia'
+import { CheckBox } from '@syncfusion/ej2-buttons'
 import type { ImportResult, ImportFileReport, AliasReviewItem } from '../../models/project-importer'
 
 interface ImportSummaryDialogModel {
@@ -30,6 +31,19 @@ export class ImportSummaryDialog implements IDialogCustomElementViewModel {
     tab: Tab = 'files'
     selectedIndex = 0
 
+    /**
+     * Whether to turn on the app-wide "Strict aliases" enforcement (Settings dialog) for the
+     * imported project. Defaults off regardless of the app's current setting — a hand-rolled
+     * project being imported essentially never has full alias coverage yet (see `aliasReview`
+     * above), so turning strict mode on immediately would flag nearly everything as needing an
+     * alias before the user has had a chance to review anything. Whatever's chosen here becomes
+     * the new app-wide preference on Continue (see continue()/home.ts's importExistingProject()) —
+     * same single global toggle the Settings dialog edits, not a separate per-project setting.
+     */
+    strictAliases = false
+    strictAliasesEl!: HTMLInputElement
+    private sfStrictAliases?: CheckBox
+
     readonly statusLabel = STATUS_LABEL
     readonly statusDot = STATUS_DOT
 
@@ -38,6 +52,19 @@ export class ImportSummaryDialog implements IDialogCustomElementViewModel {
         this.outputFileCount = model.outputFileCount
         this.tab = 'files'
         this.selectedIndex = 0
+    }
+
+    attached(): void {
+        this.sfStrictAliases = new CheckBox({
+            checked: this.strictAliases,
+            change: (args) => { this.strictAliases = args.checked },
+        })
+        this.sfStrictAliases.appendTo(this.strictAliasesEl)
+    }
+
+    detaching(): void {
+        this.sfStrictAliases?.destroy()
+        this.sfStrictAliases = undefined
     }
 
     setTab(tab: Tab): void {
@@ -73,6 +100,6 @@ export class ImportSummaryDialog implements IDialogCustomElementViewModel {
     }
 
     continue(): void {
-        void this.$dialog.ok()
+        void this.$dialog.ok(this.strictAliases)
     }
 }

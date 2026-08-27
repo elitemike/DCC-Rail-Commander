@@ -301,7 +301,12 @@ export class Workspace {
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
         this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
-        this.strictAliases = (await this.preferences.get<boolean>('strictAliases')) ?? true
+        // Strict aliases: this project's own override (SavedConfiguration.strictAliases — set by
+        // the existing-project importer's summary dialog, or by a previous setStrictAliases() call
+        // below while this project was open) wins if present; otherwise falls back to the app-wide
+        // preference every other project shares, same as before this field existed.
+        const activeSavedConfig = this.state.savedConfigurations.find((c) => c.id === this.state.activeConfigId)
+        this.strictAliases = activeSavedConfig?.strictAliases ?? (await this.preferences.get<boolean>('strictAliases')) ?? true
         this.configEditorState.strictAliases = this.strictAliases
         this.hasBlockingErrors = hasErrorMarkers()
         this.filesWithErrors = filesWithErrorMarkers()
@@ -351,11 +356,29 @@ export class Workspace {
         void this.preferences.set('strictCompile', enabled)
     }
 
-    /** Persists the strict-aliases preference and mirrors it onto configEditorState, which the turnout/roster/sensor/route/sequence editors actually consult — called from the Settings dialog. Also re-runs Monaco validation on every open model, since validateAliasRequired() depends on this setting but has no text change of its own to react to. */
+    /**
+     * Persists the strict-aliases setting and mirrors it onto configEditorState, which the
+     * turnout/roster/sensor/route/sequence editors actually consult — called from the Settings
+     * dialog. Also re-runs Monaco validation on every open model, since validateAliasRequired()
+     * depends on this setting but has no text change of its own to react to.
+     *
+     * Writes to *this project's own* SavedConfiguration.strictAliases when one exists, rather than
+     * the app-wide preference every other project shares — once a project has an explicit
+     * strictAliases value (set here, or by the existing-project importer), it keeps making its own
+     * choice independently of whatever the app-wide default is or later becomes. Only falls back to
+     * the shared app-wide preference when there's no active saved config to attach the override to
+     * (e.g. mid-wizard, before the project's first save).
+     */
     setStrictAliases(enabled: boolean): void {
         this.strictAliases = enabled
         this.configEditorState.strictAliases = enabled
-        void this.preferences.set('strictAliases', enabled)
+        const idx = this.state.savedConfigurations.findIndex((c) => c.id === this.state.activeConfigId)
+        if (idx !== -1) {
+            this.state.savedConfigurations[idx] = { ...this.state.savedConfigurations[idx], strictAliases: enabled }
+            void this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+        } else {
+            void this.preferences.set('strictAliases', enabled)
+        }
         revalidateAllModels()
     }
 
