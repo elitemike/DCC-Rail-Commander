@@ -2,7 +2,7 @@ import { bindable, BindingMode, queueTask, resolve } from 'aurelia'
 import * as Blockly from 'blockly/core'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
-import { canonicalRefValue, parseBody, compileBody, parseEventHandlerBlock, compileEventHandlerBlock } from './exrail-block-compiler'
+import { canonicalRefValue, parseBody, compileBody, parseEventHandlerBlock, compileEventHandlerBlock, exrailBodiesEquivalent } from './exrail-block-compiler'
 import type { BlockTypeDef, DefinedObjects, ParsedGraph } from './exrail-block-compiler'
 import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceHatCallbacks, setWorkspaceSelfId, withHatCallbacksSuppressed } from './exrail-blockly-blocks'
 import { buildGraphFromWorkspace, buildWorkspaceFromGraph } from './exrail-blockly-bridge'
@@ -428,6 +428,18 @@ export class ExrailBlockCanvasCustomElement {
             : parseBody(this.initialBody, this.kind, BLOCK_REGISTRY)
         if (!result.ok) {
             this.parseError = result.reason
+            return emptyRoot()
+        }
+        // Belt-and-suspenders: a parse can succeed but still lose or reshape something
+        // compileBody()/compileEventHandlerBlock() can't get back (e.g. a trailing standalone
+        // comment with nothing left to attach to). Recompiling immediately and diffing against
+        // the source — rather than trusting `result.ok` alone — catches that before the user
+        // ever sees blocks that would quietly rewrite the file differently on save.
+        const recompiled = this._isParamFlavoredHat()
+            ? compileEventHandlerBlock(result.graph, BLOCK_REGISTRY)
+            : compileBody(result.graph, BLOCK_REGISTRY)
+        if (!exrailBodiesEquivalent(this.initialBody, recompiled)) {
+            this.parseError = 'Converting this to blocks would change it (likely a comment or detail that can\'t be represented) — edit as Text instead.'
             return emptyRoot()
         }
         this.parseError = null

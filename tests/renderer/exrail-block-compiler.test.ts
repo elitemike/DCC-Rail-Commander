@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { definedTracksFor, parseBody, compileBody, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
+import { definedTracksFor, parseBody, compileBody, exrailBodiesEquivalent, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 import { BLOCK_REGISTRY } from '../../src/renderer/src/components/visual-editors/exrail-block-registry'
 
 describe('definedTracksFor', () => {
@@ -233,7 +233,11 @@ describe('parseBody failure modes', () => {
     it('attaches a standalone comment line to the statement immediately following it', () => {
         const graph = parseOk('// yard switch\nTHROW(200)')
         const node = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
-        expect(node?.info.comment).toBe('yard switch')
+        // Trailing '\n' marks "leading-only, no same-line comment" — see commentLines()'s doc
+        // comment in exrail-block-compiler.ts. Without it, this is indistinguishable from a
+        // same-line trailing comment once both collapse to a plain string.
+        expect(node?.info.comment).toBe('yard switch\n')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe('// yard switch\nTHROW(200)')
     })
 
     it('does not mistake a quoted string containing // for a comment', () => {
@@ -271,5 +275,42 @@ describe('parseBody failure modes', () => {
             expect(typeof result!.ok).toBe('boolean')
             if (!result!.ok) expect(typeof result!.reason).toBe('string')
         }
+    })
+})
+
+describe('exrailBodiesEquivalent', () => {
+    it('treats identical text as equivalent', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\nDELAY(500)', 'THROW(200)\nDELAY(500)')).toBe(true)
+    })
+
+    it('ignores indentation differences', () => {
+        expect(exrailBodiesEquivalent('IF(200)\n  THROW(1)\nENDIF', 'IF(200)\n    THROW(1)\nENDIF')).toBe(true)
+    })
+
+    it('ignores spacing before a trailing comment', () => {
+        expect(exrailBodiesEquivalent(
+            'PARSE("<S 172 172 0>")                 // SNS_PARK_1_ENTRY',
+            'PARSE("<S 172 172 0>") // SNS_PARK_1_ENTRY',
+        )).toBe(true)
+    })
+
+    it('ignores blank lines', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\n\nDELAY(500)', 'THROW(200)\nDELAY(500)')).toBe(true)
+    })
+
+    it('preserves internal spacing inside string literals', () => {
+        expect(exrailBodiesEquivalent('PARSE("<S 172 172 0>")', 'PARSE("<S172 172 0>")')).toBe(false)
+    })
+
+    it('flags a changed argument value', () => {
+        expect(exrailBodiesEquivalent('THROW(200)', 'THROW(201)')).toBe(false)
+    })
+
+    it('flags a dropped trailing comment', () => {
+        expect(exrailBodiesEquivalent('THROW(200) // note', 'THROW(200)')).toBe(false)
+    })
+
+    it('flags a dropped standalone comment with nothing left to attach to', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\n// trailing note', 'THROW(200)')).toBe(false)
     })
 })
