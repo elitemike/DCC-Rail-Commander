@@ -304,4 +304,50 @@ describe('ConfigEditorState — myStartup.h', () => {
         expect(state.generatedTurnoutDefaultsContent).toBe('')
         expect(state.installerState.configFiles.find(f => f.name === 'myStartup.h')!.content).not.toContain('THROW(5)')
     })
+
+    it('_syncGeneratedTurnoutDefaultsContent emits THROW(aliasName) instead of THROW(id) when a Turnout alias exists', () => {
+        const state = {
+            turnouts: [
+                { type: 'SERVO', id: 5, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow', description: 'Aliased', comment: '', defaultState: 'THROWN' },
+                { type: 'SERVO', id: 6, pin: 26, activeAngle: 410, inactiveAngle: 205, profile: 'Slow', description: 'Unaliased', comment: '', defaultState: 'THROWN' },
+            ],
+            aliases: [{ name: 'MyTurnout', value: '5', aliasType: 'Turnout' }],
+            generatedTurnoutDefaultsContent: '',
+            getPrimaryAliasNameForId: ConfigEditorState.prototype.getPrimaryAliasNameForId,
+        }
+
+        ;(ConfigEditorState.prototype as unknown as Record<string, unknown>)._syncGeneratedTurnoutDefaultsContent.call(state)
+
+        expect(state.generatedTurnoutDefaultsContent).toBe('AUTOSTART\n  THROW(MyTurnout)\n  THROW(6)\nDONE')
+    })
+
+    it('resolves an alias-name THROW() in myStartup.h back to the turnout it targets on load', () => {
+        // loadFromInstallerState() resets this.aliases to [] before parsing files (so a
+        // reopened session never retains a stale list), so myAliases.h must be a real file
+        // in this test's config files for the alias to survive to the THROW()-resolution step —
+        // see parseDefaultThrownTurnoutIdsFromAutomation's own dedicated tests in
+        // load-from-folder.test.ts for the resolution logic in isolation.
+        const startupContent = turnoutDefaultsBlock('AUTOSTART\n  THROW(MyTurnout)\nDONE')
+        const state = makeState([
+            { name: 'config.h', content: '// empty\n' },
+            { name: 'myTurnouts.h', content: 'SERVO_TURNOUT(5, 25, 410, 205, Slow, "Aliased")\nSERVO_TURNOUT(6, 26, 410, 205, Slow, "Unaliased")' },
+            { name: 'myAliases.h', content: 'ALIAS(MyTurnout, 5) // type: Turnout' },
+            { name: 'myStartup.h', content: startupContent },
+        ])
+        ;(state as any).normalizeAliasesLenient = (ConfigEditorState.prototype as unknown as Record<string, unknown>)['normalizeAliasesLenient']
+        ;(state as any).normalizeAliasEntry = (ConfigEditorState.prototype as unknown as Record<string, unknown>)['normalizeAliasEntry']
+        ;(state as any).validateAliasTargetId = ConfigEditorState.prototype.validateAliasTargetId
+        ;(state as any).getObjectIdReferences = ConfigEditorState.prototype.getObjectIdReferences
+        ;(state as any).sensors = []
+        ;(state as any).routes = []
+        ;(state as any).sequences = []
+        ;(state as any).automations = []
+
+        ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
+
+        expect((state as any).turnouts).toEqual([
+            expect.objectContaining({ id: 5, defaultState: 'THROWN' }),
+            expect.objectContaining({ id: 6, defaultState: 'CLOSED' }),
+        ])
+    })
 })

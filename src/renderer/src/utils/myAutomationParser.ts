@@ -1196,19 +1196,28 @@ export function serializeTurnoutToFile(turnouts: Turnout[]): string {
 
 /**
  * Extracts turnout IDs that are set to thrown at startup via AUTOSTART THROW(id)
- * statements in myAutomation.h.
+ * statements in myAutomation.h/myStartup.h. THROW(...) may reference the turnout
+ * either by its numeric id or by an ALIAS name pointing at it — `aliases` resolves
+ * the latter back to an id (unresolvable names are silently skipped, same as the
+ * old id-only behavior did for anything that failed to parse as a number).
  */
-export function parseDefaultThrownTurnoutIdsFromAutomation(fileContent: string): Set<number> {
+export function parseDefaultThrownTurnoutIdsFromAutomation(fileContent: string, aliases: AliasEntry[] = []): Set<number> {
     const thrownIds = new Set<number>();
     const autostartRe = /AUTOSTART\s*\n([\s\S]*?)\nDONE/g;
     let blockMatch: RegExpExecArray | null;
 
     while ((blockMatch = autostartRe.exec(fileContent)) !== null) {
         const block = blockMatch[1] ?? '';
-        const throwRe = /THROW\s*\(\s*(\d+)\s*\)/g;
+        const throwRe = /THROW\s*\(\s*([A-Za-z_]\w*|\d+)\s*\)/g;
         let throwMatch: RegExpExecArray | null;
         while ((throwMatch = throwRe.exec(block)) !== null) {
-            thrownIds.add(parseInt(throwMatch[1], 10));
+            const token = throwMatch[1];
+            if (/^\d+$/.test(token)) {
+                thrownIds.add(parseInt(token, 10));
+            } else {
+                const id = getAliasIdByName(aliases, token, 'Turnout');
+                if (id !== undefined) thrownIds.add(id);
+            }
         }
     }
 
