@@ -1,19 +1,22 @@
 /**
  * "Setup New Device" wizard — this app version only supports EX-CommandStation,
  * so the wizard has no product-selection step (see device-wizard.ts/.html).
+ *
+ * Step order: Select Device -> Select Version -> [WiFi -> Display -> Track
+ * Power, EX-CSB1 only] -> Confirm. Confirm is always the last step: it's
+ * where the device gets its name and a review of every choice made earlier.
  */
 
 import { test, expect } from './fixtures'
 
 /**
  * Drives the CSB1 wizard from an already-open "Select Device" step through
- * Finish, picking whatever `nickname` and roster choice are given. Accepts
- * defaults for everything else (WiFi AP mode, suggested OLED, "all tracks
- * on" power).
+ * Finish, picking whatever `nickname` is given. Accepts defaults for
+ * everything else (WiFi AP mode, suggested display, "all tracks on" power).
  */
 async function finishCsb1Wizard(
     page: import('@playwright/test').Page,
-    { nickname, addRosterEntry }: { nickname: string; addRosterEntry: boolean },
+    { nickname }: { nickname: string },
 ) {
     await expect(page.getByText('Select Device', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
     const boardButton = page.locator('button', { hasText: 'EX-CSB1' })
@@ -30,32 +33,28 @@ async function finishCsb1Wizard(
     await expect(page.locator('au-dialog-container').getByRole('combobox').first()).toBeVisible({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Next' }).click()
 
-    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
-    await page.getByTestId('wizard-device-nickname').fill(nickname)
-    await page.getByRole('button', { name: 'Next' }).click()
-
     await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
     await page.getByRole('button', { name: 'Next' }).click()
 
-    await expect(page.getByText('Suggested OLED display settings')).toBeVisible()
+    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
 
     await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
 
-    await expect(page.getByText('Would you like to add your first roster entry now?')).toBeVisible()
-    await page.getByText(addRosterEntry ? 'Add my first roster entry' : 'Skip for now').click()
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('wizard-device-nickname').fill(nickname)
     await page.getByRole('button', { name: 'Finish' }).click()
 }
 
 /** Get the current raw text in the Monaco editor (view-line based, no clipboard). */
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     const lines = await page.locator('div.monaco-editor .view-line').allTextContents()
-    // Monaco uses non-breaking spaces ( ) in view-line rendering.
+    // Monaco uses non-breaking spaces ( ) in view-line rendering.
     return lines.map((l) => l.replace(/\u00a0/g, ' ')).join('\n')
 }
 
-test('new device wizard: no product step, recommends latest Prod tag, confirm step needs no scroll', async ({ onboardingPage: page }) => {
+test('new device wizard: no product step, recommends latest Prod tag, Confirm step needs no scroll', async ({ onboardingPage: page }) => {
     await page.getByText('New Device', { exact: true }).click()
 
     // ── Step: Select Device ─────────────────────────────────────────────────
@@ -79,28 +78,65 @@ test('new device wizard: no product step, recommends latest Prod tag, confirm st
 
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: Confirm ────────────────────────────────────────────────────────
-    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    // ── Step: WiFi ───────────────────────────────────────────────────────────
+    await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Display — OLED + stacked motor shield share one pane ─────────
+    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
     const shieldLabel = page.getByText('This EX-CSB1 has a stacked motor shield')
     await expect(shieldLabel).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
 
-    // Device Name defaults to "CSB1" and is focused as soon as the step shows,
-    // so the user can just start typing to replace it.
+    // ── Step: Track Power ───────────────────────────────────────────────────
+    await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Confirm — device name defaults to "CSB1" and is focused, and
+    // reviews everything configured in the earlier steps ────────────────────
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
     const nicknameInput = page.getByTestId('wizard-device-nickname')
     await expect(nicknameInput).toHaveValue('CSB1')
     await expect(nicknameInput).toBeFocused()
+    await expect(page.getByText('Access Point')).toBeVisible()
+    await expect(page.getByText('OLED 132×64 (EX-CSB1)')).toBeVisible()
+    await expect(page.getByText('Standard (EXCSB1)')).toBeVisible()
 
-    // The stacked-motor-shield option must be visible without scrolling the
-    // step container (the whole point of the dialog height bump).
+    // The whole review must be visible without scrolling the step container.
     const container = page.locator('div.overflow-y-auto').first()
     const containerBox = await container.boundingBox()
-    const labelBox = await shieldLabel.boundingBox()
+    const nameLabelBox = await page.getByText('Device Name').boundingBox()
     expect(containerBox).not.toBeNull()
-    expect(labelBox).not.toBeNull()
-    expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(containerBox!.y + containerBox!.height + 1)
+    expect(nameLabelBox).not.toBeNull()
+    expect(nameLabelBox!.y + nameLabelBox!.height).toBeLessThanOrEqual(containerBox!.y + containerBox!.height + 1)
 })
 
-test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Power/Roster steps', async ({ onboardingPage: page }) => {
+test('new device wizard: non-CSB1 boards skip WiFi/Display/Track Power straight to Confirm', async ({ onboardingPage: page }) => {
+    await page.getByText('New Device', { exact: true }).click()
+
+    // ── Step: Select Device — pick the mock Arduino Mega, not an EX-CSB1 ───
+    await expect(page.getByText('Select Device', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const boardButton = page.locator('button', { hasText: 'Mega' })
+    await expect(boardButton.first()).toBeVisible({ timeout: 15_000 })
+    await boardButton.first().click()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Select Version ────────────────────────────────────────────────
+    await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const versionSelect = page.locator('select')
+    await expect(versionSelect).toBeVisible({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Confirm — WiFi/Display/Track Power never shown for this board ─
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('This EX-CSB1 has a stacked motor shield')).toHaveCount(0)
+
+    // Going back from Confirm returns to Version, not Track Power.
+    await page.getByRole('button', { name: 'Back' }).click()
+    await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+})
+
+test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on Roster, no roster prompt', async ({ onboardingPage: page }) => {
     await page.getByText('New Device', { exact: true }).click()
 
     // ── Step: Select Device ─────────────────────────────────────────────────
@@ -116,13 +152,6 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     await expect(versionSelect).toBeVisible({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: Confirm — Next provisions the device but, for EX-CSB1, does
-    // NOT close the dialog: it continues on to WiFi instead ────────────────
-    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
-    await page.getByTestId('wizard-device-nickname').fill('My CSB1 Layout')
-    await expect(page.getByRole('button', { name: 'Next' })).toBeVisible()
-    await page.getByRole('button', { name: 'Next' }).click()
-
     // ── Step: WiFi ───────────────────────────────────────────────────────────
     await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
     // AP mode's SSID/password help text is the tallest content this step
@@ -135,8 +164,8 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     await page.getByTestId('wizard-wifi-ssid').fill('MyHomeNetwork')
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: OLED Display — suggested 132x64 default, with the fallback note ──
-    await expect(page.getByText('Suggested OLED display settings')).toBeVisible()
+    // ── Step: Display — suggested 132x64 default, plus stacked shield ──────
+    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
     await expect(page.getByText("If your screen doesn't display correctly, try a different display type")).toBeVisible()
     await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
     await page.getByRole('button', { name: 'Next' }).click()
@@ -165,16 +194,18 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     await page.waitForTimeout(300)
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: Roster — accept "add my first entry" and finish ──────────────
-    await expect(page.getByText('Would you like to add your first roster entry now?')).toBeVisible()
-    await page.getByText('Add my first roster entry').click()
+    // ── Step: Confirm — review shows every earlier choice, then Finish ─────
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Station — MyHomeNetwork')).toBeVisible()
+    await page.getByTestId('wizard-device-nickname').fill('My CSB1 Layout')
     await expect(page.getByRole('button', { name: 'Finish' })).toBeVisible()
     await page.getByRole('button', { name: 'Finish' }).click()
 
-    // ── Landed in the workspace ─────────────────────────────────────────────
+    // ── Roster isn't a wizard step — finishing lands directly on it ────────
     await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('roster-editor')).toBeVisible()
 
-    // config.h picked up the WiFi + OLED answers.
+    // config.h picked up the WiFi + Display answers.
     await page.getByTestId('nav-general-wifi').click()
     await page.getByRole('button', { name: 'Raw' }).click()
     await expect(page.locator('div.monaco-editor')).toBeVisible()
@@ -183,10 +214,6 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     expect(configHContent).toContain('WIFI_SSID "MyHomeNetwork"')
     expect(configHContent).toContain('ENABLE_WIFI true')
     expect(configHContent).toContain('OLED_DRIVER 132,64')
-
-    // The first roster entry was added via ConfigEditorState (not written raw).
-    await page.getByText('Roster', { exact: true }).first().click()
-    await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
 
     // The Track Power step's Track A → PROG and "Individual tracks" choices
     // made it through to myStartup.h — proving the wizard's live
@@ -202,19 +229,23 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
 })
 
 test('new device wizard: a second device never inherits an earlier device\'s roster/config', async ({ onboardingPage: page }) => {
-    // Device A: create it with a roster entry.
+    // Device A: create it, then add a roster entry by hand once landed there.
     await page.getByText('New Device', { exact: true }).click()
-    await finishCsb1Wizard(page, { nickname: 'Device A', addRosterEntry: true })
+    await finishCsb1Wizard(page, { nickname: 'Device A' })
     await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
     await page.getByText('Roster', { exact: true }).first().click()
+    await page.getByTitle('Add new roster entry').click()
     await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Save' }).click()
+    await page.locator('[data-testid="file-changes-save-button"]').click()
+    await page.waitForTimeout(300)
 
-    // Device B: same (mock) board, skip the roster prompt this time — it must
-    // start with none of Device A's roster/config, even though --mock-device
-    // only simulates one physical EX-CSB1 (same FQBN/serial as Device A).
+    // Device B: same (mock) board — it must start with none of Device A's
+    // roster/config, even though --mock-device only simulates one physical
+    // EX-CSB1 (same FQBN/serial as Device A).
     await page.getByRole('button', { name: /Device A/ }).click()
     await page.getByText('Add New Device', { exact: true }).click()
-    await finishCsb1Wizard(page, { nickname: 'Device B', addRosterEntry: false })
+    await finishCsb1Wizard(page, { nickname: 'Device B' })
     await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
 
     await page.getByText('Roster', { exact: true }).first().click()

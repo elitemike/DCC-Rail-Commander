@@ -68,18 +68,14 @@ export class InstallerState {
     pendingMigrationOnLoad = false
 
     /**
-     * One-shot signal set by DeviceWizard's completeWizard() when the CSB1
-     * extended flow's roster prompt ("add my first entry?") needs to be
-     * applied through ConfigEditorState.addRosterEntry() once it's loaded —
-     * it's just a yes/no choice collected in the wizard, not a live-mounted
-     * editor, so unlike Track Power (written live by <track-manager-form>
-     * during the wizard itself) it can't apply itself immediately. Consumed
-     * (and cleared) by workspace.ts's applyPendingWizardSetup(), called right
-     * after loadFromInstallerState() in both binding() and switchToConfig().
+     * One-shot signal set by DeviceWizard's completeWizard() so the workspace
+     * lands on the Roster editor right after setup finishes — Roster isn't a
+     * wizard step of its own, this is just where a future onboarding tutorial
+     * will live. Consumed (and cleared) by workspace.ts's
+     * applyPendingWizardSetup(), called right after loadFromInstallerState()
+     * in both binding() and switchToConfig().
      */
-    pendingWizardSetup: {
-        addFirstRosterEntry: boolean
-    } | null = null
+    pendingWizardOpenRoster = false
 
     reset(): void {
         this.toolchainReady = false
@@ -96,7 +92,7 @@ export class InstallerState {
         this.detectedBoards = []
         this.activeConfigId = null
         this.pendingMigrationOnLoad = false
-        this.pendingWizardSetup = null
+        this.pendingWizardOpenRoster = false
         // NOTE: savedConfigurations is intentionally NOT reset — it persists across wizard runs
     }
 }
