@@ -170,11 +170,20 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     await expect(page.getByText('Hardware settings for this EX-CSB1')).toBeVisible()
     await expect(page.getByText("If your screen doesn't display correctly, try a different display type")).toBeVisible()
     await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
+    // Checking the stacked-shield box here must reach Track Power's live
+    // <track-manager-form> the instant it mounts, even though the two live
+    // in different wizard steps.
+    await page.getByText('This EX-CSB1 has a stacked motor shield').click()
     await page.getByRole('button', { name: 'Next' }).click()
 
     // ── Step: Track Power — the same live <track-manager-form> the Startup
     // section uses, so it supports DCC/DC/Mixed and programming just like it ──
     await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
+    // Track C/D only appear once the form sees the stacked motor shield —
+    // regression coverage for that choice reaching config.h before Track
+    // Power's <track-manager-form> mounts (see syncCsb1ConfigH()).
+    await expect(page.locator('track-manager-form').getByText('Track C', { exact: true })).toBeVisible()
+    await expect(page.locator('track-manager-form').getByText('Track D', { exact: true })).toBeVisible()
     await expect(page.getByText('Mixed (DCC and DC)')).toBeVisible()
     await page.getByText('Mixed (DCC and DC)').click()
     await page.waitForTimeout(300)
@@ -203,6 +212,7 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     // show up as a real readout, not just "configured in the previous step".
     await expect(page.getByText('Individual per-track power', { exact: false })).toBeVisible()
     await expect(page.getByText('A: PROG (ON)', { exact: false })).toBeVisible()
+    await expect(page.getByText('Stacked (EXCSB1_WITH_EX8874)')).toBeVisible()
     await page.getByTestId('wizard-device-nickname').fill('My CSB1 Layout')
     await expect(page.getByRole('button', { name: 'Finish' })).toBeVisible()
     await page.getByRole('button', { name: 'Finish' }).click()
@@ -220,6 +230,7 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     expect(configHContent).toContain('WIFI_SSID "MyHomeNetwork"')
     expect(configHContent).toContain('ENABLE_WIFI true')
     expect(configHContent).toContain('OLED_DRIVER 132,64')
+    expect(configHContent).toContain('MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874')
 
     // The Track Power step's Track A → PROG and "Individual tracks" choices
     // made it through to myStartup.h — proving the wizard's live

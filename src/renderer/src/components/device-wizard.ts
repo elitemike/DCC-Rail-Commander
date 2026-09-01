@@ -18,6 +18,7 @@ import {
     generateCommandStationConfig,
     defaultCommandStationConfig,
     parseMyAutomationTrackManager,
+    STACKED_MOTOR_DRIVER,
 } from '../config/commandstation'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
@@ -327,6 +328,15 @@ export class DeviceWizard {
             return
         }
 
+        // Push the Hardware step's motor-shield choice into config.h before
+        // leaving it — <track-manager-form> reads ConfigEditorState.configHContent
+        // in its binding() lifecycle hook the instant `if.bind="step === 4"`
+        // flips true, which Aurelia can run synchronously off the `step++`
+        // below; doing this sync *before* incrementing (and awaiting it)
+        // guarantees the write lands first regardless of that timing — see
+        // syncCsb1ConfigH()'s doc comment.
+        if (this.step === 3) await this.syncCsb1ConfigH()
+
         this.step++
         this.sfStepper?.nextStep();
         if (this.step === 1) await this.loadVersions()
@@ -346,6 +356,48 @@ export class DeviceWizard {
 
         this.step--
         this.sfStepper?.previousStep();
+    }
+
+    /**
+     * Regenerates config.h from the wizard's WiFi/Display/motor-shield
+     * answers and writes it everywhere something might read it: disk,
+     * state.configFiles (so it's captured in the saved configuration), and
+     * ConfigEditorState.configHContent — that last one is what makes this
+     * necessary here at all: <track-manager-form>'s hasStackedMotorShield
+     * is derived from ConfigEditorState.configHContent's motor driver (see
+     * track-manager-form.ts), so without pushing the checkbox's value there
+     * before Track Power mounts, it would still see the driver provision()
+     * wrote before the user ever reached the Hardware step, and hide
+     * Track C/D even when the stacked-shield checkbox is checked. Called
+     * both on the way into Track Power and again in completeWizard() (in
+     * case the user went back and changed something afterward).
+     */
+    private async syncCsb1ConfigH(): Promise<void> {
+        const idx = this.state.configFiles.findIndex((f) => f.name === 'config.h')
+        if (idx === -1 || !this.state.scratchPath) return
+
+        // config.h has no managed-block wrapping (unlike myStartup.h) — it's
+        // safe to reparse/regenerate directly here, the same way
+        // commandstation-config-form.ts's onFieldChange() does.
+        const opts: CommandStationConfigOptions = parseCommandStationConfig(this.state.configFiles[idx].content)
+        opts.enableWifi = true
+        opts.wifiMode = this.wifiMode
+        opts.wifiHostname = this.wifiHostname.trim() || 'dccex'
+        opts.wifiSsid = this.wifiSsid.trim()
+        opts.wifiPassword = this.wifiPassword
+        opts.wifiChannel = this.wifiChannel
+        opts.display = this.oledDisplay
+        opts.scrollMode = this.oledScrollMode
+        // generateCommandStationConfig() writes opts.motorDriver verbatim as
+        // MOTOR_SHIELD_TYPE — it does NOT derive it from hasStackedMotorShield,
+        // so the checkbox has to drive the actual driver string here.
+        opts.motorDriver = this.hasStackedMotorShield ? STACKED_MOTOR_DRIVER : 'EXCSB1'
+        opts.hasStackedMotorShield = this.hasStackedMotorShield
+
+        const newContent = generateCommandStationConfig(opts)
+        this.state.configFiles[idx] = { name: 'config.h', content: newContent }
+        this.configEditorState.configHContent = newContent
+        await this.files.writeFile(`${this.state.scratchPath}/config.h`, newContent)
     }
 
     private enterConfirmStep(): void {
@@ -511,30 +563,15 @@ export class DeviceWizard {
         this.finishError = null
         try {
             if (this.isCsb1Board) {
-                // config.h has no managed-block wrapping (unlike myStartup.h) —
-                // it's safe to reparse/regenerate directly here, the same way
-                // commandstation-config-form.ts's onFieldChange() does.
-                const idx = this.state.configFiles.findIndex((f) => f.name === 'config.h')
-                if (idx !== -1 && this.state.scratchPath) {
-                    const opts: CommandStationConfigOptions = parseCommandStationConfig(this.state.configFiles[idx].content)
-                    opts.enableWifi = true
-                    opts.wifiMode = this.wifiMode
-                    opts.wifiHostname = this.wifiHostname.trim() || 'dccex'
-                    opts.wifiSsid = this.wifiSsid.trim()
-                    opts.wifiPassword = this.wifiPassword
-                    opts.wifiChannel = this.wifiChannel
-                    opts.display = this.oledDisplay
-                    opts.scrollMode = this.oledScrollMode
-                    opts.hasStackedMotorShield = this.hasStackedMotorShield
-
-                    const newContent = generateCommandStationConfig(opts)
-                    this.state.configFiles[idx] = { name: 'config.h', content: newContent }
-                    await this.files.writeFile(`${this.state.scratchPath}/config.h`, newContent)
-                }
+                // Catches any WiFi/Display change made after the user already
+                // visited Track Power and came back — syncCsb1ConfigH() also
+                // ran on the way into Track Power (see goNext()), but that
+                // was a point-in-time snapshot.
+                await this.syncCsb1ConfigH()
                 // Track Power was already written live to ConfigEditorState by
-                // <track-manager-form> during the wizard (see goNext()'s
-                // step===1 handler) — it's picked up below along with config.h
-                // when the saved configuration's configFiles snapshot is refreshed.
+                // <track-manager-form> during the wizard — it's picked up
+                // below along with config.h when the saved configuration's
+                // configFiles snapshot is refreshed.
             }
 
             // Device name is only known now (Confirm is the last step) — fill
