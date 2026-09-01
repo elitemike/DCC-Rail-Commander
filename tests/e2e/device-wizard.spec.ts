@@ -5,6 +5,44 @@
 
 import { test, expect } from './fixtures'
 
+/**
+ * Drives the CSB1 wizard from an already-open "Select Device" step through
+ * Finish, picking whatever `nickname` and roster choice are given. Accepts
+ * defaults for everything else (WiFi AP mode, suggested OLED, "all tracks
+ * on" power).
+ */
+async function finishCsb1Wizard(
+    page: import('@playwright/test').Page,
+    { nickname, addRosterEntry }: { nickname: string; addRosterEntry: boolean },
+) {
+    await expect(page.getByText('Select Device', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const boardButton = page.locator('button', { hasText: 'EX-CSB1' })
+    await expect(boardButton.first()).toBeVisible({ timeout: 15_000 })
+    await boardButton.first().click()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('dialog').getByRole('combobox').first()).toBeVisible({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('wizard-device-nickname').fill(nickname)
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Suggested OLED display settings')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Choose how track power behaves on startup.')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Would you like to add your first roster entry now?')).toBeVisible()
+    await page.getByText(addRosterEntry ? 'Add my first roster entry' : 'Skip for now').click()
+    await page.getByRole('button', { name: 'Finish' }).click()
+}
+
 /** Get the current raw text in the Monaco editor (view-line based, no clipboard). */
 async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
     const lines = await page.locator('div.monaco-editor .view-line').allTextContents()
@@ -110,6 +148,32 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     expect(configHContent).toContain('OLED_DRIVER 132,64')
 
     // The first roster entry was added via ConfigEditorState (not written raw).
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
+})
+
+test('new device wizard: a second device never inherits an earlier device\'s roster/config', async ({ onboardingPage: page }) => {
+    // Device A: create it with a roster entry.
+    await page.getByText('New Device', { exact: true }).click()
+    await finishCsb1Wizard(page, { nickname: 'Device A', addRosterEntry: true })
+    await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
+
+    // Device B: same (mock) board, skip the roster prompt this time — it must
+    // start with none of Device A's roster/config, even though --mock-device
+    // only simulates one physical EX-CSB1 (same FQBN/serial as Device A).
+    await page.getByRole('button', { name: /Device A/ }).click()
+    await page.getByText('Add New Device', { exact: true }).click()
+    await finishCsb1Wizard(page, { nickname: 'Device B', addRosterEntry: false })
+    await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
+
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.getByText('New Loco 1')).toHaveCount(0)
+
+    // Device A's own roster is untouched by Device B's setup.
+    await page.getByRole('button', { name: /Device B/ }).click()
+    await page.getByText('Device A', { exact: true }).click()
     await page.getByText('Roster', { exact: true }).first().click()
     await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
 })
