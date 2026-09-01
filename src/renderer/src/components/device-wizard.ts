@@ -16,6 +16,8 @@ import {
     type CommandStationConfigOptions,
     parseCommandStationConfig,
     generateCommandStationConfig,
+    defaultCommandStationConfig,
+    parseMyAutomationTrackManager,
 } from '../config/commandstation'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
@@ -123,6 +125,32 @@ export class DeviceWizard {
     // ── Step 5: Confirm ────────────────────────────────────────────────────────
     deviceNickname = ''
     deviceNicknameEl?: HTMLInputElement
+
+    /**
+     * Readable summary of the Track Power step's live edits, for the Confirm
+     * review — <track-manager-form> writes straight through
+     * ConfigEditorState.generatedTrackManagerContent, so this just re-parses
+     * that same EXRAIL text the same way the form itself does on reload (see
+     * track-manager-form.ts's reloadFromConfig()), starting from the
+     * firmware defaults for anything the user never touched.
+     */
+    get trackPowerSummary(): string {
+        const opts = defaultCommandStationConfig()
+        Object.assign(opts, parseMyAutomationTrackManager(this.configEditorState.generatedTrackManagerContent))
+        const perTrack = opts.startupPowerMode === 'individual'
+        const track = (label: string, mode: string, power: 'ON' | 'OFF'): string =>
+            `${label}: ${mode}${perTrack ? ` (${power})` : ''}`
+        const parts = [
+            perTrack ? 'Individual per-track power' : 'All tracks on at startup',
+            track('A', opts.trackAMode, opts.trackAPower),
+            track('B', opts.trackBMode, opts.trackBPower),
+        ]
+        if (this.hasStackedMotorShield) {
+            parts.push(track('C', opts.trackCMode, opts.trackCPower))
+            parts.push(track('D', opts.trackDMode, opts.trackDPower))
+        }
+        return parts.join(' · ')
+    }
 
     // ── Finishing ────────────────────────────────────────────────────────────
     finishing = false

@@ -101,6 +101,8 @@ test('new device wizard: no product step, recommends latest Prod tag, Confirm st
     await expect(page.getByText('Access Point')).toBeVisible()
     await expect(page.getByText('OLED 132×64 (EX-CSB1)')).toBeVisible()
     await expect(page.getByText('Standard (EXCSB1)')).toBeVisible()
+    // Track Power was never touched — the review falls back to firmware defaults.
+    await expect(page.getByText('All tracks on at startup', { exact: false })).toBeVisible()
 
     // The whole review must be visible without scrolling the step container.
     const container = page.locator('div.overflow-y-auto').first()
@@ -197,6 +199,10 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     // ── Step: Confirm — review shows every earlier choice, then Finish ─────
     await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('Station — MyHomeNetwork')).toBeVisible()
+    // Track Power's PROG + individual-power choices from the previous step
+    // show up as a real readout, not just "configured in the previous step".
+    await expect(page.getByText('Individual per-track power', { exact: false })).toBeVisible()
+    await expect(page.getByText('A: PROG (ON)', { exact: false })).toBeVisible()
     await page.getByTestId('wizard-device-nickname').fill('My CSB1 Layout')
     await expect(page.getByRole('button', { name: 'Finish' })).toBeVisible()
     await page.getByRole('button', { name: 'Finish' }).click()
