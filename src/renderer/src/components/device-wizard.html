@@ -234,155 +234,18 @@
                 </div>
 
                 <!-- ─── Step 5: Track Power (EX-CSB1 only) ──────────────── -->
-                <!-- Mirrors track-manager-form.ts's fields/options (same
-                     DCC/DC/Mixed modes, per-track type, and PROG support) —
-                     see device-wizard.ts for why this is plain HTML instead
-                     of that component. Applied on Finish via
-                     InstallerState.pendingWizardSetup. -->
+                <!-- Same live component as the Startup section's Visual tab
+                     (see startup-editor.html) — DCC/DC/Mixed mode, per-track
+                     type, PROG, and power, all writing straight through
+                     ConfigEditorState (loaded from this device in
+                     goNext()'s step===2 handler). Its Syncfusion dropdown
+                     popups only render correctly because this dialog is
+                     opened with DialogDomRendererClassic instead of the
+                     app-wide native-<dialog> renderer — see home.ts/
+                     workspace.ts's openNewDevice()/addNewDevice(). -->
                 <div if.bind="step === 5" class="space-y-4">
                     <p class="text-gray-700 dark:text-gray-300 text-sm">Configure track power for this EX-CSB1.</p>
-
-                    <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5 space-y-3">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track Configuration</span>
-                        <div class="flex gap-6">
-                            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                <input type="radio" name="trackManagerMode" model.bind="'dcc-only'" checked.bind="trackManagerMode" change.trigger="onTrackManagerModeChange()" />
-                                DCC only
-                            </label>
-                            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                <input type="radio" name="trackManagerMode" model.bind="'dc-only'" checked.bind="trackManagerMode" change.trigger="onTrackManagerModeChange()" />
-                                DC only
-                            </label>
-                            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                <input type="radio" name="trackManagerMode" model.bind="'mixed'" checked.bind="trackManagerMode" change.trigger="onTrackManagerModeChange()" />
-                                Mixed (DCC and DC)
-                            </label>
-                        </div>
-                        <div class="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-white/10">
-                            <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Startup power</label>
-                            <select value.bind="trackPowerMode"
-                                class="w-64 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option value="all">All tracks on (POWERON)</option>
-                                <option value="individual">Individual tracks (SET_POWER)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Track A -->
-                    <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5 space-y-2">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track A</span>
-                        <div class="flex items-center gap-4 flex-wrap">
-                            <div if.bind="trackManagerModeMixed" class="flex items-center gap-3">
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackAType" model.bind="'dcc'" checked.bind="trackAType" change.trigger="onTrackTypeChange('A')" /> DCC
-                                </label>
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackAType" model.bind="'dc'" checked.bind="trackAType" change.trigger="onTrackTypeChange('A')" /> DC
-                                </label>
-                            </div>
-                            <select value.bind="trackAMode"
-                                class="w-36 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option repeat.for="m of getTrackModeOptions(trackAType)" value.bind="m">${m}</option>
-                            </select>
-                            <select if.bind="trackPowerMode === 'individual'" value.bind="trackAPower"
-                                class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option>ON</option>
-                                <option>OFF</option>
-                            </select>
-                            <div if.bind="trackAType === 'dc'" class="flex items-center gap-2">
-                                <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
-                                <input value.bind="trackALocoId" type="number" min="0"
-                                    class="w-20 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Track B -->
-                    <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5 space-y-2">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track B</span>
-                        <div class="flex items-center gap-4 flex-wrap">
-                            <div if.bind="trackManagerModeMixed" class="flex items-center gap-3">
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackBType" model.bind="'dcc'" checked.bind="trackBType" change.trigger="onTrackTypeChange('B')" /> DCC
-                                </label>
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackBType" model.bind="'dc'" checked.bind="trackBType" change.trigger="onTrackTypeChange('B')" /> DC
-                                </label>
-                            </div>
-                            <select value.bind="trackBMode"
-                                class="w-36 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option repeat.for="m of getTrackModeOptions(trackBType)" value.bind="m">${m}</option>
-                            </select>
-                            <select if.bind="trackPowerMode === 'individual'" value.bind="trackBPower"
-                                class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option>ON</option>
-                                <option>OFF</option>
-                            </select>
-                            <div if.bind="trackBType === 'dc'" class="flex items-center gap-2">
-                                <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
-                                <input value.bind="trackBLocoId" type="number" min="0"
-                                    class="w-20 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Track C (only with stacked motor shield) -->
-                    <div if.bind="hasStackedMotorShield" class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5 space-y-2">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track C</span>
-                        <div class="flex items-center gap-4 flex-wrap">
-                            <div if.bind="trackManagerModeMixed" class="flex items-center gap-3">
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackCType" model.bind="'dcc'" checked.bind="trackCType" change.trigger="onTrackTypeChange('C')" /> DCC
-                                </label>
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackCType" model.bind="'dc'" checked.bind="trackCType" change.trigger="onTrackTypeChange('C')" /> DC
-                                </label>
-                            </div>
-                            <select value.bind="trackCMode"
-                                class="w-36 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option repeat.for="m of getTrackModeOptions(trackCType)" value.bind="m">${m}</option>
-                            </select>
-                            <select if.bind="trackPowerMode === 'individual'" value.bind="trackCPower"
-                                class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option>ON</option>
-                                <option>OFF</option>
-                            </select>
-                            <div if.bind="trackCType === 'dc'" class="flex items-center gap-2">
-                                <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
-                                <input value.bind="trackCLocoId" type="number" min="0"
-                                    class="w-20 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Track D (only with stacked motor shield) -->
-                    <div if.bind="hasStackedMotorShield" class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5 space-y-2">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Track D</span>
-                        <div class="flex items-center gap-4 flex-wrap">
-                            <div if.bind="trackManagerModeMixed" class="flex items-center gap-3">
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackDType" model.bind="'dcc'" checked.bind="trackDType" change.trigger="onTrackTypeChange('D')" /> DCC
-                                </label>
-                                <label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    <input type="radio" name="trackDType" model.bind="'dc'" checked.bind="trackDType" change.trigger="onTrackTypeChange('D')" /> DC
-                                </label>
-                            </div>
-                            <select value.bind="trackDMode"
-                                class="w-36 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option repeat.for="m of getTrackModeOptions(trackDType)" value.bind="m">${m}</option>
-                            </select>
-                            <select if.bind="trackPowerMode === 'individual'" value.bind="trackDPower"
-                                class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                                <option>ON</option>
-                                <option>OFF</option>
-                            </select>
-                            <div if.bind="trackDType === 'dc'" class="flex items-center gap-2">
-                                <label class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Loco / Cab address</label>
-                                <input value.bind="trackDLocoId" type="number" min="0"
-                                    class="w-20 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
-                            </div>
-                        </div>
-                    </div>
+                    <track-manager-form></track-manager-form>
                 </div>
 
                 <!-- ─── Step 6: Roster (EX-CSB1 only) ───────────────────── -->

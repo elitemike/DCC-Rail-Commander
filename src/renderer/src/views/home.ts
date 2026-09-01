@@ -1,6 +1,6 @@
 import { resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
-import { IDialogService } from '@aurelia/dialog'
+import { IDialogService, DialogDomRendererClassic } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
 import { ConfigEditorState } from '../models/config-editor-state'
 import { PreferencesService } from '../services/preferences.service'
@@ -59,7 +59,17 @@ export class Home {
     async openNewDevice(): Promise<void> {
         this.state.reset()
         const result = await this.dialogService
-            .open({ component: () => DeviceWizard })
+            .open({
+                component: () => DeviceWizard,
+                // DeviceWizard mounts <track-manager-form>, whose Syncfusion
+                // dropdown popups portal to document.body — that renders
+                // BEHIND the app-wide native-<dialog> renderer's top-layer
+                // (showModal(), unbeatable by z-index), making them
+                // unclickable. The classic div-based overlay doesn't use the
+                // top layer, so normal stacking lets the popups show through.
+                renderer: DialogDomRendererClassic,
+                options: { lock: true, startingZIndex: 1000 },
+            })
             .whenClosed((r) => r)
         if (typeof result === 'object' && result !== null && 'status' in result && (result as any).status === 'ok') {
             await this.router.load('workspace')
