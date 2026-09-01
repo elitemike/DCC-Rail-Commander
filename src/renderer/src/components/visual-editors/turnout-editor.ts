@@ -311,9 +311,9 @@ export class TurnoutEditorCustomElement {
     /**
      * Switches the selected entry to a different turnout kind, converting to that kind's
      * shape (fresh sensible defaults for any newly-required fields) while preserving the
-     * fields common to every kind (id, description, comment, defaultState). This is the
-     * only way to create a non-SERVO entry today — + always starts a SERVO (see addEntry) —
-     * so it doubles as the "kind picker" for both new and existing entries.
+     * fields common to every kind (id, description, comment, defaultState). Used both for
+     * changing an existing entry's kind and, indirectly, by addEntry() below (which asks
+     * for the kind up front via TurnoutTypeDialog, then builds the shape the same way).
      */
     async updateType(type: TurnoutType): Promise<void> {
         if (!this.editBuffer || this.editBuffer.type === type) return
@@ -342,33 +342,53 @@ export class TurnoutEditorCustomElement {
     // ── Add / remove entries ──────────────────────────────────────────────────
     async addEntry(): Promise<void> {
         if (this.editBuffer !== null) this.commitBuffer()
+
+        // Ask which kind to create up front, rather than always creating a SERVO
+        // and making the user switch kind afterward via the detail panel's Kind
+        // dropdown.
+        const type = await this._pickType()
+        if (type === null) return
+
         const ts = this.state.turnouts
         const maxId = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
+        const base = { id: maxId, description: 'New Turnout', comment: '', defaultState: 'CLOSED' as TurnoutDefaultState }
 
-        // New entries always start as SERVO — pick the driving pin up front (Direct
-        // MCU pin, or a channel on a PWM-capable HAL board) before creating the
-        // entry, rather than silently assigning one and letting the user hunt
-        // for the pin field afterwards. Use updateType() afterward to switch kind.
-        const pin = await this._pickPin(this._nextFreeVpin())
-        if (pin === null) return
-
-        const newEntry: Turnout = {
-            type: 'SERVO',
-            id: maxId,
-            pin,
-            activeAngle: 400,
-            inactiveAngle: 100,
-            profile: 'Slow',
-            description: 'New Turnout',
-            comment: '',
-            defaultState: 'CLOSED',
+        let newEntry: Turnout
+        if (type === 'SERVO') {
+            // Pick the driving pin up front (Direct MCU pin, or a channel on a
+            // PWM-capable HAL board) before creating the entry, rather than
+            // silently assigning one and letting the user hunt for the pin
+            // field afterwards.
+            const pin = await this._pickPin(this._nextFreeVpin())
+            if (pin === null) return
+            newEntry = { ...base, type: 'SERVO', pin, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' }
+        } else if (type === 'DCC') {
+            newEntry = { ...base, type: 'DCC', addr: 0, subAddr: 0 }
+        } else if (type === 'DCCL') {
+            newEntry = { ...base, type: 'DCCL', addr: 0 }
+        } else if (type === 'PIN') {
+            newEntry = { ...base, type: 'PIN', pin: this._nextFreeVpin() }
+        } else {
+            newEntry = { ...base, type: 'VIRTUAL' }
         }
+
         this.state.addTurnoutEntry(newEntry)
         const idx = this.state.turnouts.length - 1
         this._setBuffer(idx, this.state.turnouts[idx])
-        // Jump straight into calibration so the user can set a sensible
-        // position before doing anything else.
-        void this.openServoCalibration()
+        // Servo entries jump straight into calibration so the user can set a
+        // sensible position before doing anything else.
+        if (type === 'SERVO') void this.openServoCalibration()
+    }
+
+    /** Opens the kind-picker popup. Returns the chosen kind, or null if cancelled. */
+    private async _pickType(): Promise<TurnoutType | null> {
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../dialogs/turnout-type-dialog').then(m => m.TurnoutTypeDialog).catch(() => null),
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return null
+        return (result.value as { type: TurnoutType }).type
     }
 
     /** Opens the small pin-select popup, pre-filled with `defaultPin`. Returns the chosen pin, or null if cancelled. */
