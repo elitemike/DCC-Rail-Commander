@@ -138,10 +138,15 @@ export class DeviceWizard {
         const opts = defaultCommandStationConfig()
         Object.assign(opts, parseMyAutomationTrackManager(this.configEditorState.generatedTrackManagerContent))
         const perTrack = opts.startupPowerMode === 'individual'
+        const powerModeLabel = {
+            all: 'All tracks on at startup',
+            off: 'All tracks off at startup',
+            individual: 'Individual per-track power',
+        }[opts.startupPowerMode]
         const track = (label: string, mode: string, power: 'ON' | 'OFF'): string =>
             `${label}: ${mode}${perTrack ? ` (${power})` : ''}`
         const parts = [
-            perTrack ? 'Individual per-track power' : 'All tracks on at startup',
+            powerModeLabel,
             track('A', opts.trackAMode, opts.trackAPower),
             track('B', opts.trackBMode, opts.trackBPower),
         ]
