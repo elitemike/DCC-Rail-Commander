@@ -31,11 +31,12 @@ export class DeviceWizard {
     private readonly config = resolve(ConfigService)
     private readonly dialogService = resolve(IDialogService)
 
-    // ── Wizard step (0–3) ────────────────────────────────────────────────────
+    // ── Wizard step (0–2) ────────────────────────────────────────────────────
+    // Product is fixed to EX-CommandStation (the only product this version
+    // supports), so there is no separate product-selection step.
     step = 0
     readonly STEP_LABELS: StepModel[] = [
         { label: 'Select Device', iconCss: 'sf-icon-cart' },
-        { label: 'Select Product', iconCss: 'sf-icon-cart' },
         { label: 'Select Version', iconCss: 'sf-icon-cart' },
         { label: 'Confirm', iconCss: 'sf-icon-cart' },
     ];
@@ -46,22 +47,21 @@ export class DeviceWizard {
     scanning = false
     scanError: string | null = null
 
-    // ── Step 2: Product ──────────────────────────────────────────────────────
-    selectedProduct: string | null = null
-    readonly products = Object.entries(productDetails).map(([key, val]) => ({
-        key,
-        name: val.productName,
-        description: this.productDescription(key),
-    }))
+    // ── Product (fixed) ──────────────────────────────────────────────────────
+    readonly selectedProduct: string = 'ex_commandstation'
+    get productName(): string {
+        return productDetails[this.selectedProduct]?.productName ?? ''
+    }
 
-    // ── Step 3: Version ──────────────────────────────────────────────────────
+    // ── Step 1: Version ──────────────────────────────────────────────────────
     versions: string[] = []
     selectedVersion: string | null = null
+    recommendedVersion: string | null = null
     versionBusy = false
     versionStatus = ''
     versionError: string | null = null
 
-    // ── Step 4: Confirm ──────────────────────────────────────────────────────
+    // ── Step 2: Confirm ──────────────────────────────────────────────────────
     deviceNickname = ''
     hasStackedMotorShield = false
 
@@ -135,16 +135,6 @@ export class DeviceWizard {
         }
     }
 
-    // ── Step 2: Product ──────────────────────────────────────────────────────
-    private productDescription(key: string): string {
-        const desc: Record<string, string> = {
-            ex_commandstation: 'Full DCC command station for model railroads',
-            ex_ioexpander: 'Expands I/O pins via I\u00b2C',
-            ex_turntable: 'Controls a turntable or traverser',
-        }
-        return desc[key] ?? ''
-    }
-
     private applyCsb1MotorShieldType(content: string): string {
         if (!this.showStackedMotorShieldOption) return content
 
@@ -197,7 +187,8 @@ export class DeviceWizard {
             this.versionStatus = 'Loading version list...'
             const tags = await this.git.listTags(repoPath)
             this.versions = sortVersionsDescending(tags)
-            this.selectedVersion = pickLatestVersion(this.versions)
+            this.recommendedVersion = pickLatestVersion(this.versions)
+            this.selectedVersion = this.recommendedVersion
             this.versionStatus = ''
         } catch (err) {
             this.versionError = (err as Error).message
@@ -208,22 +199,21 @@ export class DeviceWizard {
 
     // ── Navigation ───────────────────────────────────────────────────────────
     get canGoNext(): boolean {
-        if (this.step === 0) return this.selectedBoard !== null
-        if (this.step === 1) return this.selectedProduct !== null
-        if (this.step === 2) return this.selectedVersion !== null && !this.versionBusy
-        if (this.step === 3) return this.deviceNickname.trim().length > 0
+        if (this.step === 0) return this.selectedBoard !== null && this.isDeviceSupported(this.selectedProduct)
+        if (this.step === 1) return this.selectedVersion !== null && !this.versionBusy
+        if (this.step === 2) return this.deviceNickname.trim().length > 0
         return false
     }
 
     async goNext(): Promise<void> {
         if (!this.canGoNext) return
-        if (this.step === 3) {
+        if (this.step === 2) {
             await this.finish()
             return
         }
         this.step++
         this.sfStepper?.nextStep();
-        if (this.step === 2) await this.loadVersions()
+        if (this.step === 1) await this.loadVersions()
     }
 
     goBack(): void {
