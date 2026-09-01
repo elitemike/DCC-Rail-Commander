@@ -425,6 +425,27 @@ test.describe('Startup Editor — myStartup.h', () => {
         await expect(csb1StackedPage.locator('startup-editor div.monaco-editor')).toContainText('SET_POWER(D,ON)')
     })
 
+    test('regression: toggling TrackManager Startup power to "All tracks off" writes POWEROFF to myStartup.h', async ({ workspacePage }) => {
+        await openStartupTab(workspacePage)
+
+        const startupDdl = workspacePage.locator('track-manager-form .e-ddl:visible').first()
+        await startupDdl.click()
+        await workspacePage.waitForTimeout(200)
+        await workspacePage.locator('li.e-list-item', { hasText: 'All tracks off (POWEROFF)' }).first().click()
+        await workspacePage.waitForTimeout(200)
+
+        // Per-track power dropdowns are only shown for "Individual" mode.
+        await expect(workspacePage.getByText('Individual tracks (SET_POWER)')).toHaveCount(0)
+
+        await workspacePage.locator('startup-editor').getByRole('button', { name: 'Raw' }).click()
+        await expect(workspacePage.locator('startup-editor div.monaco-editor')).toBeVisible()
+        await workspacePage.waitForTimeout(300)
+
+        await expect(workspacePage.locator('startup-editor div.monaco-editor')).toContainText('POWEROFF')
+        await expect(workspacePage.locator('startup-editor div.monaco-editor')).not.toContainText('POWERON')
+        await expect(workspacePage.locator('startup-editor div.monaco-editor')).not.toContainText('SET_POWER(')
+    })
+
     // ── Regression: switching motor driver away from stacked must clear Track C/D ─
     //
     // hasStackedMotorShield is derived solely from Device Settings' motor driver,
