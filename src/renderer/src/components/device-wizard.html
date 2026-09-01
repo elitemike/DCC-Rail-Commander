@@ -159,12 +159,16 @@
                     </div>
                 </div>
 
-                <!-- ─── Step 3: Display (EX-CSB1 only) ──────────────────── -->
+                <!-- ─── Step 3: Hardware (EX-CSB1 only) ─────────────────── -->
                 <!-- OLED display type/scroll mode plus the stacked motor
                      shield choice share one pane — both are config.h
-                     device-hardware settings. -->
+                     device-hardware settings — but stay visually separated
+                     (own subheading + divider) since they're logically
+                     unrelated hardware choices. -->
                 <div if.bind="step === 3" class="space-y-4">
-                    <p class="text-gray-700 dark:text-gray-300 text-sm">Display and motor shield settings for this EX-CSB1.</p>
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Hardware settings for this EX-CSB1.</p>
+
+                    <h3 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">Display</h3>
 
                     <div class="bg-blue-900/20 border border-blue-500/20 rounded-xl p-3 text-blue-300 text-sm">
                         EX-CSB1 boards typically use a 132×64 OLED display. If your screen doesn't display
@@ -186,6 +190,10 @@
                             <option repeat.for="s of scrollModes" model.bind="s.value">${s.label}</option>
                         </select>
                     </div>
+
+                    <hr class="border-gray-200 dark:border-white/10" />
+
+                    <h3 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">Motor Drive</h3>
 
                     <div if.bind="showStackedMotorShieldOption"
                         class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5">
