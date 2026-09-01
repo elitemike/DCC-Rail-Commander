@@ -1,6 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
-import { IDialogService } from '@aurelia/dialog'
+import { IDialogService, DialogDomRendererClassic } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
 import { ToastService } from '../services/toast.service'
 import { ConfigEditorState } from '../models/config-editor-state'
@@ -20,7 +20,6 @@ import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDe
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
-import { generateMyAutomation } from '../config/commandstation'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -852,37 +851,20 @@ export class Workspace {
     }
 
     /**
-     * Applies track-power/roster answers collected by DeviceWizard's extended
-     * EX-CSB1 flow (see InstallerState.pendingWizardSetup) — deferred here
-     * because it must go through ConfigEditorState, which isn't loaded from
-     * the wizard's freshly-written configFiles until loadFromInstallerState()
-     * runs (right before this is called, in both binding() and
-     * switchToConfig()). Writing myStartup.h's TrackManager block or the
-     * roster entry directly from the wizard would get silently wiped by the
-     * next Startup-section touch — see ConfigEditorState._ensureStartupFile().
+     * Applies the roster answer collected by DeviceWizard's extended EX-CSB1
+     * flow (see InstallerState.pendingWizardSetup) — deferred here because it
+     * must go through ConfigEditorState.addRosterEntry(), which isn't loaded
+     * from the wizard's freshly-written configFiles until
+     * loadFromInstallerState() runs (right before this is called, in both
+     * binding() and switchToConfig()). Track Power doesn't need this: the
+     * wizard mounts the same live <track-manager-form> the Startup section
+     * uses, so it already writes straight through ConfigEditorState during
+     * the wizard itself.
      */
     private applyPendingWizardSetup(): void {
         const pending = this.state.pendingWizardSetup
         if (!pending) return
         this.state.pendingWizardSetup = null
-
-        this.configEditorState.syncTrackManager(generateMyAutomation({
-            enablePowerOnStart: true,
-            hasStackedMotorShield: pending.trackPower.hasStackedMotorShield,
-            startupPowerMode: pending.trackPower.startupPowerMode,
-            trackAMode: pending.trackPower.trackAMode,
-            trackALocoId: pending.trackPower.trackALocoId,
-            trackAPower: pending.trackPower.trackAPower,
-            trackBMode: pending.trackPower.trackBMode,
-            trackBLocoId: pending.trackPower.trackBLocoId,
-            trackBPower: pending.trackPower.trackBPower,
-            trackCMode: pending.trackPower.trackCMode,
-            trackCLocoId: pending.trackPower.trackCLocoId,
-            trackCPower: pending.trackPower.trackCPower,
-            trackDMode: pending.trackPower.trackDMode,
-            trackDLocoId: pending.trackPower.trackDLocoId,
-            trackDPower: pending.trackPower.trackDPower,
-        }))
 
         if (pending.addFirstRosterEntry) {
             this.configEditorState.addRosterEntry({ dccAddress: 1, name: 'New Loco 1', functions: [], comment: '' })
@@ -1317,7 +1299,13 @@ export class Workspace {
         this.showDeviceMenu = false
         this.state.reset()
         const result = await this.dialogService
-            .open({ component: () => DeviceWizard })
+            .open({
+                // See home.ts's openNewDevice() for why this dialog needs
+                // the classic (non-native-<dialog>) renderer.
+                component: () => DeviceWizard,
+                renderer: DialogDomRendererClassic,
+                options: { lock: true, startingZIndex: 1000 },
+            })
             .whenClosed((r) => r)
         if (typeof result === 'object' && result !== null && 'status' in result && (result as any).status === 'ok') {
             await this.loadSavedConfigs()

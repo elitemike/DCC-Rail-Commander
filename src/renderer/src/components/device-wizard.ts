@@ -2,6 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogController } from '@aurelia/dialog'
 import { StepModel, Stepper } from '@syncfusion/ej2-navigations'
 import { InstallerState } from '../models/installer-state'
+import { ConfigEditorState } from '../models/config-editor-state'
 import { PlatformIoService } from '../services/platformio.service'
 import { UsbService } from '../services/usb.service'
 import { GitService } from '../services/git.service'
@@ -28,6 +29,7 @@ export class DeviceWizard {
     private readonly $dialog = resolve(IDialogController)
 
     private readonly state = resolve(InstallerState)
+    private readonly configEditorState = resolve(ConfigEditorState)
     private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
     private readonly git = resolve(GitService)
@@ -103,67 +105,16 @@ export class DeviceWizard {
     ]
 
     // ── Step 5: Track Power (EX-CSB1 only) ───────────────────────────────────
-    // Mirrors track-manager-form.ts's fields/options exactly (same DCC/DC/
-    // Mixed modes, per-track type, and PROG support), but with plain HTML
-    // controls instead of that component's Syncfusion DropDownLists — a
-    // Syncfusion popup portals to document.body, which renders BEHIND a
-    // native <dialog> shown via showModal() (the browser's top-layer always
-    // wins over regular body content, no matter the z-index), making those
-    // dropdowns unclickable inside this wizard. Applied on Finish via
-    // InstallerState.pendingWizardSetup, same as the roster prompt.
-    trackManagerMode: 'dcc-only' | 'dc-only' | 'mixed' = 'dcc-only'
-    trackAMode = 'MAIN'
-    trackAType: 'dcc' | 'dc' = 'dcc'
-    trackALocoId = 0
-    trackBMode = 'PROG'
-    trackBType: 'dcc' | 'dc' = 'dcc'
-    trackBLocoId = 0
-    trackCMode = 'MAIN'
-    trackCType: 'dcc' | 'dc' = 'dcc'
-    trackCLocoId = 0
-    trackDMode = 'MAIN'
-    trackDType: 'dcc' | 'dc' = 'dcc'
-    trackDLocoId = 0
-    trackPowerMode: 'all' | 'individual' = 'all'
-    trackAPower: 'ON' | 'OFF' = 'ON'
-    trackBPower: 'ON' | 'OFF' = 'ON'
-    trackCPower: 'ON' | 'OFF' = 'ON'
-    trackDPower: 'ON' | 'OFF' = 'ON'
-    readonly dccModes = ['MAIN', 'MAIN_INV', 'MAIN_AUTO', 'PROG', 'NONE']
-    readonly dcModes = ['DC', 'DC_INV', 'DCX', 'NONE']
-
-    get trackManagerModeMixed(): boolean {
-        return this.trackManagerMode === 'mixed'
-    }
-
-    getTrackModeOptions(trackType: 'dcc' | 'dc'): string[] {
-        if (this.trackManagerMode === 'dcc-only') return this.dccModes
-        if (this.trackManagerMode === 'dc-only') return this.dcModes
-        return trackType === 'dcc' ? this.dccModes : this.dcModes
-    }
-
-    /** Switching Track Configuration mode resets every track to a valid type/mode for it. */
-    onTrackManagerModeChange(): void {
-        const type: 'dcc' | 'dc' = this.trackManagerMode === 'dc-only' ? 'dc' : 'dcc'
-        if (this.trackManagerMode !== 'mixed') {
-            this.trackAType = type
-            this.trackBType = type
-            this.trackCType = type
-            this.trackDType = type
-        }
-        this.trackAMode = this.getTrackModeOptions(this.trackAType)[0]
-        this.trackBMode = this.getTrackModeOptions(this.trackBType)[0]
-        this.trackCMode = this.getTrackModeOptions(this.trackCType)[0]
-        this.trackDMode = this.getTrackModeOptions(this.trackDType)[0]
-    }
-
-    /** Switching a track's type (mixed mode only) resets its mode to something valid for the new type. */
-    onTrackTypeChange(track: 'A' | 'B' | 'C' | 'D'): void {
-        if (track === 'A') this.trackAMode = this.getTrackModeOptions(this.trackAType)[0]
-        else if (track === 'B') this.trackBMode = this.getTrackModeOptions(this.trackBType)[0]
-        else if (track === 'C') this.trackCMode = this.getTrackModeOptions(this.trackCType)[0]
-        else this.trackDMode = this.getTrackModeOptions(this.trackDType)[0]
-    }
+    // Rendered live by <track-manager-form>, the same component the Startup
+    // section uses — it reads/writes ConfigEditorState directly, so there is
+    // no wizard-local state to track here. See goNext()'s step===2 handler,
+    // which loads ConfigEditorState from the freshly-provisioned device
+    // before this step becomes reachable. The dialog is opened with
+    // DialogDomRendererClassic (see home.ts/workspace.ts) specifically so
+    // this component's Syncfusion dropdown popups render correctly — they
+    // portal to document.body, which paints BEHIND a native <dialog> shown
+    // via showModal() no matter the z-index (browser top-layer rules), so
+    // the default DialogDomRendererStandard can't host this component.
 
     // ── Step 6: Roster (EX-CSB1 only) ────────────────────────────────────────
     addFirstRosterEntry = true
@@ -329,6 +280,12 @@ export class DeviceWizard {
             const id = await this.provision()
             if (!id) return
             if (this.isCsb1Board) {
+                // Load ConfigEditorState from the config.h/etc. provision()
+                // just wrote for THIS device, so the WiFi/OLED/Track Power
+                // steps — track-manager-form in particular — read and write
+                // this device's own state, not whatever the previous device
+                // left behind in the shared singleton.
+                this.configEditorState.loadFromInstallerState()
                 this.step++
                 this.sfStepper?.nextStep();
             } else {
@@ -547,23 +504,12 @@ export class DeviceWizard {
                     }
                 }
 
+                // Track Power was already written live to ConfigEditorState by
+                // <track-manager-form> during the wizard (see goNext()'s
+                // step===2 handler) — only the roster prompt still needs to be
+                // deferred, since it's collected as a plain yes/no choice here
+                // rather than through a live-mounted editor.
                 this.state.pendingWizardSetup = {
-                    trackPower: {
-                        hasStackedMotorShield: this.hasStackedMotorShield,
-                        startupPowerMode: this.trackPowerMode,
-                        trackAMode: this.trackAMode,
-                        trackALocoId: this.trackALocoId,
-                        trackAPower: this.trackAPower,
-                        trackBMode: this.trackBMode,
-                        trackBLocoId: this.trackBLocoId,
-                        trackBPower: this.trackBPower,
-                        trackCMode: this.trackCMode,
-                        trackCLocoId: this.trackCLocoId,
-                        trackCPower: this.trackCPower,
-                        trackDMode: this.trackDMode,
-                        trackDLocoId: this.trackDLocoId,
-                        trackDPower: this.trackDPower,
-                    },
                     addFirstRosterEntry: this.addFirstRosterEntry,
                 }
             }

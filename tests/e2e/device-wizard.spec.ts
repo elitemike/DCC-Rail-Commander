@@ -22,7 +22,12 @@ async function finishCsb1Wizard(
     await page.getByRole('button', { name: 'Next' }).click()
 
     await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByRole('dialog').getByRole('combobox').first()).toBeVisible({ timeout: 60_000 })
+    // The wizard is opened with DialogDomRendererClassic (a plain
+    // <au-dialog-container> div, not a native <dialog>) so <track-manager-form>'s
+    // Syncfusion popups render correctly — see home.ts/workspace.ts. Scope
+    // through that tag instead of getByRole('dialog'), which only native
+    // <dialog> elements get for free.
+    await expect(page.locator('au-dialog-container').getByRole('combobox').first()).toBeVisible({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Next' }).click()
 
     await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
@@ -136,20 +141,28 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: Track Power — mirrors track-manager-form.ts's own fields, so
-    // it supports DCC/DC/Mixed and programming just like the Startup section ──
+    // ── Step: Track Power — the same live <track-manager-form> the Startup
+    // section uses, so it supports DCC/DC/Mixed and programming just like it ──
     await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
     await expect(page.getByText('Mixed (DCC and DC)')).toBeVisible()
     await page.getByText('Mixed (DCC and DC)').click()
+    await page.waitForTimeout(300)
     // Set Track A to PROG (the programming track) — proves mode switching,
     // including programming, works the same as the Startup section's form.
-    const trackAModeSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'PROG' }) }).first()
-    await trackAModeSelect.selectOption('PROG')
+    // DDL order: [0] Startup power, [1] Track A mode, [2] Track A power
+    // (hidden until "Individual"), [3] Track B mode, [4] Track B power.
+    await page.locator('track-manager-form .e-ddl').nth(1).click()
+    await page.waitForTimeout(200)
+    await page.locator('li.e-list-item', { hasText: 'PROG' }).first().click()
+    await page.waitForTimeout(300)
     // Switch to individual per-track power — together with the mode change
     // above, this guarantees myStartup.h actually changes, unlike leaving
     // everything at its firmware default (which generates no AUTOSTART block
     // at all).
-    await page.locator('select').filter({ has: page.locator('option', { hasText: 'POWERON' }) }).selectOption('individual')
+    await page.locator('track-manager-form .e-ddl').first().click()
+    await page.waitForTimeout(200)
+    await page.getByText('Individual tracks (SET_POWER)').click()
+    await page.waitForTimeout(300)
     await page.getByRole('button', { name: 'Next' }).click()
 
     // ── Step: Roster — accept "add my first entry" and finish ──────────────

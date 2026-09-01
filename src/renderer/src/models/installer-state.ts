@@ -69,31 +69,15 @@ export class InstallerState {
 
     /**
      * One-shot signal set by DeviceWizard's completeWizard() when the CSB1
-     * extended flow collected track-power/roster answers that can only be
-     * applied safely through ConfigEditorState (myStartup.h's managed
-     * TrackManager block would be silently wiped by the next Startup-section
-     * touch if written as raw file content instead — see
-     * ConfigEditorState._ensureStartupFile()). Consumed (and cleared) by
-     * workspace.ts's applyPendingWizardSetup(), called right after
-     * loadFromInstallerState() in both binding() and switchToConfig().
+     * extended flow's roster prompt ("add my first entry?") needs to be
+     * applied through ConfigEditorState.addRosterEntry() once it's loaded —
+     * it's just a yes/no choice collected in the wizard, not a live-mounted
+     * editor, so unlike Track Power (written live by <track-manager-form>
+     * during the wizard itself) it can't apply itself immediately. Consumed
+     * (and cleared) by workspace.ts's applyPendingWizardSetup(), called right
+     * after loadFromInstallerState() in both binding() and switchToConfig().
      */
     pendingWizardSetup: {
-        trackPower: {
-            hasStackedMotorShield: boolean
-            startupPowerMode: 'all' | 'individual'
-            trackAMode: string
-            trackALocoId: number
-            trackAPower: 'ON' | 'OFF'
-            trackBMode: string
-            trackBLocoId: number
-            trackBPower: 'ON' | 'OFF'
-            trackCMode: string
-            trackCLocoId: number
-            trackCPower: 'ON' | 'OFF'
-            trackDMode: string
-            trackDLocoId: number
-            trackDPower: 'ON' | 'OFF'
-        }
         addFirstRosterEntry: boolean
     } | null = null
 
