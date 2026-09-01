@@ -67,6 +67,28 @@ export class InstallerState {
      */
     pendingMigrationOnLoad = false
 
+    /**
+     * One-shot signal set by DeviceWizard's completeWizard() when the CSB1
+     * extended flow collected track-power/roster answers that can only be
+     * applied safely through ConfigEditorState (myStartup.h's managed
+     * TrackManager block would be silently wiped by the next Startup-section
+     * touch if written as raw file content instead — see
+     * ConfigEditorState._ensureStartupFile()). Consumed (and cleared) by
+     * workspace.ts's applyPendingWizardSetup(), called right after
+     * loadFromInstallerState() in both binding() and switchToConfig().
+     */
+    pendingWizardSetup: {
+        trackPower: {
+            hasStackedMotorShield: boolean
+            startupPowerMode: 'all' | 'individual'
+            trackAPower: 'ON' | 'OFF'
+            trackBPower: 'ON' | 'OFF'
+            trackCPower: 'ON' | 'OFF'
+            trackDPower: 'ON' | 'OFF'
+        }
+        addFirstRosterEntry: boolean
+    } | null = null
+
     reset(): void {
         this.toolchainReady = false
         this.selectedDevice = null
@@ -82,6 +104,7 @@ export class InstallerState {
         this.detectedBoards = []
         this.activeConfigId = null
         this.pendingMigrationOnLoad = false
+        this.pendingWizardSetup = null
         // NOTE: savedConfigurations is intentionally NOT reset — it persists across wizard runs
     }
 }

@@ -131,7 +131,7 @@
 
                     <div>
                         <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Device Name</label>
-                        <input value.bind="deviceNickname" type="text" placeholder="e.g. My Layout Controller"
+                        <input value.bind="deviceNickname" type="text" placeholder="e.g. My Layout Controller" data-testid="wizard-device-nickname"
                             class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
                         <p class="text-gray-500 text-xs mt-1.5">A friendly name to identify this device in DCC-Rail-Commander.
                         </p>
@@ -154,6 +154,153 @@
                     </div>
                 </div>
 
+                <!-- ─── Step 3: WiFi (EX-CSB1 only) ─────────────────────── -->
+                <div if.bind="step === 3" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Set up WiFi for this EX-CSB1.</p>
+
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="wifiMode" model.bind="'ap'" checked.bind="wifiMode" />
+                            Access Point (create network)
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="wifiMode" model.bind="'sta'" checked.bind="wifiMode" />
+                            Station (join existing network)
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Hostname</label>
+                        <input value.bind="wifiHostname" type="text" placeholder="dccex"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">
+                            Network Name (SSID)${wifiMode === 'ap' ? ' — optional' : ''}
+                        </label>
+                        <input value.bind="wifiSsid" type="text" data-testid="wizard-wifi-ssid"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">
+                            Password${wifiMode === 'ap' ? ' — optional' : ''}
+                        </label>
+                        <input value.bind="wifiPassword" type="password"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                    </div>
+
+                    <div if.bind="wifiMode === 'ap'">
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Channel</label>
+                        <input value.bind="wifiChannel" type="number" min="1" max="11"
+                            class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                    </div>
+                </div>
+
+                <!-- ─── Step 4: OLED Display (EX-CSB1 only) ─────────────── -->
+                <div if.bind="step === 4" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Suggested OLED display settings for this EX-CSB1.</p>
+
+                    <div class="bg-blue-900/20 border border-blue-500/20 rounded-xl p-3 text-blue-300 text-sm">
+                        EX-CSB1 boards typically use a 132×64 OLED display. If your screen doesn't display
+                        correctly, try a different display type below.
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Display Type</label>
+                        <select value.bind="oledDisplay" data-testid="wizard-oled-display"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                            <option repeat.for="d of displays" value.bind="d.value">${d.label}</option>
+                        </select>
+                    </div>
+
+                    <div if.bind="oledDisplay !== 'NONE'">
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Scroll Mode</label>
+                        <select value.bind="oledScrollMode"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                            <option repeat.for="s of scrollModes" model.bind="s.value">${s.label}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ─── Step 5: Track Power (EX-CSB1 only) ──────────────── -->
+                <div if.bind="step === 5" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Choose how track power behaves on startup.</p>
+
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="trackPowerMode" model.bind="'all'" checked.bind="trackPowerMode" />
+                            All tracks on at startup
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="trackPowerMode" model.bind="'individual'" checked.bind="trackPowerMode" />
+                            Choose power per track
+                        </label>
+                    </div>
+
+                    <div if.bind="trackPowerMode === 'individual'" class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Track A</label>
+                            <select value.bind="trackAPower"
+                                class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                                <option>ON</option>
+                                <option>OFF</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Track B</label>
+                            <select value.bind="trackBPower"
+                                class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                                <option>ON</option>
+                                <option>OFF</option>
+                            </select>
+                        </div>
+                        <div if.bind="hasStackedMotorShield">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Track C</label>
+                            <select value.bind="trackCPower"
+                                class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                                <option>ON</option>
+                                <option>OFF</option>
+                            </select>
+                        </div>
+                        <div if.bind="hasStackedMotorShield">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Track D</label>
+                            <select value.bind="trackDPower"
+                                class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                                <option>ON</option>
+                                <option>OFF</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── Step 6: Roster (EX-CSB1 only) ───────────────────── -->
+                <div if.bind="step === 6" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Would you like to add your first roster entry now?</p>
+
+                    <button click.trigger="addFirstRosterEntry = true" class="w-full text-left border rounded-xl p-3.5 transition-all"
+                        class.bind="addFirstRosterEntry
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50'
+                        : 'border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-900/10 dark:hover:bg-white/10'">
+                        <p class="text-gray-900 dark:text-white text-sm font-medium">Add my first roster entry</p>
+                        <p class="text-gray-500 dark:text-gray-400 text-xs mt-0.5">Opens the Roster editor with a new entry ready to name.</p>
+                    </button>
+
+                    <button click.trigger="addFirstRosterEntry = false" class="w-full text-left border rounded-xl p-3.5 transition-all"
+                        class.bind="!addFirstRosterEntry
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50'
+                        : 'border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-900/10 dark:hover:bg-white/10'">
+                        <p class="text-gray-900 dark:text-white text-sm font-medium">Skip for now</p>
+                        <p class="text-gray-500 dark:text-gray-400 text-xs mt-0.5">You can add locomotives to the roster at any time.</p>
+                    </button>
+
+                    <div if.bind="finishError"
+                        class="bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-red-300 text-sm">
+                        Setup failed: ${finishError}
+                    </div>
+                </div>
+
             </div>
 
         </div>
@@ -169,7 +316,7 @@
                 </button>
                 <button click.trigger="goNext()" disabled.bind="!canGoNext || finishing || versionBusy"
                     class="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white text-sm font-semibold transition-colors">
-                    ${finishing ? 'Setting up...' : (step === 2 ? 'Finish' : 'Next')}
+                    ${finishing ? 'Setting up...' : (isLastStep ? 'Finish' : 'Next')}
                 </button>
             </div>
         </div>

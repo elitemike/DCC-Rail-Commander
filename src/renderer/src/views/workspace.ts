@@ -20,6 +20,7 @@ import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDe
 import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
+import { generateMyAutomation } from '../config/commandstation'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -296,6 +297,7 @@ export class Workspace {
             this.configEditorState.hasChanges = true
             this.state.pendingMigrationOnLoad = false
         }
+        this.applyPendingWizardSetup()
         this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
         this.showMonitorOnConnect = (await this.preferences.get<boolean>('showMonitorOnConnect')) ?? true
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
@@ -849,6 +851,48 @@ export class Workspace {
         })
     }
 
+    /**
+     * Applies track-power/roster answers collected by DeviceWizard's extended
+     * EX-CSB1 flow (see InstallerState.pendingWizardSetup) — deferred here
+     * because it must go through ConfigEditorState, which isn't loaded from
+     * the wizard's freshly-written configFiles until loadFromInstallerState()
+     * runs (right before this is called, in both binding() and
+     * switchToConfig()). Writing myStartup.h's TrackManager block or the
+     * roster entry directly from the wizard would get silently wiped by the
+     * next Startup-section touch — see ConfigEditorState._ensureStartupFile().
+     */
+    private applyPendingWizardSetup(): void {
+        const pending = this.state.pendingWizardSetup
+        if (!pending) return
+        this.state.pendingWizardSetup = null
+
+        this.configEditorState.syncTrackManager(generateMyAutomation({
+            enablePowerOnStart: true,
+            hasStackedMotorShield: pending.trackPower.hasStackedMotorShield,
+            startupPowerMode: pending.trackPower.startupPowerMode,
+            trackAMode: 'MAIN',
+            trackALocoId: 0,
+            trackAPower: pending.trackPower.trackAPower,
+            trackBMode: 'PROG',
+            trackBLocoId: 0,
+            trackBPower: pending.trackPower.trackBPower,
+            trackCMode: 'MAIN',
+            trackCLocoId: 0,
+            trackCPower: pending.trackPower.trackCPower,
+            trackDMode: 'MAIN',
+            trackDLocoId: 0,
+            trackDPower: pending.trackPower.trackDPower,
+        }))
+
+        if (pending.addFirstRosterEntry) {
+            this.configEditorState.addRosterEntry({ dccAddress: 1, name: 'New Loco 1', functions: [], comment: '' })
+            const idx = this.state.configFiles.findIndex((f) => f.name === 'myRoster.h')
+            if (idx !== -1) this.setActiveFile(idx)
+        }
+
+        void this.updateSavedConfig()
+    }
+
     private async updateSavedConfig(): Promise<void> {
         const id = this.state.activeConfigId
         if (!id) return
@@ -1253,6 +1297,7 @@ export class Workspace {
         // so components that parse `config.h` (e.g. commandstation form) see
         // updated values such as `MOTOR_SHIELD_TYPE` immediately.
         this.configEditorState.loadFromInstallerState()
+        this.applyPendingWizardSetup()
         // Notify any mounted components that the active config changed so they
         // can re-parse `config.h` and refresh UI state without requiring a
         // full reattach / reload.
