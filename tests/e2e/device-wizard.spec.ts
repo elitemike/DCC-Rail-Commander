@@ -35,7 +35,7 @@ async function finishCsb1Wizard(
     await expect(page.getByText('Suggested OLED display settings')).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
 
-    await expect(page.getByText('Choose how track power behaves on startup.')).toBeVisible()
+    await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
 
     await expect(page.getByText('Would you like to add your first roster entry now?')).toBeVisible()
@@ -136,8 +136,20 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
     await page.getByRole('button', { name: 'Next' }).click()
 
-    // ── Step: Track Power — accept the "all tracks on" default ─────────────
-    await expect(page.getByText('Choose how track power behaves on startup.')).toBeVisible()
+    // ── Step: Track Power — mirrors track-manager-form.ts's own fields, so
+    // it supports DCC/DC/Mixed and programming just like the Startup section ──
+    await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
+    await expect(page.getByText('Mixed (DCC and DC)')).toBeVisible()
+    await page.getByText('Mixed (DCC and DC)').click()
+    // Set Track A to PROG (the programming track) — proves mode switching,
+    // including programming, works the same as the Startup section's form.
+    const trackAModeSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'PROG' }) }).first()
+    await trackAModeSelect.selectOption('PROG')
+    // Switch to individual per-track power — together with the mode change
+    // above, this guarantees myStartup.h actually changes, unlike leaving
+    // everything at its firmware default (which generates no AUTOSTART block
+    // at all).
+    await page.locator('select').filter({ has: page.locator('option', { hasText: 'POWERON' }) }).selectOption('individual')
     await page.getByRole('button', { name: 'Next' }).click()
 
     // ── Step: Roster — accept "add my first entry" and finish ──────────────
@@ -162,6 +174,18 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
     // The first roster entry was added via ConfigEditorState (not written raw).
     await page.getByText('Roster', { exact: true }).first().click()
     await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
+
+    // The Track Power step's Track A → PROG and "Individual tracks" choices
+    // made it through to myStartup.h — proving the wizard's live
+    // <track-manager-form> writes survive into the final saved/on-disk
+    // config, not just the in-memory wizard session.
+    await page.getByTestId('nav-startup').click()
+    await page.locator('startup-editor').getByRole('button', { name: 'Raw' }).click()
+    await expect(page.locator('div.monaco-editor')).toBeVisible()
+    await page.waitForTimeout(400)
+    const startupContent = await getMonacoContent(page)
+    expect(startupContent).toContain('SET_TRACK(A,PROG)')
+    expect(startupContent).toContain('SET_POWER(A,ON)')
 })
 
 test('new device wizard: a second device never inherits an earlier device\'s roster/config', async ({ onboardingPage: page }) => {

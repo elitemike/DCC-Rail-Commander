@@ -81,9 +81,17 @@ export class InstallerState {
         trackPower: {
             hasStackedMotorShield: boolean
             startupPowerMode: 'all' | 'individual'
+            trackAMode: string
+            trackALocoId: number
             trackAPower: 'ON' | 'OFF'
+            trackBMode: string
+            trackBLocoId: number
             trackBPower: 'ON' | 'OFF'
+            trackCMode: string
+            trackCLocoId: number
             trackCPower: 'ON' | 'OFF'
+            trackDMode: string
+            trackDLocoId: number
             trackDPower: 'ON' | 'OFF'
         }
         addFirstRosterEntry: boolean
