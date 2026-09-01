@@ -120,6 +120,12 @@ test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Pow
 
     // ── Step: WiFi ───────────────────────────────────────────────────────────
     await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
+    // AP mode's SSID/password help text is the tallest content this step
+    // shows — the step container must fit it without scrolling.
+    const wifiContainer = page.locator('div.overflow-y-auto').first()
+    await expect
+        .poll(() => wifiContainer.evaluate((el) => el.scrollHeight - el.clientHeight))
+        .toBeLessThanOrEqual(1)
     await page.getByLabel('Station (join existing network)').check()
     await page.getByTestId('wizard-wifi-ssid').fill('MyHomeNetwork')
     await page.getByRole('button', { name: 'Next' }).click()
