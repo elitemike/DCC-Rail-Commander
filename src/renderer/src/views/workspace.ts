@@ -851,28 +851,20 @@ export class Workspace {
     }
 
     /**
-     * Applies the roster answer collected by DeviceWizard's extended EX-CSB1
-     * flow (see InstallerState.pendingWizardSetup) — deferred here because it
-     * must go through ConfigEditorState.addRosterEntry(), which isn't loaded
-     * from the wizard's freshly-written configFiles until
-     * loadFromInstallerState() runs (right before this is called, in both
-     * binding() and switchToConfig()). Track Power doesn't need this: the
-     * wizard mounts the same live <track-manager-form> the Startup section
-     * uses, so it already writes straight through ConfigEditorState during
-     * the wizard itself.
+     * Lands the workspace on the Roster editor right after DeviceWizard
+     * finishes (see InstallerState.pendingWizardOpenRoster) — Roster isn't a
+     * wizard step, this is just where a future onboarding tutorial will live.
+     * Deferred here (rather than done by the wizard itself) because
+     * myRoster.h isn't in state.configFiles until loadFromInstallerState()
+     * runs, right before this is called, in both binding() and
+     * switchToConfig().
      */
     private applyPendingWizardSetup(): void {
-        const pending = this.state.pendingWizardSetup
-        if (!pending) return
-        this.state.pendingWizardSetup = null
+        if (!this.state.pendingWizardOpenRoster) return
+        this.state.pendingWizardOpenRoster = false
 
-        if (pending.addFirstRosterEntry) {
-            this.configEditorState.addRosterEntry({ dccAddress: 1, name: 'New Loco 1', functions: [], comment: '' })
-            const idx = this.state.configFiles.findIndex((f) => f.name === 'myRoster.h')
-            if (idx !== -1) this.setActiveFile(idx)
-        }
-
-        void this.updateSavedConfig()
+        const idx = this.state.configFiles.findIndex((f) => f.name === 'myRoster.h')
+        if (idx !== -1) this.setActiveFile(idx)
     }
 
     private async updateSavedConfig(): Promise<void> {
