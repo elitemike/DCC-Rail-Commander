@@ -36,7 +36,7 @@ async function finishCsb1Wizard(
     await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
     await page.getByRole('button', { name: 'Next' }).click()
 
-    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
+    await expect(page.getByText('Hardware settings for this EX-CSB1')).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
 
     await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
@@ -83,7 +83,7 @@ test('new device wizard: no product step, recommends latest Prod tag, Confirm st
     await page.getByRole('button', { name: 'Next' }).click()
 
     // ── Step: Display — OLED + stacked motor shield share one pane ─────────
-    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
+    await expect(page.getByText('Hardware settings for this EX-CSB1')).toBeVisible()
     const shieldLabel = page.getByText('This EX-CSB1 has a stacked motor shield')
     await expect(shieldLabel).toBeVisible()
     await page.getByRole('button', { name: 'Next' }).click()
@@ -165,7 +165,7 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     await page.getByRole('button', { name: 'Next' }).click()
 
     // ── Step: Display — suggested 132x64 default, plus stacked shield ──────
-    await expect(page.getByText('Display and motor shield settings')).toBeVisible()
+    await expect(page.getByText('Hardware settings for this EX-CSB1')).toBeVisible()
     await expect(page.getByText("If your screen doesn't display correctly, try a different display type")).toBeVisible()
     await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
     await page.getByRole('button', { name: 'Next' }).click()

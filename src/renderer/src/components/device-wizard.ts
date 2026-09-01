@@ -41,7 +41,7 @@ export class DeviceWizard {
     // ── Wizard step (0–5) ────────────────────────────────────────────────────
     // Product is fixed to EX-CommandStation (the only product this version
     // supports), so there is no separate product-selection step. Steps 2–4
-    // (WiFi/Display/Track Power) only apply to EX-CSB1 boards — see
+    // (WiFi/Hardware/Track Power) only apply to EX-CSB1 boards — see
     // isCsb1Board — and are simply skipped straight to Confirm for any other
     // board (see goNext()'s step===1 handler). Confirm is always the last
     // step: it's where the device gets its name and a final review of every
@@ -51,7 +51,7 @@ export class DeviceWizard {
         { label: 'Select Device', iconCss: 'sf-icon-cart' },
         { label: 'Select Version', iconCss: 'sf-icon-cart' },
         { label: 'WiFi', iconCss: 'sf-icon-cart' },
-        { label: 'Display', iconCss: 'sf-icon-cart' },
+        { label: 'Hardware', iconCss: 'sf-icon-cart' },
         { label: 'Track Power', iconCss: 'sf-icon-cart' },
         { label: 'Confirm', iconCss: 'sf-icon-cart' },
     ];
@@ -83,7 +83,7 @@ export class DeviceWizard {
     wifiPassword = ''
     wifiChannel = 1
 
-    // ── Step 3: Display (EX-CSB1 only) ────────────────────────────────────────
+    // ── Step 3: Hardware (EX-CSB1 only) ───────────────────────────────────────
     // Combines the OLED display type/scroll mode with the stacked motor
     // shield choice — both are config.h device-hardware settings, so they
     // share one pane rather than each getting their own step.
@@ -272,7 +272,7 @@ export class DeviceWizard {
             if (!id) return
             if (this.isCsb1Board) {
                 // Load ConfigEditorState from the config.h/etc. provision()
-                // just wrote for THIS device, so the WiFi/Display/Track Power
+                // just wrote for THIS device, so the WiFi/Hardware/Track Power
                 // steps — track-manager-form in particular — read and write
                 // this device's own state, not whatever the previous device
                 // left behind in the shared singleton.
@@ -305,7 +305,7 @@ export class DeviceWizard {
 
         if (!this.isCsb1Board && this.step === 5) {
             // Mirror goNext()'s skip: non-CSB1 boards jump straight back to
-            // Version, since WiFi/Display/Track Power were never visited.
+            // Version, since WiFi/Hardware/Track Power were never visited.
             this.step = 1
             this.syncStepper()
             return
@@ -328,7 +328,7 @@ export class DeviceWizard {
     // ── Provision: create the device's repo/scratch dir + saved config ────────
     // Returns the new config's id on success, or null on failure (finishError
     // is set). Does not close the dialog — EX-CSB1 boards continue on to the
-    // WiFi/Display/Track Power/Confirm steps; completeWizard() closes it. Runs
+    // WiFi/Hardware/Track Power/Confirm steps; completeWizard() closes it. Runs
     // right after Version, before the device has a name (Confirm — where the
     // name is collected — is now the last step), so the saved config is
     // created with a blank name and completeWizard() fills it in.
