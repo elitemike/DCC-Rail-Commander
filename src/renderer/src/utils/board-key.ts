@@ -1,5 +1,3 @@
-import type { SavedConfiguration } from '../models/saved-configuration'
-
 /**
  * Identity and directory naming for a configured board.
  *
@@ -66,29 +64,4 @@ export function buildScratchPath(
     id: string,
 ): string {
     return `${reposDir}/_build/${boardDirSlug(board)}-${id}/${repoFolder}`
-}
-
-/**
- * Finds the saved configuration whose user files should seed a new one.
- *
- * Prefers the same physical board, then any board of the same type, and
- * otherwise gives up rather than silently importing another board's settings —
- * a user re-configuring a board keeps their work, and two different boards
- * never cross-feed.
- */
-export function findReusableConfig(
-    configs: SavedConfiguration[] | undefined,
-    product: string,
-    board: BoardIdentity,
-): SavedConfiguration | undefined {
-    if (!Array.isArray(configs)) return undefined
-    const candidates = configs.filter((c) => c.product === product && c.scratchPath)
-    const key = boardKey(board)
-
-    const sameBoard = candidates.find(
-        (c) => boardKey({ fqbn: c.deviceFqbn, serialNumber: c.deviceSerialNumber, port: c.devicePort }) === key,
-    )
-    if (sameBoard) return sameBoard
-
-    return candidates.find((c) => c.deviceFqbn === board.fqbn)
 }

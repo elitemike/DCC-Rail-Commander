@@ -19,9 +19,9 @@ import {
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
-import { isProductUserFile, copyProductSourceFiles } from '../utils/product-source-files'
+import { copyProductSourceFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
-import { buildScratchPath, findReusableConfig } from '../utils/board-key'
+import { buildScratchPath } from '../utils/board-key'
 
 export class DeviceWizard {
     /** Injected automatically by @aurelia/dialog */
@@ -360,32 +360,12 @@ export class DeviceWizard {
             const checkout = await this.git.checkout(repoPath, this.selectedVersion)
             if (!checkout.success) throw new Error(checkout.error ?? 'Checkout failed')
 
-            // ── Collect user-tracked file names ──────────────────────────────
-            // These are config.h, myAutomation, etc. — preserved across reconfigures.
-            const isUserFile = (name: string) => isProductUserFile(product, name)
-
-            // ── Save existing user files from previous scratchPath (if any) ──
-            // Prefer this exact board's previous configuration, then any config
-            // for the same board type — never another board's.
-            const prevConf = findReusableConfig(
-                this.state.savedConfigurations,
-                this.selectedProduct!,
-                boardIdentity,
-            )
-            const savedUserFiles: Map<string, string> = new Map()
-            if (prevConf?.scratchPath) {
-                try {
-                    const prevFiles = await this.files.listDir(prevConf.scratchPath)
-                    for (const name of prevFiles) {
-                        if (isUserFile(name)) {
-                            const content = await this.files.readFile(`${prevConf.scratchPath}/${name}`)
-                            if (content.trim()) savedUserFiles.set(name, content)
-                        }
-                    }
-                } catch { /* previous scratch dir may not exist */ }
-            }
-
             // ── Clear scratch dir and create fresh ───────────────────────────
+            // Every "Setup New Device" run is a distinct, independent
+            // configuration — it never seeds config.h/myRoster.h/etc. from any
+            // other saved configuration, even one for the same physical board,
+            // so multiple separate configurations for one board stay possible
+            // and a new device never inherits another one's roster/turnouts/etc.
             try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
             await this.files.mkdir(scratchPath)
 
@@ -393,18 +373,14 @@ export class DeviceWizard {
             await copyProductSourceFiles(this.files, product, repoPath, scratchPath)
 
             // ── Resolve user config files ────────────────────────────────────
-            // Priority: 1) previously-saved user edit
-            //           2) bundled starter template (curated, known-good default)
-            //           3) file in source repo
-            //           4) example file in source repo ("config.h.example")
-            //           5) example file in source repo ("config.example.h")
+            // Priority: 1) bundled starter template (curated, known-good default)
+            //           2) file in source repo
+            //           3) example file in source repo ("config.h.example")
+            //           4) example file in source repo ("config.example.h")
             const configFiles: Array<{ name: string; content: string }> = []
             for (const fileName of product.minimumConfigFiles) {
-                let content = savedUserFiles.get(fileName) ?? ''
-                if (!content) {
-                    // 2) bundled starter template
-                    content = STARTER_TEMPLATES[repoFolder]?.[fileName] ?? ''
-                }
+                // 1) bundled starter template
+                let content = STARTER_TEMPLATES[repoFolder]?.[fileName] ?? ''
                 if (!content) {
                     const filePath = `${repoPath}/${fileName}`
                     // Repos may name the example file either "config.h.example" or
@@ -428,14 +404,6 @@ export class DeviceWizard {
                 configFiles.push({ name: fileName, content })
                 console.debug('[device-wizard] writing starter config to scratch:', `${scratchPath}/${fileName}`)
                 await this.files.writeFile(`${scratchPath}/${fileName}`, content)
-            }
-            // Restore other tracked user files (myAutomation, etc.)
-            for (const [name, content] of savedUserFiles) {
-                if (!product.minimumConfigFiles.includes(name)) {
-                    configFiles.push({ name, content })
-                    console.debug('[device-wizard] restoring user file to scratch:', `${scratchPath}/${name}`)
-                    await this.files.writeFile(`${scratchPath}/${name}`, content)
-                }
             }
 
             // ── Update state ─────────────────────────────────────────────────
