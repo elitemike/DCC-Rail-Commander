@@ -71,6 +71,7 @@ import {
     hasUniqueHalCandidate,
     type HalDeviceInstance,
 } from '../config/hal-devices'
+export type { HalDeviceInstance }
 import { MANAGED_HAL_DEVICES_TAG } from './config-editor-state'
 
 export interface ImportFile {
@@ -119,6 +120,19 @@ export interface ImportResult {
     fileReports: ImportFileReport[]
     aliasReview: AliasReviewItem[]
     conflicts: ImportConflict[]
+    /** Every HAL accessory device merged across all old files — exposed (in addition to being
+     *  already baked into `configFiles`'s `myAutomation.h` entry) so a caller can prompt for real
+     *  labels on the ones still carrying a generic catalog default (`isDefaultLabel`) before
+     *  finalizing the import — see `buildHalDevicesFile()` below and home.ts's import flow. */
+    halDevices: HalDeviceInstance[]
+}
+
+/** Builds the `myAutomation.h`-entry-shaped `ImportFile` for a HAL Devices managed block — the
+ *  same shape `importExistingProject()`'s Step 4 emits, factored out so a caller can rebuild it
+ *  after editing device labels without duplicating the managed-block wrapping. */
+export function buildHalDevicesFile(devices: readonly HalDeviceInstance[]): ImportFile {
+    const block = [MANAGED_HAL_DEVICES_TAG, generateHalDevicesBlock(devices as HalDeviceInstance[]), MANAGED_HAL_DEVICES_TAG].join('\n')
+    return { name: 'myAutomation.h', content: block }
 }
 
 // ── Alias-name → numeric-value resolution ──────────────────────────────────
@@ -603,12 +617,11 @@ export function importExistingProject(files: readonly ImportFile[]): ImportResul
     configFiles.push({ name: 'myAliases.h', content: serializeAliasesToFile(aliasEntries) })
 
     if (halDevices.length > 0) {
-        const block = [MANAGED_HAL_DEVICES_TAG, generateHalDevicesBlock(halDevices), MANAGED_HAL_DEVICES_TAG].join('\n')
-        configFiles.push({ name: 'myAutomation.h', content: block })
+        configFiles.push(buildHalDevicesFile(halDevices))
     }
 
     const configH = files.find(f => f.name === 'config.h' || f.name === 'myConfig.h')
     if (configH) configFiles.push({ name: 'config.h', content: configH.content })
 
-    return { configFiles, fileReports, aliasReview, conflicts }
+    return { configFiles, fileReports, aliasReview, conflicts, halDevices }
 }

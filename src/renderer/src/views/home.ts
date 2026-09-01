@@ -16,7 +16,7 @@ import { productDetails } from '../models/product-details'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import { buildScratchPath } from '../utils/board-key'
-import { importExistingProject as runProjectImport } from '../models/project-importer'
+import { importExistingProject as runProjectImport, buildHalDevicesFile } from '../models/project-importer'
 
 /** File extensions we care about when scanning a loaded folder. */
 const HEADER_EXTENSIONS = ['.h']
@@ -351,6 +351,34 @@ export class Home {
         // own choice from here on, without changing the default new/other projects use.
         const strictAliasesChoice = (summaryOutcome as any).value as boolean
         this.configEditorState.strictAliases = strictAliasesChoice
+
+        // HAL accessory devices parsed from a bare, untagged `HAL(...)` line (the normal shape
+        // for a hand-written project) carry only the generic catalog board name — offer to label
+        // them now, before the import is finalized, since there's no other point where the
+        // original wiring context ("which MCP23017 is this") is still available. Optional: Skip
+        // leaves the generic names in place.
+        const defaultLabeledHalDevices = result.halDevices.filter(d => d.isDefaultLabel)
+        if (defaultLabeledHalDevices.length > 0) {
+            const { dialog: halLabelDialog } = await this.dialogService.open({
+                component: () =>
+                    import('../components/dialogs/hal-device-label-dialog').then(m => m.HalDeviceLabelDialog).catch(() => null),
+                model: { devices: defaultLabeledHalDevices },
+            })
+            const halLabelOutcome = await halLabelDialog.closed
+            if (halLabelOutcome.status === 'ok') {
+                const labels = (halLabelOutcome as any).value as Map<string, string>
+                if (labels.size > 0) {
+                    const updatedHalDevices = result.halDevices.map(d => {
+                        const custom = labels.get(d.instanceId)
+                        return custom ? { ...d, label: custom, isDefaultLabel: false } : d
+                    })
+                    const halFile = buildHalDevicesFile(updatedHalDevices)
+                    const idx = result.configFiles.findIndex(f => f.name === 'myAutomation.h')
+                    if (idx >= 0) result.configFiles[idx] = halFile
+                    else result.configFiles.push(halFile)
+                }
+            }
+        }
 
         const destFolder = await this.files.selectDirectory()
         if (!destFolder) return

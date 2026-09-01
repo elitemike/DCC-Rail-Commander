@@ -28,6 +28,13 @@ export interface HalDeviceInstance {
     parentMuxInstanceId?: string
     /** 0-based sub-bus channel on the parent multiplexer. */
     muxChannel?: number
+    /** True when `label` is still the generic catalog board name because nothing gave it a real
+     *  one — the untagged bare-`HAL(...)`-line parse (third pass below), the normal case for a
+     *  hand-written project being imported. Lets a caller (the existing-project importer) prompt
+     *  for a real label instead of leaving indistinguishable devices like "MCP23017 16-Channel
+     *  I/O Expander" x5. Never set for a first/second-pass parse — those come from this app's own
+     *  `// HAL(-MUX)(...)` comment, which always carries a real, previously-chosen label. */
+    isDefaultLabel?: boolean
 }
 
 /**
@@ -210,6 +217,7 @@ export function parseHalDevicesFromAutomation(content: string): HalDeviceInstanc
                         label: muxBoards[0].label,
                         address: muxAddress,
                         vpinStart: null,
+                        isDefaultLabel: true,
                     }
                     devices.push(parent)
                 }
@@ -225,6 +233,7 @@ export function parseHalDevicesFromAutomation(content: string): HalDeviceInstanc
             vpinStart,
             parentMuxInstanceId,
             muxChannel,
+            isDefaultLabel: true,
         })
     }
 

@@ -26,7 +26,7 @@ const STATUS_DOT: Record<ImportFileReport['status'], string> = {
 export class ImportSummaryDialog implements IDialogCustomElementViewModel {
     readonly $dialog = resolve(IDialogController)
 
-    result: ImportResult = { configFiles: [], fileReports: [], aliasReview: [], conflicts: [] }
+    result: ImportResult = { configFiles: [], fileReports: [], aliasReview: [], conflicts: [], halDevices: [] }
     outputFileCount = 0
     tab: Tab = 'files'
     selectedIndex = 0
