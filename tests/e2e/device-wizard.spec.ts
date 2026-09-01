@@ -79,6 +79,12 @@ test('new device wizard: no product step, recommends latest Prod tag, confirm st
     const shieldLabel = page.getByText('This EX-CSB1 has a stacked motor shield')
     await expect(shieldLabel).toBeVisible()
 
+    // Device Name defaults to "CSB1" and is focused as soon as the step shows,
+    // so the user can just start typing to replace it.
+    const nicknameInput = page.getByTestId('wizard-device-nickname')
+    await expect(nicknameInput).toHaveValue('CSB1')
+    await expect(nicknameInput).toBeFocused()
+
     // The stacked-motor-shield option must be visible without scrolling the
     // step container (the whole point of the dialog height bump).
     const container = page.locator('div.overflow-y-auto').first()
