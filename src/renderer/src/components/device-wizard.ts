@@ -74,6 +74,7 @@ export class DeviceWizard {
 
     // ── Step 2: Confirm ──────────────────────────────────────────────────────
     deviceNickname = ''
+    deviceNicknameEl?: HTMLInputElement
     hasStackedMotorShield = false
 
     // ── Step 3: WiFi (EX-CSB1 only) ──────────────────────────────────────────
@@ -288,13 +289,21 @@ export class DeviceWizard {
         this.step++
         this.sfStepper?.nextStep();
         if (this.step === 1) await this.loadVersions()
+        if (this.step === 2) this.enterConfirmStep()
     }
 
     goBack(): void {
         if (this.step > 0) {
             this.step--
             this.sfStepper?.previousStep();
+            if (this.step === 2) this.enterConfirmStep()
         }
+    }
+
+    private enterConfirmStep(): void {
+        if (this.isCsb1Board) this.deviceNickname ||= 'CSB1'
+        // Wait a tick — if.bind hasn't committed the step-2 DOM yet.
+        setTimeout(() => this.deviceNicknameEl?.focus(), 0)
     }
 
     cancel(): void {
