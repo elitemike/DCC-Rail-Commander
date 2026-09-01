@@ -5,6 +5,13 @@
 
 import { test, expect } from './fixtures'
 
+/** Get the current raw text in the Monaco editor (view-line based, no clipboard). */
+async function getMonacoContent(page: import('@playwright/test').Page): Promise<string> {
+    const lines = await page.locator('div.monaco-editor .view-line').allTextContents()
+    // Monaco uses non-breaking spaces ( ) in view-line rendering.
+    return lines.map((l) => l.replace(/\u00a0/g, ' ')).join('\n')
+}
+
 test('new device wizard: no product step, recommends latest Prod tag, confirm step needs no scroll', async ({ onboardingPage: page }) => {
     await page.getByText('New Device', { exact: true }).click()
 
@@ -42,4 +49,67 @@ test('new device wizard: no product step, recommends latest Prod tag, confirm st
     expect(containerBox).not.toBeNull()
     expect(labelBox).not.toBeNull()
     expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(containerBox!.y + containerBox!.height + 1)
+})
+
+test('new device wizard: EX-CSB1 continues past Confirm into WiFi/OLED/Track Power/Roster steps', async ({ onboardingPage: page }) => {
+    await page.getByText('New Device', { exact: true }).click()
+
+    // ── Step: Select Device ─────────────────────────────────────────────────
+    await expect(page.getByText('Select Device', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const boardButton = page.locator('button', { hasText: 'EX-CSB1' })
+    await expect(boardButton.first()).toBeVisible({ timeout: 15_000 })
+    await boardButton.first().click()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Select Version ────────────────────────────────────────────────
+    await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const versionSelect = page.locator('select')
+    await expect(versionSelect).toBeVisible({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Confirm — Next provisions the device but, for EX-CSB1, does
+    // NOT close the dialog: it continues on to WiFi instead ────────────────
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('wizard-device-nickname').fill('My CSB1 Layout')
+    await expect(page.getByRole('button', { name: 'Next' })).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: WiFi ───────────────────────────────────────────────────────────
+    await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
+    await page.getByLabel('Station (join existing network)').check()
+    await page.getByTestId('wizard-wifi-ssid').fill('MyHomeNetwork')
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: OLED Display — suggested 132x64 default, with the fallback note ──
+    await expect(page.getByText('Suggested OLED display settings')).toBeVisible()
+    await expect(page.getByText("If your screen doesn't display correctly, try a different display type")).toBeVisible()
+    await expect(page.getByTestId('wizard-oled-display')).toHaveValue('OLED_132x64')
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Track Power — accept the "all tracks on" default ─────────────
+    await expect(page.getByText('Choose how track power behaves on startup.')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Roster — accept "add my first entry" and finish ──────────────
+    await expect(page.getByText('Would you like to add your first roster entry now?')).toBeVisible()
+    await page.getByText('Add my first roster entry').click()
+    await expect(page.getByRole('button', { name: 'Finish' })).toBeVisible()
+    await page.getByRole('button', { name: 'Finish' }).click()
+
+    // ── Landed in the workspace ─────────────────────────────────────────────
+    await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
+
+    // config.h picked up the WiFi + OLED answers.
+    await page.getByTestId('nav-general-wifi').click()
+    await page.getByRole('button', { name: 'Raw' }).click()
+    await expect(page.locator('div.monaco-editor')).toBeVisible()
+    await page.waitForTimeout(400)
+    const configHContent = await getMonacoContent(page)
+    expect(configHContent).toContain('WIFI_SSID "MyHomeNetwork"')
+    expect(configHContent).toContain('ENABLE_WIFI true')
+    expect(configHContent).toContain('OLED_DRIVER 132,64')
+
+    // The first roster entry was added via ConfigEditorState (not written raw).
+    await page.getByText('Roster', { exact: true }).first().click()
+    await expect(page.getByText('New Loco 1')).toBeVisible({ timeout: 10_000 })
 })

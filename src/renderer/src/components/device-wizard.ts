@@ -11,6 +11,11 @@ import { ConfigService } from '../services/config.service'
 import { IDialogService } from '@aurelia/dialog'
 import { DevicePickerDialog } from './dialogs/device-picker-dialog'
 import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
+import {
+    type CommandStationConfigOptions,
+    parseCommandStationConfig,
+    generateCommandStationConfig,
+} from '../config/commandstation'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
@@ -31,14 +36,20 @@ export class DeviceWizard {
     private readonly config = resolve(ConfigService)
     private readonly dialogService = resolve(IDialogService)
 
-    // ── Wizard step (0–2) ────────────────────────────────────────────────────
+    // ── Wizard step (0–6) ────────────────────────────────────────────────────
     // Product is fixed to EX-CommandStation (the only product this version
-    // supports), so there is no separate product-selection step.
+    // supports), so there is no separate product-selection step. Steps 3–6
+    // (WiFi/OLED/Track Power/Roster) only apply to EX-CSB1 boards — see
+    // isCsb1Board — and are simply never visited for any other board.
     step = 0
     readonly STEP_LABELS: StepModel[] = [
         { label: 'Select Device', iconCss: 'sf-icon-cart' },
         { label: 'Select Version', iconCss: 'sf-icon-cart' },
         { label: 'Confirm', iconCss: 'sf-icon-cart' },
+        { label: 'WiFi', iconCss: 'sf-icon-cart' },
+        { label: 'OLED Display', iconCss: 'sf-icon-cart' },
+        { label: 'Track Power', iconCss: 'sf-icon-cart' },
+        { label: 'Roster', iconCss: 'sf-icon-cart' },
     ];
 
     // ── Step 0: Device ───────────────────────────────────────────────────────
@@ -65,16 +76,62 @@ export class DeviceWizard {
     deviceNickname = ''
     hasStackedMotorShield = false
 
+    // ── Step 3: WiFi (EX-CSB1 only) ──────────────────────────────────────────
+    wifiMode: 'ap' | 'sta' = 'ap'
+    wifiHostname = 'dccex'
+    wifiSsid = ''
+    wifiPassword = ''
+    wifiChannel = 1
+
+    // ── Step 4: OLED Display (EX-CSB1 only) ──────────────────────────────────
+    // EX-CSB1's onboard panel is a 132x64 OLED — suggested as the default.
+    oledDisplay = 'OLED_132x64'
+    oledScrollMode = 1
+    readonly displays = [
+        { value: 'NONE', label: 'None' },
+        { value: 'LCD_16x2', label: 'LCD 16×2' },
+        { value: 'LCD_20x4', label: 'LCD 20×4' },
+        { value: 'OLED_128x32', label: 'OLED 128×32' },
+        { value: 'OLED_128x64', label: 'OLED 128×64' },
+        { value: 'OLED_132x64', label: 'OLED 132×64 (EX-CSB1)' },
+    ]
+    readonly scrollModes = [
+        { value: 0, label: 'Continuous — fill screen, scroll smoothly' },
+        { value: 1, label: 'By page — alternate between pages' },
+        { value: 2, label: 'By row — move up one row at a time' },
+    ]
+
+    // ── Step 5: Track Power (EX-CSB1 only) ───────────────────────────────────
+    trackPowerMode: 'all' | 'individual' = 'all'
+    trackAPower: 'ON' | 'OFF' = 'ON'
+    trackBPower: 'ON' | 'OFF' = 'ON'
+    trackCPower: 'ON' | 'OFF' = 'ON'
+    trackDPower: 'ON' | 'OFF' = 'ON'
+
+    // ── Step 6: Roster (EX-CSB1 only) ────────────────────────────────────────
+    addFirstRosterEntry = true
+
     // ── Finishing ────────────────────────────────────────────────────────────
     finishing = false
     finishError: string | null = null
+    /** Set by provision() once the device is created — carried through steps 3–6 to completeWizard(). */
+    private provisionedId: string | null = null
 
     isMock = false
 
-    get showStackedMotorShieldOption(): boolean {
-        if (this.selectedProduct !== 'ex_commandstation' || !this.selectedBoard) return false
+    get isCsb1Board(): boolean {
+        if (!this.selectedBoard) return false
         const boardName = this.selectedBoard.name.toUpperCase()
         return boardName.includes('EX-CSB1') || boardName.includes('EXCSB1')
+    }
+
+    get showStackedMotorShieldOption(): boolean {
+        return this.selectedProduct === 'ex_commandstation' && this.isCsb1Board
+    }
+
+    /** The last step in this board's flow — CSB1 continues past Confirm, others stop there. */
+    get isLastStep(): boolean {
+        return this.isCsb1Board ? this.step === 6 : this.step === 2
     }
 
     // ── Syncfusion Stepper ───────────────────────────────────────────────────
@@ -202,15 +259,32 @@ export class DeviceWizard {
         if (this.step === 0) return this.selectedBoard !== null && this.isDeviceSupported(this.selectedProduct)
         if (this.step === 1) return this.selectedVersion !== null && !this.versionBusy
         if (this.step === 2) return this.deviceNickname.trim().length > 0
+        if (this.step === 3) return this.wifiMode !== 'sta' || this.wifiSsid.trim().length > 0
+        if (this.step === 4 || this.step === 5) return true
+        if (this.step === 6) return true
         return false
     }
 
     async goNext(): Promise<void> {
         if (!this.canGoNext) return
+
         if (this.step === 2) {
-            await this.finish()
+            const id = await this.provision()
+            if (!id) return
+            if (this.isCsb1Board) {
+                this.step++
+                this.sfStepper?.nextStep();
+            } else {
+                await this.completeWizard(id)
+            }
             return
         }
+
+        if (this.isLastStep) {
+            if (this.provisionedId) await this.completeWizard(this.provisionedId)
+            return
+        }
+
         this.step++
         this.sfStepper?.nextStep();
         if (this.step === 1) await this.loadVersions()
@@ -227,8 +301,11 @@ export class DeviceWizard {
         this.$dialog.cancel()
     }
 
-    // ── Finish: persist state then close dialog ───────────────────────────────
-    private async finish(): Promise<void> {
+    // ── Provision: create the device's repo/scratch dir + saved config ────────
+    // Returns the new config's id on success, or null on failure (finishError
+    // is set). Does not close the dialog — EX-CSB1 boards continue on to the
+    // WiFi/OLED/Track Power/Roster steps; completeWizard() closes it.
+    private async provision(): Promise<string | null> {
         this.finishing = true
         this.finishError = null
         try {
@@ -390,6 +467,65 @@ export class DeviceWizard {
                 ? this.state.savedConfigurations : []
             this.state.savedConfigurations = [savedConf, ...existing].slice(0, 10)
             await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+
+            this.provisionedId = id
+            return id
+        } catch (err) {
+            this.finishError = (err as Error).message
+            return null
+        } finally {
+            this.finishing = false
+        }
+    }
+
+    // ── Complete: apply extended-step answers (if any), persist, close ────────
+    private async completeWizard(id: string): Promise<void> {
+        this.finishing = true
+        this.finishError = null
+        try {
+            if (this.isCsb1Board) {
+                // config.h has no managed-block wrapping (unlike myStartup.h) —
+                // it's safe to reparse/regenerate directly here, the same way
+                // commandstation-config-form.ts's onFieldChange() does.
+                const idx = this.state.configFiles.findIndex((f) => f.name === 'config.h')
+                if (idx !== -1 && this.state.scratchPath) {
+                    const opts: CommandStationConfigOptions = parseCommandStationConfig(this.state.configFiles[idx].content)
+                    opts.enableWifi = true
+                    opts.wifiMode = this.wifiMode
+                    opts.wifiHostname = this.wifiHostname.trim() || 'dccex'
+                    opts.wifiSsid = this.wifiSsid.trim()
+                    opts.wifiPassword = this.wifiPassword
+                    opts.wifiChannel = this.wifiChannel
+                    opts.display = this.oledDisplay
+                    opts.scrollMode = this.oledScrollMode
+
+                    const newContent = generateCommandStationConfig(opts)
+                    this.state.configFiles[idx] = { name: 'config.h', content: newContent }
+                    await this.files.writeFile(`${this.state.scratchPath}/config.h`, newContent)
+
+                    const savedIdx = this.state.savedConfigurations.findIndex((c) => c.id === id)
+                    if (savedIdx !== -1) {
+                        this.state.savedConfigurations[savedIdx] = {
+                            ...this.state.savedConfigurations[savedIdx],
+                            configFiles: this.state.configFiles.map((f) => ({ ...f })),
+                            lastModified: new Date().toISOString(),
+                        }
+                        await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+                    }
+                }
+
+                this.state.pendingWizardSetup = {
+                    trackPower: {
+                        hasStackedMotorShield: this.hasStackedMotorShield,
+                        startupPowerMode: this.trackPowerMode,
+                        trackAPower: this.trackAPower,
+                        trackBPower: this.trackBPower,
+                        trackCPower: this.trackCPower,
+                        trackDPower: this.trackDPower,
+                    },
+                    addFirstRosterEntry: this.addFirstRosterEntry,
+                }
+            }
 
             await this.$dialog.ok({ id })
         } catch (err) {
