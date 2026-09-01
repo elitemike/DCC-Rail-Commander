@@ -1117,7 +1117,7 @@ export class ConfigEditorState {
         }
 
         if (startupContent) {
-            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(startupContent)
+            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(startupContent, this.aliases)
             if (defaultThrownIds.size > 0) {
                 this.turnouts = this.turnouts.map(t => ({
                     ...t,
@@ -1387,7 +1387,7 @@ export class ConfigEditorState {
 
         this.generatedTurnoutDefaultsContent = [
             'AUTOSTART',
-            ...thrownIds.map(id => `  THROW(${id})`),
+            ...thrownIds.map(id => `  THROW(${this.getPrimaryAliasNameForId(id, 'Turnout') || id})`),
             'DONE',
         ].join('\n')
     }
