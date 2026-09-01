@@ -28,18 +28,6 @@
   THROW(id_right)\
   DELAY(DELAY_SWITCH)
 
-// Macros to have close throw with delay for solenoid turnouts
-
-#ifdef SHUTTLE
-  #define CLOSE_DELAY(id)\
-  CLOSE(id)\
-  DELAY(DELAY_SWITCH)
-
-  #define THROW_DELAY(id)\
-  THROW(id)\
-  DELAY(DELAY_SWITCH)
-#endif
-
 // Macro to control two turnouts as one for crossovers.
 
   #define CROSSOVER(id, id1, addr1, addr_sub1, id2, addr2, addr_sub2, desc)\
@@ -83,26 +71,6 @@
 //Macro to control solenoid turnouts
 // https://discord.com/channels/713189617066836079/873794422993727568/1004923697586511954
 // not used with DCC Turnout controller
-
-#ifdef TESTING_SOLENOID_TURNOUTS
-  #define SOLENOID_PULSE 50 //5 mSec                    // should be less than 50mSec
-//  #define SOLENOID_PULSE 30 //3 mSec                    // should be less than 50mSec
-
-  #define SOLENOID_TURNOUT(id,pc,pt,desc,ali)\
-  ALIAS(ali,id)\
-  PIN_TURNOUT(id,0,desc)\
-  DONE\
-  ONCLOSE(id)\
-  SET(pc)\
-  DELAY(SOLENOID_PULSE)\
-  RESET(pc)\
-  DONE\
-  ONTHROW(id)\
-  SET(pt)\
-  DELAY(SOLENOID_PULSE)\
-  RESET(pt)\
-  DONE
-#endif
 
 // This is for 3 aspect DCC signal.
 // The "slow" (HP2) is only active with the "clear" (HP1)
