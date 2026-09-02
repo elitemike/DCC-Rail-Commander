@@ -36,6 +36,7 @@ export class CommandstationConfigFormCustomElement {
     activeConfigTab: ConfigTab = 'general'
     motorDrivers: string[] = []
     opts: CommandStationConfigOptions = defaultCommandStationConfig()
+    showWifiPassword = false
 
     readonly displays = [
         { value: 'NONE', label: 'None' },
@@ -64,6 +65,7 @@ export class CommandstationConfigFormCustomElement {
     wifiHostnameEl!: HTMLInputElement
     wifiSsidEl!: HTMLInputElement
     wifiPasswordEl!: HTMLInputElement
+    togglePasswordVisibilityEl!: HTMLButtonElement
     wifiChannelEl!: HTMLInputElement
     resetWifiBtnEl!: HTMLButtonElement
 
@@ -311,6 +313,11 @@ export class CommandstationConfigFormCustomElement {
             },
         })
         this.sfWifiPassword.appendTo(this.wifiPasswordEl)
+
+        this.togglePasswordVisibilityEl!.addEventListener('click', () => {
+            this.showWifiPassword = !this.showWifiPassword
+            if (this.sfWifiPassword) this.sfWifiPassword.type = this.showWifiPassword ? 'text' : 'password'
+        })
 
         this.sfWifiChannel = new NumericTextBox({
             min: 1,

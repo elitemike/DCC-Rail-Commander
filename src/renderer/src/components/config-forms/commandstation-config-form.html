@@ -127,7 +127,13 @@
                                 <span if.bind="opts.wifiMode === 'ap'" class="text-gray-600"> (optional — overrides
                                     firmware default)</span>
                             </label>
-                            <input ref="wifiPasswordEl" type="password" />
+                            <div class="relative">
+                                <input ref="wifiPasswordEl" type="password" />
+                                <button ref="togglePasswordVisibilityEl" type="button"
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 z-10 text-gray-500 hover:text-gray-300 text-xs font-medium">
+                                    ${showWifiPassword ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Channel — AP mode only -->
