@@ -143,8 +143,14 @@
                         <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">
                             Password${wifiMode === 'ap' ? ' — optional' : ''}
                         </label>
-                        <input value.bind="wifiPassword" type="password"
-                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        <div class="relative">
+                            <input value.bind="wifiPassword" type.bind="showWifiPassword ? 'text' : 'password'"
+                                class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 pr-12 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                            <button type="button" click.trigger="showWifiPassword = !showWifiPassword"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-xs font-medium">
+                                ${showWifiPassword ? 'Hide' : 'Show'}
+                            </button>
+                        </div>
                         <p if.bind="wifiMode === 'ap'" class="text-gray-500 text-xs mt-1.5">
                             Leave blank to use the auto-generated <span class="font-mono">PASS_xxxxxx</span> password
                             (same xxxxxx suffix as the SSID). Both the SSID and password are shown on the
@@ -248,6 +254,19 @@
                                 <span class="text-gray-500 dark:text-gray-400">WiFi</span>
                                 <span class="text-gray-700 dark:text-gray-300">
                                     ${wifiMode === 'ap' ? 'Access Point' : 'Station'}${wifiMode === 'sta' ? ' — ' + wifiSsid : ''}
+                                </span>
+                            </div>
+                            <div class="flex justify-between items-center gap-2 text-sm">
+                                <span class="text-gray-500 dark:text-gray-400 shrink-0">WiFi Password</span>
+                                <span class="flex items-center gap-2 min-w-0">
+                                    <span class="text-gray-700 dark:text-gray-300 truncate">
+                                        ${wifiPassword ? (showWifiPassword ? wifiPassword : '••••••••') : '(auto-generated)'}
+                                    </span>
+                                    <button if.bind="wifiPassword" type="button"
+                                        click.trigger="showWifiPassword = !showWifiPassword"
+                                        class="text-gray-500 hover:text-gray-300 text-xs font-medium shrink-0">
+                                        ${showWifiPassword ? 'Hide' : 'Show'}
+                                    </button>
                                 </span>
                             </div>
                             <div class="flex justify-between text-sm">

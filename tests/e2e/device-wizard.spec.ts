@@ -245,6 +245,44 @@ test('new device wizard: EX-CSB1 flow through WiFi/Display/Track Power lands on 
     expect(startupContent).toContain('SET_POWER(A,ON)')
 })
 
+test('new device wizard: WiFi password can be shown/hidden on WiFi and Confirm steps', async ({ onboardingPage: page }) => {
+    await page.getByText('New Device', { exact: true }).click()
+
+    await expect(page.getByText('Select Device', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    const boardButton = page.locator('button', { hasText: 'EX-CSB1' })
+    await expect(boardButton.first()).toBeVisible({ timeout: 15_000 })
+    await boardButton.first().click()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Select Version', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('au-dialog-container').getByRole('combobox').first()).toBeVisible({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: WiFi — password field defaults masked, Show/Hide toggles it ──
+    await expect(page.getByText('Set up WiFi for this EX-CSB1.')).toBeVisible({ timeout: 30_000 })
+    const pwInput = page.locator('label', { hasText: 'Password' }).locator('xpath=following-sibling::div[1]//input')
+    await pwInput.fill('supersecret123')
+    await expect(pwInput).toHaveAttribute('type', 'password')
+    await page.getByRole('button', { name: 'Show' }).first().click()
+    await expect(pwInput).toHaveAttribute('type', 'text')
+    await expect(pwInput).toHaveValue('supersecret123')
+    await page.getByRole('button', { name: 'Hide' }).first().click()
+    await expect(pwInput).toHaveAttribute('type', 'password')
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByText('Hardware settings for this EX-CSB1')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByText('Configure track power for this EX-CSB1.')).toBeVisible()
+    await page.getByRole('button', { name: 'Next' }).click()
+
+    // ── Step: Confirm — masked by default, its own Show/Hide reveals it ────
+    await expect(page.getByText('Review your selections')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('WiFi Password')).toBeVisible()
+    await expect(page.getByText('••••••••')).toBeVisible()
+    await page.getByRole('button', { name: 'Show' }).click()
+    await expect(page.getByText('supersecret123')).toBeVisible()
+})
+
 test('new device wizard: a second device never inherits an earlier device\'s roster/config', async ({ onboardingPage: page }) => {
     // Device A: create it, then add a roster entry by hand once landed there.
     await page.getByText('New Device', { exact: true }).click()

@@ -85,6 +85,7 @@ export class DeviceWizard {
     wifiSsid = ''
     wifiPassword = ''
     wifiChannel = 1
+    showWifiPassword = false
 
     // ── Step 3: Hardware (EX-CSB1 only) ───────────────────────────────────────
     // Combines the OLED display type/scroll mode with the stacked motor

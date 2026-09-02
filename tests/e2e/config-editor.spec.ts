@@ -168,6 +168,35 @@ test.describe('Config Editor — EX-CommandStation', () => {
         ).toBeVisible()
     })
 
+    test('WiFi sub-tab password field can be shown/hidden', async ({ workspacePage }) => {
+        await openDeviceSettings(workspacePage)
+
+        const wifiCheckbox = workspacePage
+            .locator('commandstation-config-form')
+            .locator('input[type="checkbox"]')
+            .first()
+        await wifiCheckbox.check()
+
+        await workspacePage
+            .locator('commandstation-config-form')
+            .getByRole('button', { name: /WiFi/ })
+            .click()
+
+        const pwInput = workspacePage
+            .locator('label', { hasText: 'Password' })
+            .locator('xpath=following-sibling::div[1]//input')
+        await expect(pwInput).toBeVisible()
+        await pwInput.fill('workspacepw1')
+        await expect(pwInput).toHaveAttribute('type', 'password')
+
+        await workspacePage.locator('commandstation-config-form').getByRole('button', { name: 'Show' }).click()
+        await expect(pwInput).toHaveAttribute('type', 'text')
+        await expect(pwInput).toHaveValue('workspacepw1')
+
+        await workspacePage.locator('commandstation-config-form').getByRole('button', { name: 'Hide' }).click()
+        await expect(pwInput).toHaveAttribute('type', 'password')
+    })
+
     test('switching to Raw tab shows Monaco editor', async ({ workspacePage }) => {
         await openDeviceSettings(workspacePage)
         await switchToRaw(workspacePage)
