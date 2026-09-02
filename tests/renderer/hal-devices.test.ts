@@ -132,12 +132,66 @@ describe('parseHalDevicesFromAutomation — round trip', () => {
     })
 })
 
+describe('parseHalDevicesFromAutomation — bare, untagged HAL(...) lines (hand-written project)', () => {
+    it('resolves a bare PCA9685 line — chip+pinCount matches exactly one catalog board', () => {
+        const parsed = parseHalDevicesFromAutomation('HAL(PCA9685, 100, 16, 0x40)')
+        expect(parsed).toHaveLength(1)
+        expect(parsed[0]).toMatchObject({ boardId: 'pca9685_sh', address: 0x40, vpinStart: 100 })
+    })
+
+    it('resolves a bare MCP23017 line behind a multiplexer sub-bus, real-world shape', () => {
+        // Matches the exact real-world shape: HAL(MCP23017, 164, 16, {I2CMux_0,SubBus_3, 0x20})
+        const parsed = parseHalDevicesFromAutomation('HAL(MCP23017, 164, 16, {I2CMux_0,SubBus_3, 0x20})')
+        // No tagged HAL-MUX comment exists anywhere in this content, so there's no record of the
+        // multiplexer's own identity to link back to — but there's exactly one multiplexer board
+        // in the whole catalog, so one is synthesized rather than the link being silently dropped
+        // (dropping it would flatten the device to a bare address, changing its wiring topology
+        // the next time this regenerates — see hal-devices.ts's own comment on this).
+        expect(parsed).toHaveLength(2)
+        const mcp = parsed.find(d => d.boardId === 'mcp23017_generic')!
+        const mux = parsed.find(d => d.boardId === 'rt_i2c_iso_mux')!
+        expect(mcp).toMatchObject({ address: 0x20, vpinStart: 164, muxChannel: 3 })
+        expect(mux).toMatchObject({ address: 0x70, vpinStart: null })
+        expect(mcp.parentMuxInstanceId).toBe(mux.instanceId)
+    })
+
+    it('leaves an ambiguous bare PCA9555 line unrecognized — two catalog boards share that chip+pinCount', () => {
+        expect(parseHalDevicesFromAutomation('HAL(PCA9555, 276, 16, 0x20)')).toEqual([])
+    })
+
+    it('does not double-count a HAL(...) line that already has its own DCC-Rail-Commander tag comment', () => {
+        const block = generateHalDevicesBlock([device()])
+        const parsed = parseHalDevicesFromAutomation(block)
+        expect(parsed).toHaveLength(1)
+    })
+
+    it('parses several bare lines from a real multi-device file, mixing MCP23017 and tagged PCA9555', () => {
+        const file = [
+            'HAL_IGNORE_DEFAULTS',
+            'HAL(MCP23017, 164, 16, {I2CMux_0,SubBus_3, 0x20})',
+            'HAL(MCP23017, 180, 16, {I2CMux_0,SubBus_3, 0x21})',
+            '// HAL(board=rt_dcd_16, label="Yard block detector")',
+            'HAL(PCA9555, 276, 16, {I2CMux_0,SubBus_4, 0x20})',
+        ].join('\n')
+        const parsed = parseHalDevicesFromAutomation(file)
+        // 2 MCP23017 (behind a synthesized mux, sharing it — not one each) + 1 tagged rt_dcd_16
+        // (a different address, 0x20 on SubBus_4 vs. 0x20/0x21 on SubBus_3 — no collision since
+        // sub-bus channels are independent address spaces) + 1 synthesized multiplexer.
+        expect(parsed).toHaveLength(4)
+        expect(parsed.filter(d => d.boardId === 'mcp23017_generic')).toHaveLength(2)
+        expect(parsed.filter(d => d.boardId === 'rt_dcd_16')).toHaveLength(1)
+        const mux = parsed.find(d => d.boardId === 'rt_i2c_iso_mux')!
+        expect(mux).toBeDefined()
+        expect(parsed.filter(d => d.boardId === 'mcp23017_generic').every(d => d.parentMuxInstanceId === mux.instanceId)).toBe(true)
+    })
+})
+
 describe('VPin registry', () => {
     const turnouts: Turnout[] = [
         { type: 'SERVO', id: 1, pin: 25, activeAngle: 400, inactiveAngle: 100, profile: 'Slow', description: 'Points', comment: '', defaultState: 'CLOSED' },
     ]
     const sensors: SensorEntry[] = [{ id: 1, pin: 30, description: 'Occupancy' }]
-    const signals: SignalEntry[] = [{ red: 40, amber: 41, green: 42, description: 'Home' }]
+    const signals: SignalEntry[] = [{ type: 'PIN', red: 40, amber: 41, green: 42, description: 'Home' }]
     const halDevices: HalDeviceInstance[] = [device({ vpinStart: 164 })] // rt_dcd_16 -> 16 pins: 164-179
 
     it('computeVpinAllocations aggregates turnouts, sensors, signals, and HAL devices', () => {

@@ -10,6 +10,8 @@
  * generic Monaco editor with no specific completions.
  */
 import { baseFilename } from '../utils/exrail-completions'
+import { BLOCK_REGISTRY } from '../components/visual-editors/exrail-block-registry'
+import type { BlockParamDef, BlockTypeDef } from '../components/visual-editors/exrail-block-compiler'
 
 export interface HoverDoc {
     title: string
@@ -548,6 +550,70 @@ const EXRAIL_BLOCK_COMPLETIONS: CompletionSnippet[] = [
     },
 ]
 
+// ── Auto-generated completions for every BLOCK_REGISTRY command not already ──
+// hand-curated above. BLOCK_REGISTRY (exrail-block-registry.ts) is the block
+// canvas's single source of truth for every EXRAIL command it supports —
+// ~190 entries as of this writing, only a fraction of which have a hand-
+// written entry in EXRAIL_BODY_COMPLETIONS/EXRAIL_BLOCK_COMPLETIONS above.
+// Without this, a command works fully in the block canvas (palette, drag,
+// compile) but silently gets no Monaco autocomplete/hover when typed as raw
+// text — which is exactly what happened here: the hand-curated lists had
+// already drifted behind the registry before this generator existed (e.g.
+// TOGGLE_TURNOUT/AFTEROVERLOAD/DELAYMINS existed in the registry but not
+// here). Regenerating from the registry on every module load keeps the two
+// permanently in sync instead of relying on someone remembering to update
+// both places by hand.
+function paramPlaceholder(p: BlockParamDef, index: number): string {
+    return `\${${index + 1}:${p.name}}`
+}
+
+/** Monaco snippet body for one registry entry — a hat gets the same "header + body + DONE" shape ROUTE/SEQUENCE already use above; anything else is just its own call. */
+function snippetInsertTextFor(def: BlockTypeDef): string {
+    const args = def.params.map(paramPlaceholder).join(', ')
+    const call = def.params.length > 0 ? `${def.id}(${args})` : def.id
+    return def.shape === 'hat' ? `${call}\n  \${0}\nDONE` : call
+}
+
+/** Short signature shown to the right of the completion label, e.g. "THROW(turnoutId)". */
+function detailFor(def: BlockTypeDef): string {
+    return def.params.length === 0 ? def.id : `${def.id}(${def.params.map(p => p.name).join(', ')})`
+}
+
+/** A plausible fully-substituted call, via the same emit() the block canvas itself compiles through — so the hover example is always a real, valid EXRAIL line for this command, never hand-typed and liable to drift. */
+function exampleFor(def: BlockTypeDef): string {
+    const sample: Record<string, string | number> = {}
+    for (const p of def.params) {
+        if (p.variadic) { sample[p.name] = ''; continue }
+        sample[p.name] = p.kind === 'string' ? 'text' : 200
+    }
+    const line = def.emit(sample).replace(/,\s*\)/, ')') // trims a variadic param's empty placeholder cleanly
+    return def.shape === 'hat' ? `${line}\n  DONE` : line
+}
+
+function generatedCompletionFor(def: BlockTypeDef): CompletionSnippet {
+    return {
+        label: def.id,
+        detail: detailFor(def),
+        documentation: def.description ?? def.label,
+        insertText: snippetInsertTextFor(def),
+        hover: {
+            title: def.label,
+            description: def.description ?? def.label,
+            example: exampleFor(def),
+        },
+    }
+}
+
+const CURATED_EXRAIL_LABELS = new Set([...EXRAIL_BODY_COMPLETIONS, ...EXRAIL_BLOCK_COMPLETIONS].map(c => c.label))
+
+const GENERATED_EXRAIL_COMPLETIONS: CompletionSnippet[] = BLOCK_REGISTRY
+    .filter(def => !CURATED_EXRAIL_LABELS.has(def.id))
+    .map(generatedCompletionFor)
+
+/** Same generated set, minus hat-shaped (ROUTE/SEQUENCE/ON*) entries — for myStartup.h, which (like the curated EXRAIL_BODY_COMPLETIONS list) only ever holds AUTOSTART...DONE body statements, never a block starter. */
+const GENERATED_BODY_ONLY_COMPLETIONS: CompletionSnippet[] = GENERATED_EXRAIL_COMPLETIONS
+    .filter(c => BLOCK_REGISTRY.find(def => def.id === c.label)?.shape !== 'hat')
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-file configuration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -610,12 +676,26 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
 
     'myRoutes.h': {
         friendlyName: 'Routes',
-        completions: [EXRAIL_BLOCK_COMPLETIONS[1], ...EXRAIL_BODY_COMPLETIONS],
+        completions: [EXRAIL_BLOCK_COMPLETIONS[1], ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
     },
 
     'mySequences.h': {
         friendlyName: 'Sequences',
-        completions: [EXRAIL_BLOCK_COMPLETIONS[0], ...EXRAIL_BODY_COMPLETIONS],
+        completions: [EXRAIL_BLOCK_COMPLETIONS[0], ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
+    },
+
+    'myAutomations.h': {
+        friendlyName: 'Automations',
+        completions: [EXRAIL_BLOCK_COMPLETIONS[2], ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
+    },
+
+    'myEvents.h': {
+        friendlyName: 'Event Handlers',
+        // Includes the generated ON* header-line snippets (ONSENSOR(...), etc.) alongside every
+        // body command — the block canvas's Add control is the primary way to create an entry,
+        // but the per-row and whole-file Raw tabs are fully hand-editable too, so typing "ONSENSOR"
+        // there should snippet-complete the same way ROUTE/SEQUENCE already do in their own files.
+        completions: [...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
     },
 
     'myAliases.h': {
@@ -663,6 +743,17 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
                 },
             },
             {
+                label: 'TURNOUTL',
+                detail: 'TURNOUTL(id, addr, "desc")',
+                documentation: 'Define a DCC accessory turnout with a single linear address.',
+                insertText: 'TURNOUTL(${1:id}, ${2:addr}, "${3:description}")',
+                hover: {
+                    title: 'TURNOUTL Macro',
+                    description: 'Define a DCC accessory decoder-controlled turnout using one linear address instead of an addr/subAddr pair.',
+                    example: 'TURNOUTL(1, 401, "Yard Exit")',
+                },
+            },
+            {
                 label: 'PIN_TURNOUT',
                 detail: 'PIN_TURNOUT(id, pin, "desc")',
                 documentation: 'Define a GPIO-pin-driven turnout.',
@@ -673,6 +764,17 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
                     example: 'PIN_TURNOUT(2, 22, "Siding")',
                 },
             },
+            {
+                label: 'VIRTUAL_TURNOUT',
+                detail: 'VIRTUAL_TURNOUT(id, "desc")',
+                documentation: 'Define a turnout with no hardware, driven by ONCLOSE/ONTHROW handlers.',
+                insertText: 'VIRTUAL_TURNOUT(${1:id}, "${2:description}")',
+                hover: {
+                    title: 'VIRTUAL_TURNOUT Macro',
+                    description: 'Define a virtual turnout with no hardware — simulate it with ONCLOSE/ONTHROW event handlers.',
+                    example: 'VIRTUAL_TURNOUT(3, "Simulated Siding")',
+                },
+            },
         ],
     },
 
@@ -681,15 +783,15 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         // blocks. This file just links the other config files together; see
         // the Device Settings > Advanced row.
         friendlyName: 'Advanced',
-        completions: [...EXRAIL_BLOCK_COMPLETIONS, ...EXRAIL_BODY_COMPLETIONS],
+        completions: [...EXRAIL_BLOCK_COMPLETIONS, ...EXRAIL_BODY_COMPLETIONS, ...GENERATED_EXRAIL_COMPLETIONS],
     },
 
     'myStartup.h': {
         friendlyName: 'Startup',
         // Body-only completions (THROW/CLOSE/POWERON/SETLOCO/etc.) — no block
-        // starters like ROUTE/SEQUENCE/AUTOMATION, since this file only ever
+        // starters like ROUTE/SEQUENCE/AUTOMATION/ON*, since this file only ever
         // contains AUTOSTART...DONE blocks, never those.
-        completions: [...EXRAIL_BODY_COMPLETIONS],
+        completions: [...EXRAIL_BODY_COMPLETIONS, ...GENERATED_BODY_ONLY_COMPLETIONS],
     },
 }
 

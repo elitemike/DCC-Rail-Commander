@@ -132,6 +132,64 @@ describe('ConfigEditorState.syncAliasForId', () => {
         expect(result).toEqual({ ok: true })
         expect(state.aliases).toEqual([{ name: 'AMBIG_ALIAS', value: '3', aliasType: 'Turnout' }])
     })
+
+    describe('strictAliases', () => {
+        it('rejects clearing an alias to blank when strictAliases is on', () => {
+            const state = {
+                aliases: [{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }],
+                hasChanges: false,
+                strictAliases: true,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, '', 'Turnout', 'YARD_TURNOUT',
+            )
+
+            expect(result).toEqual({ ok: false, reason: 'An alias is required when Strict aliases is enabled.' })
+            // Nothing removed — the alias must survive the rejected attempt.
+            expect(state.aliases).toEqual([{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }])
+        })
+
+        it('still allows clearing an alias to blank when strictAliases is off', () => {
+            const state = {
+                aliases: [{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }],
+                hasChanges: false,
+                strictAliases: false,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, '', 'Turnout', 'YARD_TURNOUT',
+            )
+
+            expect(result).toEqual({ ok: true })
+            expect(state.aliases).toEqual([])
+        })
+
+        it('still allows setting a non-blank alias when strictAliases is on', () => {
+            const state = {
+                aliases: [] as { name: string; value: string; aliasType?: string }[],
+                hasChanges: false,
+                strictAliases: true,
+                _syncToInstallerState: vi.fn(),
+                validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
+                getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
+            }
+
+            const result = ConfigEditorState.prototype.syncAliasForId.call(
+                state, 1, 1, 'YARD_TURNOUT', 'Turnout', '',
+            )
+
+            expect(result).toEqual({ ok: true })
+            expect(state.aliases).toEqual([{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }])
+        })
+
+    })
 })
 
 describe('ConfigEditorState.getPrimaryAliasNameForId', () => {
@@ -150,5 +208,90 @@ describe('ConfigEditorState.getPrimaryAliasNameForId', () => {
         expect(
             ConfigEditorState.prototype.getPrimaryAliasNameForId.call(state, 1, 'Roster'),
         ).toBe('')
+    })
+})
+
+/**
+ * Getters, not methods — call via their property descriptor rather than `.call()` directly.
+ * `filesNeedingAlias` reads the other per-type getters via `this.turnoutIdsNeedingAlias` etc.,
+ * so `fields` is applied to a real ConfigEditorState-prototyped object (not a bare object
+ * literal), or those nested getter reads would resolve to `undefined` instead of inheriting
+ * from the prototype. `roster`/`turnouts`/etc. are `@observable`, which defines a getter-only
+ * accessor on the prototype until Aurelia's own construction/observation wiring runs — plain
+ * `Object.assign` hits that accessor's (missing) setter, so each field is defined directly as
+ * an own data property instead, shadowing the inherited accessor entirely.
+ */
+function getViaPrototype<T>(fields: Record<string, unknown>, prop: string): T {
+    const state = Object.create(ConfigEditorState.prototype) as object
+    for (const [key, value] of Object.entries(fields)) {
+        Object.defineProperty(state, key, { value, writable: true, configurable: true, enumerable: true })
+    }
+    return (Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, prop)!.get as (this: unknown) => T).call(state)
+}
+
+describe('ConfigEditorState — which existing objects need an alias', () => {
+    it('is empty for every getter when strictAliases is off', () => {
+        const state = {
+            strictAliases: false,
+            aliases: [],
+            turnouts: [{ id: 200 }],
+            sensors: [{ id: 1 }],
+            roster: [{ dccAddress: 3 }],
+            routes: [{ id: 1 }],
+            sequences: [{ id: 1 }],
+        }
+        expect(getViaPrototype(state, 'turnoutIdsNeedingAlias')).toEqual(new Set())
+        expect(getViaPrototype(state, 'sensorIdsNeedingAlias')).toEqual(new Set())
+        expect(getViaPrototype(state, 'rosterAddressesNeedingAlias')).toEqual(new Set())
+        expect(getViaPrototype(state, 'routeIdsNeedingAlias')).toEqual(new Set())
+        expect(getViaPrototype(state, 'sequenceIdsNeedingAlias')).toEqual(new Set())
+        expect(getViaPrototype(state, 'filesNeedingAlias')).toEqual(new Set())
+    })
+
+    it('lists ids of objects with no matching alias, per type, when strictAliases is on', () => {
+        const state = {
+            strictAliases: true,
+            aliases: [
+                { name: 'MAIN_JUNCTION', value: '200', aliasType: 'Turnout' },
+                { name: 'THOMAS', value: '3', aliasType: 'Roster' },
+            ],
+            turnouts: [{ id: 200 }, { id: 201 }],
+            sensors: [{ id: 1 }],
+            roster: [{ dccAddress: 3 }, { dccAddress: 5 }],
+            routes: [{ id: 1 }],
+            sequences: [],
+        }
+        expect(getViaPrototype(state, 'turnoutIdsNeedingAlias')).toEqual(new Set([201]))
+        expect(getViaPrototype(state, 'sensorIdsNeedingAlias')).toEqual(new Set([1]))
+        expect(getViaPrototype(state, 'rosterAddressesNeedingAlias')).toEqual(new Set([5]))
+        expect(getViaPrototype(state, 'routeIdsNeedingAlias')).toEqual(new Set([1]))
+        expect(getViaPrototype(state, 'sequenceIdsNeedingAlias')).toEqual(new Set())
+    })
+
+    it('does not match an alias of a different type on the same numeric id', () => {
+        const state = {
+            strictAliases: true,
+            aliases: [{ name: 'SOME_TURNOUT', value: '3', aliasType: 'Turnout' }],
+            turnouts: [],
+            sensors: [],
+            roster: [{ dccAddress: 3 }],
+            routes: [],
+            sequences: [],
+        }
+        expect(getViaPrototype(state, 'rosterAddressesNeedingAlias')).toEqual(new Set([3]))
+    })
+
+    it('filesNeedingAlias lists a file only when it has at least one un-aliased object', () => {
+        const state = {
+            strictAliases: true,
+            aliases: [{ name: 'MAIN_JUNCTION', value: '200', aliasType: 'Turnout' }],
+            turnouts: [{ id: 200 }],
+            sensors: [{ id: 1 }],
+            roster: [],
+            routes: [],
+            sequences: [],
+            automations: [],
+        }
+        expect(getViaPrototype(state, 'filesNeedingAlias')).toEqual(new Set(['mySensors.h']))
     })
 })

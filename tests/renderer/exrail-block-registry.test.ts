@@ -28,8 +28,8 @@ const POPULATED: DefinedObjects = {
 describe('BLOCK_REGISTRY isAvailable gating', () => {
     const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
 
-    it('always allows ROUTE, SEQUENCE, DELAY, DONE regardless of defined objects', () => {
-        for (const id of ['ROUTE', 'SEQUENCE', 'DELAY', 'DONE']) {
+    it('always allows ROUTE, SEQUENCE, DELAY, DELAYMINS, DONE regardless of defined objects', () => {
+        for (const id of ['ROUTE', 'SEQUENCE', 'DELAY', 'DELAYMINS', 'DONE']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(true)
         }
     })
@@ -48,11 +48,16 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
         }
     })
 
-    it('gates IF/IFNOT on sensors existing', () => {
-        for (const id of ['IF', 'IFNOT']) {
+    it('gates IF/IFNOT/AT/AFTER on sensors existing', () => {
+        for (const id of ['IF', 'IFNOT', 'AT', 'AFTER']) {
             expect(byId.get(id)!.isAvailable(EMPTY)).toBe(false)
             expect(byId.get(id)!.isAvailable(POPULATED)).toBe(true)
         }
+    })
+
+    it('gates AFTEROVERLOAD on tracks being defined', () => {
+        expect(byId.get('AFTEROVERLOAD')!.isAvailable(EMPTY)).toBe(false)
+        expect(byId.get('AFTEROVERLOAD')!.isAvailable({ ...EMPTY, tracks: [{ value: 'A', label: 'Track A' }] })).toBe(true)
     })
 
     it('gates FOLLOW on a route or sequence existing', () => {
@@ -107,6 +112,8 @@ describe('BLOCK_REGISTRY toolbox categories', () => {
 
 describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference validators', () => {
     it('every stack/branch/cap block emits text with no casing or reference diagnostics', () => {
+        const trackFixture = [{ value: 'A', label: 'Track A' }]
+
         const exrailData = {
             roster: POPULATED.roster,
             turnouts: POPULATED.turnouts,
@@ -114,6 +121,8 @@ describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference v
             routes: POPULATED.routes,
             sequences: POPULATED.sequences,
             aliases: POPULATED.aliases,
+            signals: POPULATED.signals,
+            tracks: trackFixture,
         }
 
         const idForKind: Record<string, string | number> = {
@@ -122,6 +131,7 @@ describe('BLOCK_REGISTRY emit() output never trips the EXRAIL casing/reference v
             rosterRef: POPULATED.roster[0].dccAddress,
             routeOrSequenceRef: POPULATED.routes![0].id,
             signalRef: POPULATED.signals[0].red,
+            trackRef: trackFixture[0].value,
             number: 1,
             string: 'x',
         }

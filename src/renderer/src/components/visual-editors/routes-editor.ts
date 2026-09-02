@@ -2,7 +2,7 @@ import { queueTask, resolve } from 'aurelia'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { RouteEntry } from '../../utils/myAutomationParser'
-import { parseBody } from './exrail-block-compiler'
+import { definedTracksFor, parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
 import { ToastService } from '../../services/toast.service'
@@ -41,6 +41,7 @@ export class RoutesEditorCustomElement {
             routes: this.state.routes,
             sequences: this.state.sequences,
             aliases: this.state.aliases,
+            tracks: definedTracksFor(this.state.hasStackedMotorShield),
         }
     }
 
@@ -56,7 +57,7 @@ export class RoutesEditorCustomElement {
     }
 
     canUseBlocks(r: RouteEntry): boolean {
-        return parseBody(r.body, 'route', BLOCK_REGISTRY).ok
+        return parseBody(r.body, 'ROUTE', BLOCK_REGISTRY).ok
     }
 
     private static readonly ROUTE_HEADER_RE = /^ROUTE\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*$/
@@ -268,13 +269,46 @@ export class RoutesEditorCustomElement {
         }
     }
 
+    /** `focus.trigger` on the description input — see updateRoute()'s strict-aliases block below.
+     *  Description is the only field.two-way-bound directly onto the live `state.routes` entry
+     *  (id/body come through explicit callback params instead), so it's the only one that needs
+     *  an explicit pre-edit snapshot to revert to when a commit is blocked. */
+    private _descriptionBeforeEdit: string | undefined = undefined
+    captureDescriptionBeforeEdit(): void {
+        this._descriptionBeforeEdit = this.selectedRoute?.description
+    }
+
     updateRoute(idx: number, r: RouteEntry) {
         // `value.two-way` on `<input type="text">` (description) round-trips through the DOM's
         // `.value`, always a string, but `id` comes from makeIdChangeHandler()'s already-numeric
         // callback param — Number() here is a no-op for that path and just guards the description-
         // only path, where `r` is a spread of the existing (already-numeric) entry.
         const entry: RouteEntry = { ...r, id: Number(r.id) }
-        const previousId = this.state.routes[idx]?.id ?? null
+        const existing = this.state.routes[idx]
+        const previousId = existing?.id ?? null
+        // A block-canvas field unrelated to this route's own data (its ALIAS field, most
+        // notably) can trigger an incidental re-commit of the *unchanged* body/description/id
+        // as a side effect of Blockly's own async field-commit ordering — not a real edit. Only
+        // gate genuine changes, or an incidental resync racing an in-flight alias assignment
+        // would itself get blocked and toast, even though nothing the user actually touched
+        // here was left unsaved.
+        const isRealChange = !existing || existing.id !== entry.id || existing.description !== entry.description || existing.body !== entry.body
+        // Strict aliases: block *any* real field save (description, id, or body — including a
+        // Blocks-tab edit routed here via makeBodyChangeHandler()) on a route that currently has
+        // no alias. Checked by the pre-edit id when an id change is in flight, same reasoning as
+        // sensors-editor.ts's updateSensor().
+        if (isRealChange && this.state.strictAliases && !this.state.getPrimaryAliasNameForId(previousId ?? entry.id, 'Route')) {
+            // Description is already live in state.routes[idx] (two-way binding, not an edit-buffer)
+            // — revert it so the block actually takes visible effect.
+            if (this._descriptionBeforeEdit !== undefined) {
+                const revertTo = this._descriptionBeforeEdit
+                this.state.routes = this.state.routes.map((v, i) => i === idx ? { ...v, description: revertTo } : v)
+            }
+            this._descriptionBeforeEdit = undefined
+            this.toastService.show({ title: 'Alias Required', content: 'This route requires an alias when Strict aliases is enabled.', cssClass: 'e-toast-warning' })
+            return
+        }
+        this._descriptionBeforeEdit = undefined
         this.state.routes = this.state.routes.map((v, i) => i === idx ? entry : v)
         if (previousId !== null && previousId !== entry.id) {
             this.selectedId = entry.id

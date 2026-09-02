@@ -1,6 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
-import { IDialogService } from '@aurelia/dialog'
+import { IDialogService, DialogDomRendererClassic } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
 import { ToastService } from '../services/toast.service'
 import { ConfigEditorState } from '../models/config-editor-state'
@@ -24,6 +24,8 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
+import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels } from '../config/dccex-validators'
+import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
     private readonly router = resolve(Router)
@@ -78,6 +80,23 @@ export class Workspace {
 
     get automationFileIndex(): number {
         return this.state.configFiles.findIndex(f => f.name === 'myAutomation.h')
+    }
+
+    get generalWifiHasError(): boolean {
+        return this.fileHasError('config.h') || this.fileHasError('myConfig.h')
+    }
+
+    get startupHasError(): boolean {
+        return this.fileHasError('myStartup.h')
+    }
+
+    /** Accessories is a slice of myAutomation.h (the HAL Devices block) — same underlying model. */
+    get accessoriesHasError(): boolean {
+        return this.fileHasError('myAutomation.h')
+    }
+
+    get automationHasError(): boolean {
+        return this.fileHasError('myAutomation.h')
     }
 
     selectGeneralWifi(): void {
@@ -166,6 +185,15 @@ export class Workspace {
     verboseCompile = false
     /** Persisted app-wide preference — whether loadVersions() always overrides the version selection with the latest Prod release. Loaded in binding(), toggled from the Settings dialog. */
     useLatestProdVersion = true
+    /** Persisted app-wide preference — when on, canCompile also requires no Monaco error markers across any config file. Loaded in binding(), toggled from the Settings dialog. */
+    strictCompile = false
+    /** Persisted app-wide preference (default on) — mirrored onto configEditorState.strictAliases, which the turnout/roster/sensor/route/sequence editors actually consult. Loaded in binding(), toggled from the Settings dialog. */
+    strictAliases = true
+    /** Live mirror of hasErrorMarkers(), kept current via onMarkersChanged() (see binding()/detaching()) — only consulted when strictCompile is on. */
+    hasBlockingErrors = false
+    /** Live mirror of filesWithErrorMarkers(), kept current via onMarkersChanged() — drives the error dot in the file list, independent of strictCompile. */
+    filesWithErrors: Set<string> = new Set()
+    private _unsubMarkersChanged: IDisposable | null = null
 
     // ── Serial connection — the actual open/closed state of the port ─────────
     /** True once connect() has successfully opened the selected device's port. The single source of truth for whether anything (Throttle, Monitor) can currently talk to the device — Monitor visibility is a separate, unrelated concern. */
@@ -285,10 +313,25 @@ export class Workspace {
             this.configEditorState.hasChanges = true
             this.state.pendingMigrationOnLoad = false
         }
+        this.applyPendingWizardSetup()
         this.autoConnectMonitor = (await this.preferences.get<boolean>('autoConnectMonitor')) ?? true
         this.showMonitorOnConnect = (await this.preferences.get<boolean>('showMonitorOnConnect')) ?? true
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
+        this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
+        // Strict aliases: this project's own override (SavedConfiguration.strictAliases — set by
+        // the existing-project importer's summary dialog, or by a previous setStrictAliases() call
+        // below while this project was open) wins if present; otherwise falls back to the app-wide
+        // preference every other project shares, same as before this field existed.
+        const activeSavedConfig = this.state.savedConfigurations.find((c) => c.id === this.state.activeConfigId)
+        this.strictAliases = activeSavedConfig?.strictAliases ?? (await this.preferences.get<boolean>('strictAliases')) ?? true
+        this.configEditorState.strictAliases = this.strictAliases
+        this.hasBlockingErrors = hasErrorMarkers()
+        this.filesWithErrors = filesWithErrorMarkers()
+        this._unsubMarkersChanged = onMarkersChanged(() => {
+            this.hasBlockingErrors = hasErrorMarkers()
+            this.filesWithErrors = filesWithErrorMarkers()
+        })
         // Fire-and-forget: a git call that can be slow (or fail entirely
         // offline) and must never block the rest of the view from rendering.
         // Started after the preferences above are loaded so it reads a
@@ -325,6 +368,38 @@ export class Workspace {
         void this.preferences.set('useLatestProdVersion', enabled)
     }
 
+    /** Persists the strict-compile preference — called from the Settings dialog. */
+    setStrictCompile(enabled: boolean): void {
+        this.strictCompile = enabled
+        void this.preferences.set('strictCompile', enabled)
+    }
+
+    /**
+     * Persists the strict-aliases setting and mirrors it onto configEditorState, which the
+     * turnout/roster/sensor/route/sequence editors actually consult — called from the Settings
+     * dialog. Also re-runs Monaco validation on every open model, since validateAliasRequired()
+     * depends on this setting but has no text change of its own to react to.
+     *
+     * Writes to *this project's own* SavedConfiguration.strictAliases when one exists, rather than
+     * the app-wide preference every other project shares — once a project has an explicit
+     * strictAliases value (set here, or by the existing-project importer), it keeps making its own
+     * choice independently of whatever the app-wide default is or later becomes. Only falls back to
+     * the shared app-wide preference when there's no active saved config to attach the override to
+     * (e.g. mid-wizard, before the project's first save).
+     */
+    setStrictAliases(enabled: boolean): void {
+        this.strictAliases = enabled
+        this.configEditorState.strictAliases = enabled
+        const idx = this.state.savedConfigurations.findIndex((c) => c.id === this.state.activeConfigId)
+        if (idx !== -1) {
+            this.state.savedConfigurations[idx] = { ...this.state.savedConfigurations[idx], strictAliases: enabled }
+            void this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+        } else {
+            void this.preferences.set('strictAliases', enabled)
+        }
+        revalidateAllModels()
+    }
+
     /** Opens the app-wide Settings dialog. Each toggle applies (and persists) immediately via its callback — there is nothing to "save" on close. */
     openSettings(): void {
         void this.dialogService.open({
@@ -334,10 +409,14 @@ export class Workspace {
                 showMonitorOnConnect: this.showMonitorOnConnect,
                 verboseCompile: this.verboseCompile,
                 useLatestProdVersion: this.useLatestProdVersion,
+                strictCompile: this.strictCompile,
+                strictAliases: this.strictAliases,
                 onAutoConnectChange: (v: boolean) => this.setAutoConnectMonitor(v),
                 onShowMonitorOnConnectChange: (v: boolean) => this.setShowMonitorOnConnect(v),
                 onVerboseCompileChange: (v: boolean) => this.setVerboseCompile(v),
                 onUseLatestProdVersionChange: (v: boolean) => this.setUseLatestProdVersion(v),
+                onStrictCompileChange: (v: boolean) => this.setStrictCompile(v),
+                onStrictAliasesChange: (v: boolean) => this.setStrictAliases(v),
             },
         })
     }
@@ -518,6 +597,8 @@ export class Workspace {
         this._unsubUsbAttached = null
         this._unsubUsbDetached = null
         this._unsubUsbClosed = null
+        this._unsubMarkersChanged?.dispose()
+        this._unsubMarkersChanged = null
         // Don't leak an open port once the workspace itself goes away (e.g.
         // navigating Home) — Monitor no longer owns this, so nothing else will.
         if (this.portConnected) void this.disconnect()
@@ -643,6 +724,8 @@ export class Workspace {
             'mySensors.h',
             'myRoutes.h',
             'mySequences.h',
+            'myAutomations.h',
+            'myEvents.h',
             'myAliases.h',
             'myAutomation.h',
             'myStartup.h',
@@ -782,6 +865,23 @@ export class Workspace {
                 import('../components/dialogs/file-changes-dialog').then((m) => m.FileChangesDialog).catch(() => null),
             model: { files, onSave: () => this.saveFiles() },
         })
+    }
+
+    /**
+     * Lands the workspace on the Roster editor right after DeviceWizard
+     * finishes (see InstallerState.pendingWizardOpenRoster) — Roster isn't a
+     * wizard step, this is just where a future onboarding tutorial will live.
+     * Deferred here (rather than done by the wizard itself) because
+     * myRoster.h isn't in state.configFiles until loadFromInstallerState()
+     * runs, right before this is called, in both binding() and
+     * switchToConfig().
+     */
+    private applyPendingWizardSetup(): void {
+        if (!this.state.pendingWizardOpenRoster) return
+        this.state.pendingWizardOpenRoster = false
+
+        const idx = this.state.configFiles.findIndex((f) => f.name === 'myRoster.h')
+        if (idx !== -1) this.setActiveFile(idx)
     }
 
     private async updateSavedConfig(): Promise<void> {
@@ -1196,6 +1296,7 @@ export class Workspace {
         // so components that parse `config.h` (e.g. commandstation form) see
         // updated values such as `MOTOR_SHIELD_TYPE` immediately.
         this.configEditorState.loadFromInstallerState()
+        this.applyPendingWizardSetup()
         // Notify any mounted components that the active config changed so they
         // can re-parse `config.h` and refresh UI state without requiring a
         // full reattach / reload.
@@ -1215,7 +1316,13 @@ export class Workspace {
         this.showDeviceMenu = false
         this.state.reset()
         const result = await this.dialogService
-            .open({ component: () => DeviceWizard })
+            .open({
+                // See home.ts's openNewDevice() for why this dialog needs
+                // the classic (non-native-<dialog>) renderer.
+                component: () => DeviceWizard,
+                renderer: DialogDomRendererClassic,
+                options: { lock: true, startingZIndex: 1000 },
+            })
             .whenClosed((r) => r)
         if (typeof result === 'object' && result !== null && 'status' in result && (result as any).status === 'ok') {
             await this.loadSavedConfigs()
@@ -1299,10 +1406,17 @@ export class Workspace {
         void this.checkDeviceConnection()
     }
 
-    /** True when a device with both an FQBN and a port is selected. */
+    /** True when a device with both an FQBN and a port is selected, and (if strictCompile is on) no config file currently has a Monaco error marker. */
     get canCompile(): boolean {
         const d = this.state.selectedDevice
-        return !!d && !!d.fqbn && !!d.port
+        if (!d || !d.fqbn || !d.port) return false
+        if (this.strictCompile && this.hasBlockingErrors) return false
+        return true
+    }
+
+    /** True if the named config file's Monaco model currently has an error marker — drives the file-list error dot. */
+    fileHasError(filename: string): boolean {
+        return this.filesWithErrors.has(filename)
     }
 
     get productName(): string {

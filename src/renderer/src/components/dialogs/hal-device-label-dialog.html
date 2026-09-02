@@ -1,0 +1,56 @@
+<template>
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-xl max-h-[80vh] shadow-2xl flex flex-col">
+
+            <!-- Header -->
+            <div class="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10 flex items-start justify-between shrink-0">
+                <div>
+                    <h2 class="text-gray-900 dark:text-white text-lg font-semibold">Label Accessory Boards</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        ${rows.length} HAL accessory device${rows.length === 1 ? '' : 's'} imported without a name — right
+                        now they're only distinguishable by board type, which can be identical for more than one.
+                    </p>
+                </div>
+                <button click.trigger="skip()" data-testid="hal-device-label-close-x"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/10 dark:hover:bg-white/10 transition-colors"
+                    aria-label="Close">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="px-6 py-4 overflow-y-auto flex-1 min-h-0">
+                <div class="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
+                    <span class="text-amber-600 dark:text-amber-400 text-sm leading-5">⚠</span>
+                    <p class="text-xs text-amber-800 dark:text-amber-300">
+                        Optional, but strongly suggested — e.g. "Yard block detector" or "Helix turnout bank".
+                        Leave blank to keep the generic board name.
+                    </p>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <div repeat.for="row of rows" data-testid="hal-device-label-row" class="flex items-center gap-3">
+                        <div class="w-40 shrink-0 min-w-0">
+                            <p class="text-sm text-gray-900 dark:text-white truncate">${row.boardLabel}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">${row.chip} @ ${row.addressHex}</p>
+                        </div>
+                        <input type="text" value.bind="row.label" data-testid="hal-device-label-input"
+                            placeholder="What does this board do?"
+                            class="flex-1 min-w-0 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-white/10 shrink-0">
+                <button click.trigger="skip()" data-testid="hal-device-label-skip-button"
+                    class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 rounded-lg transition-colors">
+                    Skip
+                </button>
+                <button click.trigger="continue()" data-testid="hal-device-label-continue-button"
+                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors">
+                    Continue
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

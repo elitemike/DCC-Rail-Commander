@@ -139,8 +139,15 @@ debugging a corrupted seed); the summary below is just the pointers you need day
 Scratch dirs are `repos/_build/<board-slug>-<id>/<repoFolder>`, where the slug is derived from the board's FQBN
 plus its serial number (falling back to its port) — see `src/renderer/src/utils/board-key.ts`. PlatformIO build
 output lives in `<scratch>/.pio/build/<env>`, and every board maps to a distinct env, so two boards never share
-build artefacts. `findReusableConfig()` seeds a new configuration from the same physical board first, then any
-board of the same type, and otherwise not at all — never from a different board type.
+build artefacts. Every "Setup New Device" run through `device-wizard.ts` is a wholly independent configuration —
+`config.h`/`myRoster.h`/`myAutomation.h`/etc. are always resolved from the bundled starter template or the
+product repo, never seeded from another saved configuration, even one for the exact same physical board. This is
+deliberate: it keeps multiple separate configurations for one board possible, and a new device never starts out
+with another device's roster/turnouts/etc. already populated. (An earlier version tried to auto-carry a board's
+previous user files forward via `findReusableConfig()`; that made two distinct configurations for the same board
+impossible to keep apart, so it was removed.) A device's config is only ever changed in place by editing it
+directly in the workspace — see `refreshCheckedOutVersion()`, which changes firmware version without touching
+config.h/myAutomation.h/etc.
 
 ### Renderer state model
 

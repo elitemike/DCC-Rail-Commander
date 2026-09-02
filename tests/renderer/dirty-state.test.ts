@@ -20,7 +20,7 @@ import { AutomationEditorCustomElement } from '../../src/renderer/src/components
 
 function makeConfigEditorState(configFiles: Array<{ name: string; content: string }>): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'sequences', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {
@@ -66,6 +66,7 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
             rawEditor: null,
             rawSnapshot: '',
             _idBeforeEdit: new Map<number, number>(),
+            _rowBeforeEdit: new Map<number, { id: number; pin: number; description: string }>(),
         })
         return editor
     }

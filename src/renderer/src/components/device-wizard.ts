@@ -2,6 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogController } from '@aurelia/dialog'
 import { StepModel, Stepper } from '@syncfusion/ej2-navigations'
 import { InstallerState } from '../models/installer-state'
+import { ConfigEditorState } from '../models/config-editor-state'
 import { PlatformIoService } from '../services/platformio.service'
 import { UsbService } from '../services/usb.service'
 import { GitService } from '../services/git.service'
@@ -11,18 +12,27 @@ import { ConfigService } from '../services/config.service'
 import { IDialogService } from '@aurelia/dialog'
 import { DevicePickerDialog } from './dialogs/device-picker-dialog'
 import { productDetails, sortVersionsDescending, pickLatestVersion } from '../models/product-details'
+import {
+    type CommandStationConfigOptions,
+    parseCommandStationConfig,
+    generateCommandStationConfig,
+    defaultCommandStationConfig,
+    parseMyAutomationTrackManager,
+    STACKED_MOTOR_DRIVER,
+} from '../config/commandstation'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import type { SavedConfiguration } from '../models/saved-configuration'
 import { STARTER_TEMPLATES } from '../../../types/starter-templates'
-import { isProductUserFile, copyProductSourceFiles, collectExampleConfigFiles } from '../utils/product-source-files'
+import { copyProductSourceFiles, collectExampleConfigFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
-import { buildScratchPath, findReusableConfig } from '../utils/board-key'
+import { buildScratchPath } from '../utils/board-key'
 
 export class DeviceWizard {
     /** Injected automatically by @aurelia/dialog */
     private readonly $dialog = resolve(IDialogController)
 
     private readonly state = resolve(InstallerState)
+    private readonly configEditorState = resolve(ConfigEditorState)
     private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
     private readonly git = resolve(GitService)
@@ -31,12 +41,21 @@ export class DeviceWizard {
     private readonly config = resolve(ConfigService)
     private readonly dialogService = resolve(IDialogService)
 
-    // ── Wizard step (0–3) ────────────────────────────────────────────────────
+    // ── Wizard step (0–5) ────────────────────────────────────────────────────
+    // Product is fixed to EX-CommandStation (the only product this version
+    // supports), so there is no separate product-selection step. Steps 2–4
+    // (WiFi/Hardware/Track Power) only apply to EX-CSB1 boards — see
+    // isCsb1Board — and are simply skipped straight to Confirm for any other
+    // board (see goNext()'s step===1 handler). Confirm is always the last
+    // step: it's where the device gets its name and a final review of every
+    // choice made earlier in the flow, for both board types.
     step = 0
     readonly STEP_LABELS: StepModel[] = [
         { label: 'Select Device', iconCss: 'sf-icon-cart' },
-        { label: 'Select Product', iconCss: 'sf-icon-cart' },
         { label: 'Select Version', iconCss: 'sf-icon-cart' },
+        { label: 'WiFi', iconCss: 'sf-icon-cart' },
+        { label: 'Hardware', iconCss: 'sf-icon-cart' },
+        { label: 'Track Power', iconCss: 'sf-icon-cart' },
         { label: 'Confirm', iconCss: 'sf-icon-cart' },
     ];
 
@@ -46,35 +65,120 @@ export class DeviceWizard {
     scanning = false
     scanError: string | null = null
 
-    // ── Step 2: Product ──────────────────────────────────────────────────────
-    selectedProduct: string | null = null
-    readonly products = Object.entries(productDetails).map(([key, val]) => ({
-        key,
-        name: val.productName,
-        description: this.productDescription(key),
-    }))
+    // ── Product (fixed) ──────────────────────────────────────────────────────
+    readonly selectedProduct: string = 'ex_commandstation'
+    get productName(): string {
+        return productDetails[this.selectedProduct]?.productName ?? ''
+    }
 
-    // ── Step 3: Version ──────────────────────────────────────────────────────
+    // ── Step 1: Version ──────────────────────────────────────────────────────
     versions: string[] = []
     selectedVersion: string | null = null
+    recommendedVersion: string | null = null
     versionBusy = false
     versionStatus = ''
     versionError: string | null = null
 
-    // ── Step 4: Confirm ──────────────────────────────────────────────────────
-    deviceNickname = ''
+    // ── Step 2: WiFi (EX-CSB1 only) ───────────────────────────────────────────
+    wifiMode: 'ap' | 'sta' = 'ap'
+    wifiHostname = 'dccex'
+    wifiSsid = ''
+    wifiPassword = ''
+    wifiChannel = 1
+
+    // ── Step 3: Hardware (EX-CSB1 only) ───────────────────────────────────────
+    // Combines the OLED display type/scroll mode with the stacked motor
+    // shield choice — both are config.h device-hardware settings, so they
+    // share one pane rather than each getting their own step.
+    // EX-CSB1's onboard panel is a 132x64 OLED — suggested as the default.
+    oledDisplay = 'OLED_132x64'
+    oledScrollMode = 1
     hasStackedMotorShield = false
+    readonly displays = [
+        { value: 'NONE', label: 'None' },
+        { value: 'LCD_16x2', label: 'LCD 16×2' },
+        { value: 'LCD_20x4', label: 'LCD 20×4' },
+        { value: 'OLED_128x32', label: 'OLED 128×32' },
+        { value: 'OLED_128x64', label: 'OLED 128×64' },
+        { value: 'OLED_132x64', label: 'OLED 132×64 (EX-CSB1)' },
+    ]
+    readonly scrollModes = [
+        { value: 0, label: 'Continuous — fill screen, scroll smoothly' },
+        { value: 1, label: 'By page — alternate between pages' },
+        { value: 2, label: 'By row — move up one row at a time' },
+    ]
+    get selectedDisplayLabel(): string {
+        return this.displays.find((d) => d.value === this.oledDisplay)?.label ?? this.oledDisplay
+    }
+
+    // ── Step 4: Track Power (EX-CSB1 only) ────────────────────────────────────
+    // Rendered live by <track-manager-form>, the same component the Startup
+    // section uses — it reads/writes ConfigEditorState directly, so there is
+    // no wizard-local state to track here. See goNext()'s step===1 handler,
+    // which loads ConfigEditorState from the freshly-provisioned device
+    // before this step becomes reachable. The dialog is opened with
+    // DialogDomRendererClassic (see home.ts/workspace.ts) specifically so
+    // this component's Syncfusion dropdown popups render correctly — they
+    // portal to document.body, which paints BEHIND a native <dialog> shown
+    // via showModal() no matter the z-index (browser top-layer rules), so
+    // the default DialogDomRendererStandard can't host this component.
+
+    // ── Step 5: Confirm ────────────────────────────────────────────────────────
+    deviceNickname = ''
+    deviceNicknameEl?: HTMLInputElement
+
+    /**
+     * Readable summary of the Track Power step's live edits, for the Confirm
+     * review — <track-manager-form> writes straight through
+     * ConfigEditorState.generatedTrackManagerContent, so this just re-parses
+     * that same EXRAIL text the same way the form itself does on reload (see
+     * track-manager-form.ts's reloadFromConfig()), starting from the
+     * firmware defaults for anything the user never touched.
+     */
+    get trackPowerSummary(): string {
+        const opts = defaultCommandStationConfig()
+        Object.assign(opts, parseMyAutomationTrackManager(this.configEditorState.generatedTrackManagerContent))
+        const perTrack = opts.startupPowerMode === 'individual'
+        const powerModeLabel = {
+            all: 'All tracks on at startup',
+            off: 'All tracks off at startup',
+            individual: 'Individual per-track power',
+        }[opts.startupPowerMode]
+        const track = (label: string, mode: string, power: 'ON' | 'OFF'): string =>
+            `${label}: ${mode}${perTrack ? ` (${power})` : ''}`
+        const parts = [
+            powerModeLabel,
+            track('A', opts.trackAMode, opts.trackAPower),
+            track('B', opts.trackBMode, opts.trackBPower),
+        ]
+        if (this.hasStackedMotorShield) {
+            parts.push(track('C', opts.trackCMode, opts.trackCPower))
+            parts.push(track('D', opts.trackDMode, opts.trackDPower))
+        }
+        return parts.join(' · ')
+    }
 
     // ── Finishing ────────────────────────────────────────────────────────────
     finishing = false
     finishError: string | null = null
+    /** Set by provision() once the device is created — carried through steps 3–6 to completeWizard(). */
+    private provisionedId: string | null = null
 
     isMock = false
 
-    get showStackedMotorShieldOption(): boolean {
-        if (this.selectedProduct !== 'ex_commandstation' || !this.selectedBoard) return false
+    get isCsb1Board(): boolean {
+        if (!this.selectedBoard) return false
         const boardName = this.selectedBoard.name.toUpperCase()
         return boardName.includes('EX-CSB1') || boardName.includes('EXCSB1')
+    }
+
+    get showStackedMotorShieldOption(): boolean {
+        return this.selectedProduct === 'ex_commandstation' && this.isCsb1Board
+    }
+
+    /** Confirm is always the last step, for every board — see goNext()'s step===1 handler. */
+    get isLastStep(): boolean {
+        return this.step === 5
     }
 
     // ── Syncfusion Stepper ───────────────────────────────────────────────────
@@ -135,29 +239,6 @@ export class DeviceWizard {
         }
     }
 
-    // ── Step 2: Product ──────────────────────────────────────────────────────
-    private productDescription(key: string): string {
-        const desc: Record<string, string> = {
-            ex_commandstation: 'Full DCC command station for model railroads',
-            ex_ioexpander: 'Expands I/O pins via I\u00b2C',
-            ex_turntable: 'Controls a turntable or traverser',
-        }
-        return desc[key] ?? ''
-    }
-
-    private applyCsb1MotorShieldType(content: string): string {
-        if (!this.showStackedMotorShieldOption) return content
-
-        const motorShieldType = this.hasStackedMotorShield ? 'EXCSB1_WITH_EX8874' : 'EXCSB1'
-        const motorShieldPattern = /^#define\s+MOTOR_SHIELD_TYPE\s+\S+$/m
-
-        if (motorShieldPattern.test(content)) {
-            return content.replace(motorShieldPattern, `#define MOTOR_SHIELD_TYPE ${motorShieldType}`)
-        }
-
-        return `${content.trimEnd()}\n#define MOTOR_SHIELD_TYPE ${motorShieldType}\n`
-    }
-
     isDeviceSupported(productKey: string): boolean {
         const product = productDetails[productKey]
         const board = this.selectedBoard
@@ -207,7 +288,8 @@ export class DeviceWizard {
             this.versionStatus = 'Loading version list...'
             const tags = await this.git.listTags(repoPath)
             this.versions = sortVersionsDescending(tags)
-            this.selectedVersion = pickLatestVersion(this.versions)
+            this.recommendedVersion = pickLatestVersion(this.versions)
+            this.selectedVersion = this.recommendedVersion
             this.versionStatus = ''
         } catch (err) {
             this.versionError = (err as Error).message
@@ -218,37 +300,134 @@ export class DeviceWizard {
 
     // ── Navigation ───────────────────────────────────────────────────────────
     get canGoNext(): boolean {
-        if (this.step === 0) return this.selectedBoard !== null
-        if (this.step === 1) return this.selectedProduct !== null
-        if (this.step === 2) return this.selectedVersion !== null && !this.versionBusy
-        if (this.step === 3) return this.deviceNickname.trim().length > 0
+        if (this.step === 0) return this.selectedBoard !== null && this.isDeviceSupported(this.selectedProduct)
+        if (this.step === 1) return this.selectedVersion !== null && !this.versionBusy
+        if (this.step === 2) return this.wifiMode !== 'sta' || this.wifiSsid.trim().length > 0
+        if (this.step === 3 || this.step === 4) return true
+        if (this.step === 5) return this.deviceNickname.trim().length > 0
         return false
     }
 
     async goNext(): Promise<void> {
         if (!this.canGoNext) return
-        if (this.step === 3) {
-            await this.finish()
+
+        if (this.step === 1) {
+            const id = await this.provision()
+            if (!id) return
+            if (this.isCsb1Board) {
+                // Load ConfigEditorState from the config.h/etc. provision()
+                // just wrote for THIS device, so the WiFi/Hardware/Track Power
+                // steps — track-manager-form in particular — read and write
+                // this device's own state, not whatever the previous device
+                // left behind in the shared singleton.
+                this.configEditorState.loadFromInstallerState()
+                this.step = 2
+                this.syncStepper()
+            } else {
+                // Non-CSB1 boards have nothing to configure between Version
+                // and Confirm — skip straight there.
+                this.step = 5
+                this.syncStepper()
+                this.enterConfirmStep()
+            }
             return
         }
+
+        if (this.isLastStep) {
+            if (this.provisionedId) await this.completeWizard(this.provisionedId)
+            return
+        }
+
+        // Push the Hardware step's motor-shield choice into config.h before
+        // leaving it — <track-manager-form> reads ConfigEditorState.configHContent
+        // in its binding() lifecycle hook the instant `if.bind="step === 4"`
+        // flips true, which Aurelia can run synchronously off the `step++`
+        // below; doing this sync *before* incrementing (and awaiting it)
+        // guarantees the write lands first regardless of that timing — see
+        // syncCsb1ConfigH()'s doc comment.
+        if (this.step === 3) await this.syncCsb1ConfigH()
+
         this.step++
         this.sfStepper?.nextStep();
-        if (this.step === 2) await this.loadVersions()
+        if (this.step === 1) await this.loadVersions()
+        if (this.step === 5) this.enterConfirmStep()
     }
 
     goBack(): void {
-        if (this.step > 0) {
-            this.step--
-            this.sfStepper?.previousStep();
+        if (this.step === 0) return
+
+        if (!this.isCsb1Board && this.step === 5) {
+            // Mirror goNext()'s skip: non-CSB1 boards jump straight back to
+            // Version, since WiFi/Hardware/Track Power were never visited.
+            this.step = 1
+            this.syncStepper()
+            return
         }
+
+        this.step--
+        this.sfStepper?.previousStep();
+    }
+
+    /**
+     * Regenerates config.h from the wizard's WiFi/Display/motor-shield
+     * answers and writes it everywhere something might read it: disk,
+     * state.configFiles (so it's captured in the saved configuration), and
+     * ConfigEditorState.configHContent — that last one is what makes this
+     * necessary here at all: <track-manager-form>'s hasStackedMotorShield
+     * is derived from ConfigEditorState.configHContent's motor driver (see
+     * track-manager-form.ts), so without pushing the checkbox's value there
+     * before Track Power mounts, it would still see the driver provision()
+     * wrote before the user ever reached the Hardware step, and hide
+     * Track C/D even when the stacked-shield checkbox is checked. Called
+     * both on the way into Track Power and again in completeWizard() (in
+     * case the user went back and changed something afterward).
+     */
+    private async syncCsb1ConfigH(): Promise<void> {
+        const idx = this.state.configFiles.findIndex((f) => f.name === 'config.h')
+        if (idx === -1 || !this.state.scratchPath) return
+
+        // config.h has no managed-block wrapping (unlike myStartup.h) — it's
+        // safe to reparse/regenerate directly here, the same way
+        // commandstation-config-form.ts's onFieldChange() does.
+        const opts: CommandStationConfigOptions = parseCommandStationConfig(this.state.configFiles[idx].content)
+        opts.enableWifi = true
+        opts.wifiMode = this.wifiMode
+        opts.wifiHostname = this.wifiHostname.trim() || 'dccex'
+        opts.wifiSsid = this.wifiSsid.trim()
+        opts.wifiPassword = this.wifiPassword
+        opts.wifiChannel = this.wifiChannel
+        opts.display = this.oledDisplay
+        opts.scrollMode = this.oledScrollMode
+        // generateCommandStationConfig() writes opts.motorDriver verbatim as
+        // MOTOR_SHIELD_TYPE — it does NOT derive it from hasStackedMotorShield,
+        // so the checkbox has to drive the actual driver string here.
+        opts.motorDriver = this.hasStackedMotorShield ? STACKED_MOTOR_DRIVER : 'EXCSB1'
+        opts.hasStackedMotorShield = this.hasStackedMotorShield
+
+        const newContent = generateCommandStationConfig(opts)
+        this.state.configFiles[idx] = { name: 'config.h', content: newContent }
+        this.configEditorState.configHContent = newContent
+        await this.files.writeFile(`${this.state.scratchPath}/config.h`, newContent)
+    }
+
+    private enterConfirmStep(): void {
+        if (this.isCsb1Board) this.deviceNickname ||= 'CSB1'
+        // Wait a tick — if.bind hasn't committed the step-5 DOM yet.
+        setTimeout(() => this.deviceNicknameEl?.focus(), 0)
     }
 
     cancel(): void {
         this.$dialog.cancel()
     }
 
-    // ── Finish: persist state then close dialog ───────────────────────────────
-    private async finish(): Promise<void> {
+    // ── Provision: create the device's repo/scratch dir + saved config ────────
+    // Returns the new config's id on success, or null on failure (finishError
+    // is set). Does not close the dialog — EX-CSB1 boards continue on to the
+    // WiFi/Hardware/Track Power/Confirm steps; completeWizard() closes it. Runs
+    // right after Version, before the device has a name (Confirm — where the
+    // name is collected — is now the last step), so the saved config is
+    // created with a blank name and completeWizard() fills it in.
+    private async provision(): Promise<string | null> {
         this.finishing = true
         this.finishError = null
         try {
@@ -303,32 +482,12 @@ export class DeviceWizard {
             const checkout = await this.git.checkout(repoPath, this.selectedVersion)
             if (!checkout.success) throw new Error(checkout.error ?? 'Checkout failed')
 
-            // ── Collect user-tracked file names ──────────────────────────────
-            // These are config.h, myAutomation, etc. — preserved across reconfigures.
-            const isUserFile = (name: string) => isProductUserFile(product, name)
-
-            // ── Save existing user files from previous scratchPath (if any) ──
-            // Prefer this exact board's previous configuration, then any config
-            // for the same board type — never another board's.
-            const prevConf = findReusableConfig(
-                this.state.savedConfigurations,
-                this.selectedProduct!,
-                boardIdentity,
-            )
-            const savedUserFiles: Map<string, string> = new Map()
-            if (prevConf?.scratchPath) {
-                try {
-                    const prevFiles = await this.files.listDir(prevConf.scratchPath)
-                    for (const name of prevFiles) {
-                        if (isUserFile(name)) {
-                            const content = await this.files.readFile(`${prevConf.scratchPath}/${name}`)
-                            if (content.trim()) savedUserFiles.set(name, content)
-                        }
-                    }
-                } catch { /* previous scratch dir may not exist */ }
-            }
-
             // ── Clear scratch dir and create fresh ───────────────────────────
+            // Every "Setup New Device" run is a distinct, independent
+            // configuration — it never seeds config.h/myRoster.h/etc. from any
+            // other saved configuration, even one for the same physical board,
+            // so multiple separate configurations for one board stay possible
+            // and a new device never inherits another one's roster/turnouts/etc.
             try { await this.files.deleteFiles(scratchPath) } catch { /* ignore */ }
             await this.files.mkdir(scratchPath)
 
@@ -336,18 +495,14 @@ export class DeviceWizard {
             await copyProductSourceFiles(this.files, product, repoPath, scratchPath)
 
             // ── Resolve user config files ────────────────────────────────────
-            // Priority: 1) previously-saved user edit
-            //           2) bundled starter template (curated, known-good default)
-            //           3) file in source repo
-            //           4) example file in source repo ("config.h.example")
-            //           5) example file in source repo ("config.example.h")
+            // Priority: 1) bundled starter template (curated, known-good default)
+            //           2) file in source repo
+            //           3) example file in source repo ("config.h.example")
+            //           4) example file in source repo ("config.example.h")
             const configFiles: Array<{ name: string; content: string }> = []
             for (const fileName of product.minimumConfigFiles) {
-                let content = savedUserFiles.get(fileName) ?? ''
-                if (!content) {
-                    // 2) bundled starter template
-                    content = STARTER_TEMPLATES[repoFolder]?.[fileName] ?? ''
-                }
+                // 1) bundled starter template
+                let content = STARTER_TEMPLATES[repoFolder]?.[fileName] ?? ''
                 if (!content) {
                     const filePath = `${repoPath}/${fileName}`
                     // Repos may name the example file either "config.h.example" or
@@ -365,22 +520,10 @@ export class DeviceWizard {
                         content = await this.files.readFile(examplePathInfix)
                     }
                 }
-                if (fileName === 'config.h') {
-                    content = this.applyCsb1MotorShieldType(content)
-                }
                 configFiles.push({ name: fileName, content })
                 console.debug('[device-wizard] writing starter config to scratch:', `${scratchPath}/${fileName}`)
                 await this.files.writeFile(`${scratchPath}/${fileName}`, content)
             }
-            // Restore other tracked user files (myAutomation, etc.)
-            for (const [name, content] of savedUserFiles) {
-                if (!product.minimumConfigFiles.includes(name)) {
-                    configFiles.push({ name, content })
-                    console.debug('[device-wizard] restoring user file to scratch:', `${scratchPath}/${name}`)
-                    await this.files.writeFile(`${scratchPath}/${name}`, content)
-                }
-            }
-
             // The repo's shipped example config files (myAutomation.example.h, etc.)
             // were just copied into scratchPath by copyProductSourceFiles — track
             // them too so they render (grouped under Examples) instead of sitting
@@ -398,6 +541,8 @@ export class DeviceWizard {
             this.state.configFiles = configFiles
 
             // ── Persist saved configuration ──────────────────────────────────
+            // name is blank here — Confirm (where it's collected) is the last
+            // step now, so completeWizard() fills it in once the wizard finishes.
             const savedConf: SavedConfiguration = {
                 id,
                 name: this.deviceNickname.trim(),
@@ -418,6 +563,51 @@ export class DeviceWizard {
                 ? this.state.savedConfigurations : []
             this.state.savedConfigurations = [savedConf, ...existing].slice(0, 10)
             await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+
+            this.provisionedId = id
+            return id
+        } catch (err) {
+            this.finishError = (err as Error).message
+            return null
+        } finally {
+            this.finishing = false
+        }
+    }
+
+    // ── Complete: apply extended-step answers (if any), persist, close ────────
+    private async completeWizard(id: string): Promise<void> {
+        this.finishing = true
+        this.finishError = null
+        try {
+            if (this.isCsb1Board) {
+                // Catches any WiFi/Display change made after the user already
+                // visited Track Power and came back — syncCsb1ConfigH() also
+                // ran on the way into Track Power (see goNext()), but that
+                // was a point-in-time snapshot.
+                await this.syncCsb1ConfigH()
+                // Track Power was already written live to ConfigEditorState by
+                // <track-manager-form> during the wizard — it's picked up
+                // below along with config.h when the saved configuration's
+                // configFiles snapshot is refreshed.
+            }
+
+            // Device name is only known now (Confirm is the last step) — fill
+            // it in, along with whatever config.h/myStartup.h changes were
+            // just made, before persisting.
+            const savedIdx = this.state.savedConfigurations.findIndex((c) => c.id === id)
+            if (savedIdx !== -1) {
+                this.state.savedConfigurations[savedIdx] = {
+                    ...this.state.savedConfigurations[savedIdx],
+                    name: this.deviceNickname.trim(),
+                    configFiles: this.state.configFiles.map((f) => ({ ...f })),
+                    lastModified: new Date().toISOString(),
+                }
+                await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+            }
+
+            // Roster isn't a wizard step — land the workspace there once it
+            // opens, for a future onboarding tutorial to hook into.
+            this.state.pendingWizardOpenRoster = true
 
             await this.$dialog.ok({ id })
         } catch (err) {

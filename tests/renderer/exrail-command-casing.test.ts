@@ -66,10 +66,6 @@ describe('validateExrailCommandCasing', () => {
     it('does not run for files with no defined command vocabulary (e.g. config.h)', () => {
         expect(_runValidatorsForTest('config.h', 'throw(200)')).toHaveLength(0)
     })
-
-    it('does not flag words that are not EXRAIL commands at all', () => {
-        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')).toHaveLength(0)
-    })
 })
 
 describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL files', () => {
@@ -114,5 +110,150 @@ describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL fil
     it('flags a lowercase SIGNAL call in mySignals.h', () => {
         const markers = _runValidatorsForTest('mySignals.h', 'signal(5, 6, 13)')
         expect(markers.some(m => m.message.includes("'signal' should be 'SIGNAL'"))).toBe(true)
+    })
+})
+
+describe('validateUnknownExrailCommand', () => {
+    it('flags a typo\'d macro name that is not a case variant of any known command', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'Ros("")')
+        expect(markers.some(m => m.message === "'Ros' is not a recognised EXRAIL command.")).toBe(true)
+    })
+
+    it('does not flag a correctly-cased command', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('leaves genuine case-mismatches to validateExrailCommandCasing, not this validator', () => {
+        // "roster" uppercases to a real command name — should get exactly the casing marker,
+        // not also an "unrecognised command" one.
+        const markers = _runValidatorsForTest('myRoster.h', 'roster(3, "Thomas", "LIGHT/HORN")')
+        expect(markers).toHaveLength(1)
+        expect(markers[0].message).toContain("should be 'ROSTER'")
+    })
+
+    it('does not flag identifiers used as arguments, only genuine command position', () => {
+        const markers = _runValidatorsForTest('mySignals.h', 'SIGNAL(myRedPin, 6, 13)')
+        expect(markers).toHaveLength(0)
+    })
+
+    it('does not flag unrecognised-looking words inside comments or quoted strings', () => {
+        expect(_runValidatorsForTest('myRoster.h', '// Ros(1, "x", "y") — todo\nROSTER(1, "x", "y")')).toHaveLength(0)
+        expect(_runValidatorsForTest('myRoster.h', 'ROSTER(1, "Ros(200)", "y")')).toHaveLength(0)
+    })
+
+    it('flags an unrecognised macro across every closed-vocabulary file', () => {
+        expect(_runValidatorsForTest('myTurnouts.h', 'MADE_UP_TURNOUT(1, 25, "x")')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySensors.h', 'SENSER(1, 17, "x")')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySignals.h', 'SIGNALS(5, 6, 13)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myAliases.h', 'ALIASS(FOO, 1)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
+
+    it('also runs on EXRAIL script files — EXRAIL is a closed macro DSL, a stray function call cannot compile there either', () => {
+        expect(_runValidatorsForTest('myAutomation.h', 'myCustomFunction(200)')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('mySequences.h', 'SEQUENCE(1)\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myEvents.h', 'ONSENSOR(1)\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+        expect(_runValidatorsForTest('myStartup.h', 'AUTOSTART\n  myCustomFunction(200)\nDONE')
+            .some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
+
+    it('does not flag valid EXRAIL commands in a script file, only genuinely unknown ones', () => {
+        const markers = _runValidatorsForTest('myAutomation.h', 'ROUTE(1, "Test")\n  THROW(200)\n  DELAY(500)\nDONE')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+})
+
+describe('validateTrailingLineGarbage', () => {
+    it('flags stray text after a valid call\'s closing paren', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+        expect(markers.some(m => m.message.includes("EXRAIL allows only one command per line"))).toBe(true)
+    })
+
+    it('does not flag a valid call alone on its line', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse")\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not flag a trailing comment after a valid call', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Yard Reverse") // reversing move\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('flags stray text after a bare paren-less keyword', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nDONE now')
+        expect(markers.some(m => m.message.includes('one command per line'))).toBe(true)
+    })
+
+    it('does not flag a bare keyword alone on its line', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nDONE')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not misfire on a closing paren inside a quoted string argument', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(1, "Loco (Diesel)", "LIGHT")')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('skips an unbalanced (mid-edit) call rather than guessing where it ends', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(1, "Loco",')
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('does not run for files with no defined command vocabulary', () => {
+        expect(_runValidatorsForTest('config.h', 'anything(1) garbage')).toHaveLength(0)
+    })
+
+    // Regression: a STEALTH/STEALTH_GLOBAL argument may legitimately span multiple
+    // physical lines (EXRAIL and the C++ compiler both tolerate it — see
+    // exrail-block-compiler.ts's parseBody()). The old line-scoped paren scan gave up
+    // after one line and treated every following C++ line as its own top-level EXRAIL
+    // statement, firing a false "allows only one command per line" on each one.
+    it('does not flag a multi-line STEALTH body as multiple commands', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('one command per line'))).toHaveLength(0)
+    })
+
+    it('still flags stray text after a multi-line STEALTH call\'s actual closing paren', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n}) garbage\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.some(m => m.message.includes('one command per line'))).toBe(true)
+    })
+})
+
+describe('validateUnknownExrailCommand / validateExrailCommandCasing inside STEALTH bodies', () => {
+    // Regression: STEALTH/STEALTH_GLOBAL's argument is arbitrary C++, not EXRAIL — a C++
+    // identifier in call position (`if (`, `digitalWrite(`) was being flagged as an
+    // unrecognised EXRAIL command, and a lowercase C++ keyword that happens to collide
+    // with an EXRAIL command name (e.g. `close`) was being flagged as miscased EXRAIL.
+    it('does not flag C++ identifiers inside a STEALTH body as unrecognised commands', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n  delay(500);\n})\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('does not flag a STEALTH_GLOBAL body either', () => {
+        const markers = _runValidatorsForTest('myAutomation.h', 'STEALTH_GLOBAL(int counter = 0;\nvoid tick() { counter++; })')
+        expect(markers.filter(m => m.message.includes('not a recognised'))).toHaveLength(0)
+    })
+
+    it('does not flag a lowercase C++ identifier inside STEALTH that collides with an EXRAIL command name', () => {
+        const body = 'ROUTE(1, "Test")\nSTEALTH(int close = 1;)\nDONE'
+        const markers = _runValidatorsForTest('myRoutes.h', body)
+        expect(markers.filter(m => m.message.includes('case-sensitive'))).toHaveLength(0)
+    })
+
+    it('still flags an unrecognised command outside any STEALTH body', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Test")\nMADE_UP_COMMAND(1)\nDONE')
+        expect(markers.some(m => m.message.includes('not a recognised'))).toBe(true)
     })
 })

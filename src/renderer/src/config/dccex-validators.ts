@@ -10,8 +10,9 @@
  */
 
 import * as monaco from 'monaco-editor'
-import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData } from '../utils/exrail-completions'
-import { collectObjectIdReferences, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
+import { EXRAIL_REFERENCE_COMMANDS, getTargetTypes, isExrailCompletionFile, type ExrailCompletionData, type ExrailRefKind } from '../utils/exrail-completions'
+import { definedTracksFor } from '../components/visual-editors/exrail-block-compiler'
+import { collectObjectIdReferences, getPrimaryAliasForId, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
 
@@ -436,17 +437,97 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
     }
 }
 
+// ── TURNOUTL validator ────────────────────────────────────────────────────────
+
+/**
+ * TURNOUTL(id, addr, "description") — DCC accessory decoder, single linear address.
+ */
+function validateTurnoutL(text: string, out: monaco.editor.IMarkerData[]): void {
+    for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, 'TURNOUTL')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+        if (args.length !== 3) {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                `TURNOUTL expects 3 arguments (id, addr, "desc") but got ${args.length}.`,
+            ))
+            continue
+        }
+
+        const intChecks: Array<{ idx: number; label: string; min: number; max: number }> = [
+            { idx: 0, label: 'ID', min: 0, max: 32767 },
+            // Linear address = addr*4 + subAddr + 1 over TURNOUT's own DCC address (0-511) /
+            // sub-address (0-3) range, i.e. the same address space expressed as one number.
+            { idx: 1, label: 'linear address', min: 1, max: 2048 },
+        ]
+        for (const { idx, label, min, max } of intChecks) {
+            const a = args[idx]
+            if (!isInt(a.value)) {
+                out.push(makeMarker(text, a.start, a.end,
+                    `${label} must be an integer, got: ${a.value || '(empty)'}.`,
+                ))
+            } else {
+                const n = Number(a.value)
+                if (n < min || n > max) {
+                    out.push(makeMarker(text, a.start, a.end,
+                        `${label} value ${n} is out of range (${min}–${max}).`,
+                        monaco.MarkerSeverity.Warning,
+                    ))
+                }
+            }
+        }
+
+        const desc = args[2]
+        if (!isQuotedString(desc.value)) {
+            out.push(makeMarker(text, desc.start, desc.end,
+                `Description must be a double-quoted string, e.g. "Yard Exit".`,
+            ))
+        }
+    }
+}
+
+// ── VIRTUAL_TURNOUT validator ─────────────────────────────────────────────────
+
+/**
+ * VIRTUAL_TURNOUT(id, "description") — no hardware, driven by ONCLOSE/ONTHROW handlers.
+ */
+function validateVirtualTurnout(text: string, out: monaco.editor.IMarkerData[]): void {
+    for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, 'VIRTUAL_TURNOUT')) {
+        const args = parseArgSpans(argsRaw, innerStart)
+        if (args.length !== 2) {
+            out.push(makeMarker(
+                text, m.index, m.index + m[0].length,
+                `VIRTUAL_TURNOUT expects 2 arguments (id, "desc") but got ${args.length}.`,
+            ))
+            continue
+        }
+
+        const idArg = args[0]
+        if (!isInt(idArg.value)) {
+            out.push(makeMarker(text, idArg.start, idArg.end,
+                `ID must be an integer, got: ${idArg.value || '(empty)'}.`,
+            ))
+        }
+
+        const desc = args[1]
+        if (!isQuotedString(desc.value)) {
+            out.push(makeMarker(text, desc.start, desc.end,
+                `Description must be a double-quoted string, e.g. "Siding".`,
+            ))
+        }
+    }
+}
+
 // ── Turnout ID uniqueness (myTurnouts.h) ──────────────────────────────────────
 
 /**
- * SERVO_TURNOUT/TURNOUT/PIN_TURNOUT all share one ID namespace (see
- * `collectObjectIdReferences` — a Turnout is matched purely on `id`, regardless
- * of which of the three macros defined it). Flags the 2nd+ occurrence of any ID.
+ * SERVO_TURNOUT/TURNOUT/TURNOUTL/PIN_TURNOUT/VIRTUAL_TURNOUT all share one ID
+ * namespace (see `collectObjectIdReferences` — a Turnout is matched purely on
+ * `id`, regardless of which macro defined it). Flags the 2nd+ occurrence of any ID.
  */
 function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerData[]): void {
     const seen = new Set<number>()
 
-    for (const macroName of ['SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT']) {
+    for (const macroName of ['SERVO_TURNOUT', 'TURNOUT', 'TURNOUTL', 'PIN_TURNOUT', 'VIRTUAL_TURNOUT']) {
         for (const { fullMatch: m, argsRaw, innerStart } of eachMacroCall(text, macroName)) {
             if (macroName === 'TURNOUT' && m.index > 0 && /\w/.test(text[m.index - 1])) continue
 
@@ -470,6 +551,11 @@ function validateTurnoutIdUniqueness(text: string, out: monaco.editor.IMarkerDat
 const SEQUENCE_ID_MACRO: Record<string, { macroName: 'ROUTE' | 'SEQUENCE' | 'AUTOMATION'; kind: SequenceObjectKind }> = {
     'myRoutes.h': { macroName: 'ROUTE', kind: 'Route' },
     'mySequences.h': { macroName: 'SEQUENCE', kind: 'Sequence' },
+    'myAutomations.h': { macroName: 'AUTOMATION', kind: 'Automation' },
+    // myAutomation.h (singular) is the pre-existing includes/HAL/custom-code file — kept here too
+    // since a hand-typed AUTOMATION(...) block can still legally sit in its free-form content
+    // (the one-time load migration in ConfigEditorState moves *existing* ones out to
+    // myAutomations.h, but doesn't stop a new one being typed there directly afterward).
     'myAutomation.h': { macroName: 'AUTOMATION', kind: 'Automation' },
 }
 
@@ -587,7 +673,7 @@ function validateAliasTargets(text: string, out: monaco.editor.IMarkerData[], da
 // ── EXRAIL object-reference validator (myAutomation.h / myRoutes.h / mySequences.h) ────
 
 /** True when `value` is a configured object ID or a defined alias resolving to one of `targetTypes`. */
-function isValidExrailReference(value: string, targetTypes: AliasTargetType[], data: ExrailCompletionData): boolean {
+function isValidExrailReference(value: string, targetTypes: ExrailRefKind[], data: ExrailCompletionData): boolean {
     if (isInt(value)) {
         const n = Number(value)
         return targetTypes.some((type) => {
@@ -597,9 +683,17 @@ function isValidExrailReference(value: string, targetTypes: AliasTargetType[], d
                 case 'Sensor': return (data.sensors ?? []).some((s) => s.id === n)
                 case 'Route': return (data.routes ?? []).some((r) => r.id === n)
                 case 'Sequence': return (data.sequences ?? []).some((s) => s.id === n)
+                case 'Signal': return (data.signals ?? []).some((s) => (s.type === 'DCC' ? s.id === n : s.red === n))
                 default: return false
             }
         })
+    }
+    // Track is a bare letter (A/B/C/D) — never numeric, and never alias-eligible (no ALIAS
+    // mechanism covers tracks) — so it's checked directly rather than falling into the
+    // identifier/alias branch below, which would otherwise (incorrectly) look it up as an alias
+    // name and almost always fail.
+    if (targetTypes.includes('Track') && (data.tracks ?? []).some((t) => String(t.value) === value)) {
+        return true
     }
     if (isIdentifier(value)) {
         const alias = data.aliases.find((a) => a.name === value)
@@ -681,6 +775,30 @@ function buildStringMask(text: string): boolean[] {
 }
 
 /**
+ * Offset → true while inside a STEALTH(...)/STEALTH_GLOBAL(...) call's argument — the
+ * raw C++ body, not the surrounding EXRAIL syntax. That argument is arbitrary C++, not
+ * EXRAIL, so it must be exempt from EXRAIL's closed-vocabulary/casing checks below:
+ * without this, any C++ identifier in call position inside it (`if (`, `digitalWrite(`,
+ * ...) would be flagged as an unrecognised EXRAIL command. Reuses findMatchingCloseParen
+ * so a body spanning multiple physical lines is masked correctly, matching
+ * validateTrailingLineGarbage's own multi-line tolerance.
+ */
+function buildStealthArgMask(scanText: string): boolean[] {
+    const mask: boolean[] = new Array(scanText.length).fill(false)
+    const stringMask = buildStringMask(scanText)
+    const re = /\bSTEALTH(?:_GLOBAL)?\b\s*\(/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(scanText)) !== null) {
+        if (stringMask[m.index]) continue
+        const openIdx = m.index + m[0].length - 1
+        const closeIdx = findMatchingCloseParen(scanText, openIdx)
+        if (closeIdx === -1) continue  // unbalanced — mid-edit
+        for (let i = openIdx + 1; i < closeIdx; i++) mask[i] = true
+    }
+    return mask
+}
+
+/**
  * EXRAIL command names are C preprocessor macros and are case-sensitive —
  * `throw(200)` is not recognised as `THROW(200)`, it's an undefined symbol that
  * fails to compile. Flags any word that matches a known command name only when
@@ -698,6 +816,7 @@ function validateExrailCommandCasing(text: string, filename: string, out: monaco
 
     const scanText = blankLineComments(text)
     const stringMask = buildStringMask(scanText)
+    const stealthMask = buildStealthArgMask(scanText)
 
     const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
     let m: RegExpExecArray | null
@@ -707,6 +826,7 @@ function validateExrailCommandCasing(text: string, filename: string, out: monaco
         if (token === upper) continue  // already correctly cased
         if (!canonicalNames.has(upper)) continue  // not a known EXRAIL command at all
         if (stringMask[m.index]) continue  // inside a quoted string
+        if (stealthMask[m.index]) continue  // inside a STEALTH/STEALTH_GLOBAL C++ body, not EXRAIL
 
         const afterIdx = m.index + token.length
         const lineEnd = scanText.indexOf('\n', m.index)
@@ -725,6 +845,193 @@ function validateExrailCommandCasing(text: string, filename: string, out: monaco
     }
 }
 
+/**
+ * EXRAIL only recognises a fixed vocabulary of macro names — every other identifier
+ * in command position is a compile-time error, not a warning. Flags any word in
+ * genuine command position (immediately followed by `(`, or standing alone on its
+ * own line for paren-less keywords like DONE) whose uppercased form does *not*
+ * match any known command for this file at all — a case mismatch on a real command
+ * is validateExrailCommandCasing's job, not this one.
+ */
+function validateUnknownExrailCommand(text: string, filename: string, out: monaco.editor.IMarkerData[]): void {
+    const canonicalNames = new Set(
+        getCompletions(filename)
+            .map((s) => s.label)
+            .filter((label) => /^[A-Z][A-Z0-9_]*$/.test(label)),
+    )
+    if (canonicalNames.size === 0) return
+
+    const scanText = blankLineComments(text)
+    const stringMask = buildStringMask(scanText)
+    const stealthMask = buildStealthArgMask(scanText)
+
+    const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
+    let m: RegExpExecArray | null
+    while ((m = tokenRe.exec(scanText)) !== null) {
+        const token = m[0]
+        const upper = token.toUpperCase()
+        if (canonicalNames.has(upper)) continue  // known command, right case or wrong — casing validator's job
+        if (stringMask[m.index]) continue  // inside a quoted string
+        if (stealthMask[m.index]) continue  // inside a STEALTH/STEALTH_GLOBAL C++ body, not EXRAIL
+
+        const afterIdx = m.index + token.length
+        const lineEnd = scanText.indexOf('\n', m.index)
+        const restOfLine = scanText.slice(afterIdx, lineEnd === -1 ? scanText.length : lineEnd)
+        const followedByParen = /^\s*\(/.test(restOfLine)
+
+        const lineStart = scanText.lastIndexOf('\n', m.index) + 1
+        const line = scanText.slice(lineStart, lineEnd === -1 ? scanText.length : lineEnd)
+        const isBareLine = line.trim() === token
+
+        if (followedByParen || isBareLine) {
+            out.push(makeMarker(text, m.index, afterIdx,
+                `'${token}' is not a recognised EXRAIL command.`,
+            ))
+        }
+    }
+}
+
+/**
+ * Scans forward from `openIdx` (the absolute index of a `(` within `text`) for its
+ * matching `)`, ignoring parens inside double-quoted strings and freely crossing line
+ * breaks — a macro call's argument (e.g. STEALTH/STEALTH_GLOBAL's C++ body) may
+ * legitimately span multiple physical lines, same as exrail-block-compiler.ts's
+ * parseBody() tolerates. Returns -1 if unbalanced by end of text (e.g. still mid-edit) —
+ * callers should skip rather than guess.
+ */
+function findMatchingCloseParen(text: string, openIdx: number): number {
+    let depth = 0
+    let inStr = false
+    let esc = false
+    for (let i = openIdx; i < text.length; i++) {
+        const ch = text[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '(') depth++
+        else if (ch === ')') {
+            depth--
+            if (depth === 0) return i
+        }
+    }
+    return -1
+}
+
+/**
+ * EXRAIL allows exactly one statement per line — a `COMMAND(args)` call (through its
+ * closing paren, which may land on a later physical line — see findMatchingCloseParen
+ * above) or a bare paren-less keyword (DONE, ELSE, ...) is the entire line; anything else
+ * trailing (other than a `//` comment, already blanked out here) means the generated
+ * header won't compile, e.g. `ROUTE(1, "Yard Reverse") asfdsadf`.
+ */
+function validateTrailingLineGarbage(text: string, filename: string, out: monaco.editor.IMarkerData[]): void {
+    if (getCompletions(filename).length === 0) return
+
+    const scanText = blankLineComments(text)
+    const lines = scanText.split('\n')
+    let lineStart = 0
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const leadingWs = line.match(/^\s*/)![0].length
+        const trimmed = line.slice(leadingWs)
+
+        if (trimmed.length === 0) { lineStart += line.length + 1; continue }
+
+        const idMatch = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*/)
+        if (!idMatch) { lineStart += line.length + 1; continue }
+
+        let cursor = leadingWs + idMatch[0].length
+        while (cursor < line.length && /\s/.test(line[cursor])) cursor++
+
+        let checkLine = line
+        let checkLineStart = lineStart
+        let statementEnd = leadingWs + idMatch[0].length
+
+        if (line[cursor] === '(') {
+            const closeAbs = findMatchingCloseParen(scanText, lineStart + cursor)
+            if (closeAbs === -1) { lineStart += line.length + 1; continue }  // unbalanced — mid-edit, skip
+
+            // The closing paren may be on a later physical line — advance past every line
+            // it consumes so none of them gets independently checked as its own top-level
+            // statement, then check trailing garbage only on the line the paren lands on.
+            while (i < lines.length - 1 && checkLineStart + checkLine.length < closeAbs) {
+                checkLineStart += checkLine.length + 1
+                i++
+                checkLine = lines[i]
+            }
+            statementEnd = closeAbs + 1 - checkLineStart
+        }
+
+        const rest = checkLine.slice(statementEnd)
+        const restTrimmed = rest.trim()
+        if (restTrimmed.length > 0) {
+            const restLeadingWs = rest.length - rest.trimStart().length
+            const absStart = checkLineStart + statementEnd + restLeadingWs
+            const absEnd = absStart + restTrimmed.length
+            out.push(makeMarker(text, absStart, absEnd,
+                "Unexpected text after this line's command — EXRAIL allows only one command per line.",
+            ))
+        }
+
+        lineStart = checkLineStart + checkLine.length + 1
+    }
+}
+
+/**
+ * Which macro(s) define an alias-eligible object in each file, and which AliasTargetType
+ * they define. Drives validateAliasRequired() below — myAutomation.h (singular) is deliberately
+ * not in this table: it's the includes/HAL/custom-code file, not a closed-vocabulary
+ * object-definition file, so a stray AUTOMATION(...) still sitting in its free-form content
+ * (see SEQUENCE_ID_MACRO's own comment on that) isn't strict-alias-enforced the way one in
+ * myAutomations.h is.
+ */
+const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType }> = {
+    'myRoster.h': { source: '\\bROSTER\\s*\\(\\s*(\\d+)', type: 'Roster' },
+    'myTurnouts.h': { source: '\\b(?:SERVO_TURNOUT|TURNOUTL|TURNOUT|PIN_TURNOUT|VIRTUAL_TURNOUT)\\s*\\(\\s*(\\d+)', type: 'Turnout' },
+    'mySensors.h': { source: '\\bSENSOR\\s*\\(\\s*(\\d+)', type: 'Sensor' },
+    'myRoutes.h': { source: '\\bROUTE\\s*\\(\\s*(\\d+)', type: 'Route' },
+    'mySequences.h': { source: '\\bSEQUENCE\\s*\\(\\s*(\\d+)', type: 'Sequence' },
+    'myAutomations.h': { source: '\\bAUTOMATION\\s*\\(\\s*(\\d+)', type: 'Automation' },
+}
+
+/**
+ * When ConfigEditorState.strictAliases is on, every alias-eligible object must carry an
+ * alias — the editors themselves enforce this on add/edit (see turnout-editor.ts's
+ * commitBuffer(), etc.), but that only catches *new* edits. This flags every existing
+ * object-definition line whose id has no matching myAliases.h entry, so a folder of
+ * pre-existing EXRAIL loaded with the setting already on shows what needs an alias added
+ * instead of the gap only surfacing the next time someone tries to edit that object.
+ *
+ * Deliberately Warning, not Error: a missing alias is a workflow rule this app enforces on
+ * *new* edits, not something that fails to compile — EXRAIL itself doesn't require aliases.
+ * Error-severity would (via hasErrorMarkers()/filesWithErrorMarkers()) trip Strict compile's
+ * gate and the file-list error dot for files nobody has touched yet, which is a much bigger
+ * and unrelated behavior change than "show what needs updating."
+ */
+function validateAliasRequired(text: string, filename: string, out: monaco.editor.IMarkerData[], aliases: AliasEntry[]): void {
+    const target = STRICT_ALIAS_TARGETS[filename]
+    if (!target) return
+
+    const scanText = blankLineComments(text)
+    const stringMask = buildStringMask(scanText)
+    const re = new RegExp(target.source, 'g')
+    let m: RegExpExecArray | null
+    while ((m = re.exec(scanText)) !== null) {
+        if (stringMask[m.index]) continue
+        const id = Number(m[1])
+        if (getPrimaryAliasForId(aliases, id, target.type)) continue
+        out.push(makeMarker(text, m.index, m.index + m[0].length,
+            `This ${target.type.toLowerCase()} has no alias — required while Strict aliases is enabled.`,
+            monaco.MarkerSeverity.Warning,
+        ))
+    }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
@@ -735,7 +1042,9 @@ const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerD
     'myTurnouts.h': (text, out) => {
         validateServoTurnout(text, out)
         validateTurnout(text, out)
+        validateTurnoutL(text, out)
         validatePinTurnout(text, out)
+        validateVirtualTurnout(text, out)
         validateTurnoutIdUniqueness(text, out)
     },
 }
@@ -757,9 +1066,16 @@ function validateModel(model: monaco.editor.ITextModel): void {
 
     if (validate) validate(text, markers)
 
-    // Case-sensitivity applies to every macro-file "vocabulary" (ROSTER, SERVO_TURNOUT,
-    // SENSOR, SIGNAL, THROW, ...), not just the EXRAIL script files.
-    if (hasVocabulary) validateExrailCommandCasing(text, filename, markers)
+    // Case-sensitivity, unknown-command, and trailing-garbage checks apply to every
+    // macro-file "vocabulary" (ROSTER, SERVO_TURNOUT, SENSOR, SIGNAL, THROW, ...),
+    // including the EXRAIL script files — EXRAIL is a closed, one-statement-per-line
+    // macro DSL, so neither an undefined call nor stray extra text after a valid one
+    // can compile there.
+    if (hasVocabulary) {
+        validateExrailCommandCasing(text, filename, markers)
+        validateUnknownExrailCommand(text, filename, markers)
+        validateTrailingLineGarbage(text, filename, markers)
+    }
 
     if (isExrailFile) {
         const state = getSharedConfigEditorState()
@@ -771,6 +1087,8 @@ function validateModel(model: monaco.editor.ITextModel): void {
                 sensors: state.sensors,
                 routes: state.routes,
                 sequences: state.sequences,
+                signals: state.signals,
+                tracks: definedTracksFor(state.hasStackedMotorShield),
             })
         }
     }
@@ -794,6 +1112,11 @@ function validateModel(model: monaco.editor.ITextModel): void {
         if (state) validateSequenceIdRules(text, filename, state.getSequenceIdViolations(), markers)
     }
 
+    if (STRICT_ALIAS_TARGETS[filename]) {
+        const state = getSharedConfigEditorState()
+        if (state?.strictAliases) validateAliasRequired(text, filename, markers, state.aliases)
+    }
+
     monaco.editor.setModelMarkers(model, OWNER, markers)
 }
 
@@ -811,19 +1134,28 @@ function validateModel(model: monaco.editor.ITextModel): void {
  * range/uniqueness validator (see validateSequenceIds in myAutomationParser.ts) for
  * myRoutes.h / mySequences.h / myAutomation.h, using the full combined list — same as
  * ConfigEditorState.sequenceIdEntries would produce in the real app.
+ *
+ * `strictAliasesData`, when supplied, also runs validateAliasRequired() — as if
+ * ConfigEditorState.strictAliases were on — against the given alias list, for
+ * myRoster.h / myTurnouts.h / mySensors.h / myRoutes.h / mySequences.h.
  */
 export function _runValidatorsForTest(
     filename: string,
     text: string,
     exrailData?: ExrailCompletionData,
     sequenceIdEntries?: SequenceIdEntry[],
+    strictAliasesData?: AliasEntry[],
 ): Array<{ message: string; severity: number }> {
     const markers: monaco.editor.IMarkerData[] = []
 
     const validate = FILE_VALIDATORS[filename]
     if (validate) validate(text, markers)
 
-    if (hasCommandVocabulary(filename)) validateExrailCommandCasing(text, filename, markers)
+    if (hasCommandVocabulary(filename)) {
+        validateExrailCommandCasing(text, filename, markers)
+        validateUnknownExrailCommand(text, filename, markers)
+        validateTrailingLineGarbage(text, filename, markers)
+    }
 
     if (isExrailCompletionFile(filename) && exrailData) {
         validateExrailReferences(text, markers, exrailData)
@@ -835,6 +1167,10 @@ export function _runValidatorsForTest(
 
     if (sequenceIdEntries) {
         validateSequenceIdRules(text, filename, validateSequenceIds(sequenceIdEntries), markers)
+    }
+
+    if (strictAliasesData) {
+        validateAliasRequired(text, filename, markers, strictAliasesData)
     }
 
     return markers.map((m) => ({ message: m.message, severity: m.severity }))
@@ -859,6 +1195,21 @@ export function revalidateModel(
 }
 
 /**
+ * Re-runs validation on every currently-open Monaco model. Content-based validators
+ * already refresh on every keystroke (see registerDiagnosticProviders() below), but
+ * validators driven by external state — e.g. validateAliasRequired()'s dependence on
+ * ConfigEditorState.strictAliases — have nothing to react to when that state changes
+ * without an edit to the model's own text, so a toggle like Settings' "Strict aliases"
+ * checkbox must explicitly ask every open model to re-check itself. See workspace.ts's
+ * setStrictAliases().
+ */
+export function revalidateAllModels(): void {
+    for (const model of monaco.editor.getModels()) {
+        validateModel(model)
+    }
+}
+
+/**
  * Register model lifecycle listeners that run validators and set squiggle
  * markers. Call this once from `registerProviders()` in `monaco-editor.ts`.
  */
@@ -872,4 +1223,23 @@ export function registerDiagnosticProviders(): void {
         validateModel(model)
         model.onDidChangeContent(() => validateModel(model))
     })
+}
+
+/** True if any open Monaco model (any config file) currently has an Error-severity marker. Drives the "strict compile" preference — see workspace.ts's canCompile. */
+export function hasErrorMarkers(): boolean {
+    return monaco.editor.getModelMarkers({}).some((m) => m.severity === monaco.MarkerSeverity.Error)
+}
+
+/** Fires whenever any model's markers change anywhere in the app — used to keep strict-compile's error gate live-updated without polling. */
+export function onMarkersChanged(callback: () => void): monaco.IDisposable {
+    return monaco.editor.onDidChangeMarkers(() => callback())
+}
+
+/** Filenames (matching state.configFiles' `name`, e.g. "myAutomation.h") of every open Monaco model that currently has an Error-severity marker. Drives the file-list error indicator in workspace.html. */
+export function filesWithErrorMarkers(): Set<string> {
+    const files = new Set<string>()
+    for (const m of monaco.editor.getModelMarkers({})) {
+        if (m.severity === monaco.MarkerSeverity.Error) files.add(m.resource.path.replace(/^\//, ''))
+    }
+    return files
 }

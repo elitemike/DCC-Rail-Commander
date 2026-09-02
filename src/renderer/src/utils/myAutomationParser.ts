@@ -64,7 +64,7 @@ export function deriveDefineGroups(roster: Roster[]): { groups: DefineGroup[]; u
 }
 
 export type TurnoutProfile = 'Instant' | 'Fast' | 'Medium' | 'Slow' | 'Bounce';
-export type TurnoutType = 'SERVO' | 'DCC' | 'PIN';
+export type TurnoutType = 'SERVO' | 'DCC' | 'DCCL' | 'PIN' | 'VIRTUAL';
 export type TurnoutDefaultState = 'CLOSED' | 'THROWN';
 
 interface TurnoutBase { id: number; description: string; comment?: string; defaultState: TurnoutDefaultState; }
@@ -78,11 +78,17 @@ export interface ServoTurnout extends TurnoutBase {
     profile: TurnoutProfile;
 }
 
-/** TURNOUT(id, addr, subAddr[, "desc"]) — DCC accessory decoder */
+/** TURNOUT(id, addr, subAddr[, "desc"]) — DCC accessory decoder, legacy addr/subAddr pair */
 export interface DccTurnout extends TurnoutBase {
     type: 'DCC';
     addr: number;
     subAddr: number;
+}
+
+/** TURNOUTL(id, addr[, "desc"]) — DCC accessory decoder, single linear address */
+export interface DccLinearTurnout extends TurnoutBase {
+    type: 'DCCL';
+    addr: number;
 }
 
 /** PIN_TURNOUT(id, pin[, "desc"]) — GPIO pin-driven */
@@ -91,7 +97,12 @@ export interface PinTurnout extends TurnoutBase {
     pin: number;
 }
 
-export type Turnout = ServoTurnout | DccTurnout | PinTurnout;
+/** VIRTUAL_TURNOUT(id[, "desc"]) — no hardware, driven entirely by ONCLOSE/ONTHROW handlers */
+export interface VirtualTurnout extends TurnoutBase {
+    type: 'VIRTUAL';
+}
+
+export type Turnout = ServoTurnout | DccTurnout | DccLinearTurnout | PinTurnout | VirtualTurnout;
 
 export interface AutomationData {
     roster: Roster[];
@@ -107,12 +118,25 @@ export interface SensorEntry {
     description: string;
 }
 
-export interface SignalEntry {
+/** SIGNAL(redPin, amberPin, greenPin) — three GPIO/HAL pins driving LEDs directly */
+export interface PinSignal {
+    type: 'PIN';
     red: number;
     amber: number;
     green: number;
     description?: string;
 }
+
+/** DCC_SIGNAL(id, addr, subAddr) — DCC accessory decoder-controlled signal */
+export interface DccSignal {
+    type: 'DCC';
+    id: number;
+    addr: number;
+    subAddr: number;
+    description?: string;
+}
+
+export type SignalEntry = PinSignal | DccSignal;
 
 export interface RouteEntry {
     id: number;
@@ -135,10 +159,13 @@ export interface SequenceEntry {
 }
 
 /**
- * AUTOMATION(id, "desc") — structurally identical to ROUTE, but there is no visual editor for
- * it; automation blocks live as free-form text inside myAutomation.h (see
- * `ConfigEditorState.preservedAutomationContent`). This parser exists purely to extract IDs for
- * `validateSequenceIds` — it is not round-tripped/serialized by the app.
+ * AUTOMATION(id, "desc") — structurally identical to ROUTE, with its own dedicated file
+ * (myAutomations.h — plural, distinct from myAutomation.h's includes/HAL/custom-code role) and
+ * visual editor. `parseAutomationsFromFile` still scans the *whole* file content rather than
+ * requiring a dedicated file, for two reasons: `validateSequenceIds` needs it for id-collision
+ * checking regardless of where a block happens to sit, and the one-time load migration that
+ * moves a pre-existing project's hand-typed AUTOMATION blocks out of whatever custom file they
+ * were living in (see ConfigEditorState.loadFromInstallerState()) needs to find them there first.
  */
 export interface AutomationEntry {
     id: number;
@@ -147,13 +174,30 @@ export interface AutomationEntry {
     body: string;
 }
 
+/**
+ * ONSENSOR(200)/ONACTIVATE(100, 4)/ONRAILSYNCON/... — an EXRAIL event-handler block: a task entry
+ * point like ROUTE/SEQUENCE, but with real typed arguments on its header line instead of an
+ * id/description, and no participation in the shared ROUTE/AUTOMATION/SEQUENCE id pool. Unlike
+ * RouteEntry/SequenceEntry, `text` is the *entire* on-disk block including the header line — a
+ * param-flavored hat has no separate structured home for its header args (they're edited directly
+ * on the hat block's own face — see exrail-block-compiler.ts's parseEventHandlerBlock()/
+ * compileEventHandlerBlock()), so there's nothing to split header from body for at this layer.
+ * `command` is fixed at creation (which BLOCK_REGISTRY hat this is) and is otherwise redundant
+ * with `text`'s own first line — kept as its own field purely so the list editor can group/label
+ * entries without re-parsing `text` on every render.
+ */
+export interface EventHandlerEntry {
+    command: string;
+    text: string;
+}
+
 export interface AliasEntry {
     name: string;
     value: string;
     aliasType?: AliasTargetType;
 }
 
-export type AliasTargetType = 'Roster' | 'Turnout' | 'Sensor' | 'Route' | 'Sequence';
+export type AliasTargetType = 'Roster' | 'Turnout' | 'Sensor' | 'Route' | 'Sequence' | 'Automation';
 
 export interface ObjectIdReference {
     type: AliasTargetType;
@@ -167,13 +211,14 @@ export interface ObjectIdCollections {
     sensors?: SensorEntry[];
     routes?: RouteEntry[];
     sequences?: SequenceEntry[];
+    automations?: AutomationEntry[];
 }
 
-const VALID_ALIAS_TYPES = new Set<AliasTargetType>(['Roster', 'Turnout', 'Sensor', 'Route', 'Sequence']);
+const VALID_ALIAS_TYPES = new Set<AliasTargetType>(['Roster', 'Turnout', 'Sensor', 'Route', 'Sequence', 'Automation']);
 
 export function parseAliasTypeComment(comment: string | undefined): AliasTargetType | undefined {
     if (!comment) return undefined;
-    const match = comment.match(/\btype:\s*(Roster|Turnout|Sensor|Route|Sequence)\b/i);
+    const match = comment.match(/\btype:\s*(Roster|Turnout|Sensor|Route|Sequence|Automation)\b/i);
     if (!match) return undefined;
 
     const normalized = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
@@ -191,18 +236,41 @@ export function parseAliasNumericValue(value: string): number | null {
  * EXRAIL/macro command names — see https://dcc-ex.com/exrail/exrail-command-reference.html.
  * An alias name colliding with one of these compiles into a broken redefinition.
  */
+// Every command name in exrail-block-registry.ts's BLOCK_REGISTRY (AUTOMATION included — it's a
+// hat block, same as ROUTE/SEQUENCE), plus the object-definition commands that intentionally
+// have no registry entry (TURNOUT/SIGNAL/ROSTER/HAL/ALIAS — see exrail-block-registry.ts's own
+// doc comment on why those are out of scope for the block canvas), plus structural EXRAIL
+// keywords (ELSE/ENDIF) and IFOCCUPIED (a real EXRAIL command with no registry entry). This
+// module doesn't import the registry (kept framework/UI-free — see the top-of-file doc comment),
+// so the list is transcribed here rather than derived; regenerate it by extracting every
+// `id: '...'` from BLOCK_REGISTRY if the registry grows further.
 const EXRAIL_RESERVED_WORDS = new Set([
-    'ALIAS', 'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT',
-    'SEQUENCE', 'ROUTE', 'AUTOMATION', 'AUTOSTART',
-    'THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'ONTHROW', 'ONCLOSE',
-    'SETLOCO', 'SENDLOCO', 'START', 'FOLLOW',
-    'IFOCCUPIED', 'IF', 'ELSE', 'ENDIF', 'AT', 'AFTER',
-    'FWD', 'REV', 'STOP', 'SPEED', 'ESTOP', 'POWERON', 'POWEROFF',
-    'DELAY', 'DELAYRANDOM', 'RESERVE', 'FREE', 'SET', 'RESET',
-    'BLINK', 'RED', 'AMBER', 'GREEN', 'ONBUTTON', 'ONSENSOR',
-    'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED',
-    'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE', 'IFROUTE_HIDDEN', 'IFROUTE_DISABLED',
-    'ROUTE_CAPTION', 'PRINT', 'DONE',
+    'ROUTE', 'SEQUENCE', 'THROW', 'CLOSE', 'TOGGLE_TURNOUT', 'IFCLOSED', 'IFTHROWN', 'SETLOCO',
+    'FWD', 'REV', 'SPEED', 'STOP', 'ESTOP', 'FON', 'FOFF', 'XFON',
+    'XFOFF', 'RED', 'AMBER', 'GREEN', 'IF', 'IFNOT', 'AT', 'AFTER',
+    'AFTEROVERLOAD', 'DELAY', 'DELAYMINS', 'DONE', 'FOLLOW', 'ACTIVATE', 'ACTIVATEL', 'DEACTIVATE',
+    'DEACTIVATEL', 'ASPECT', 'IFRED', 'IFAMBER', 'IFGREEN', 'WAIT_WHILE_RED', 'ATTIMEOUT', 'ATGTE',
+    'ATLT', 'LATCH', 'UNLATCH', 'IF_ALL', 'IF_ANY', 'IFGTE', 'IFLT', 'IFRE',
+    'IFRANDOM', 'IFTIMEOUT', 'IFBITMAP_ALL', 'IFBITMAP_ANY', 'IFLOCO', 'IFRESERVE', 'IFROUTE_ACTIVE', 'IFROUTE_INACTIVE',
+    'IFROUTE_HIDDEN', 'IFROUTE_DISABLED', 'IFSTASH', 'IFSTASHED_HERE', 'IFTTPOSITION', 'SPEEDUP', 'SLOWDOWN', 'SPEED_REL',
+    'ESTOPALL', 'ESTOP_PAUSE', 'ESTOP_RESUME', 'SAVE_SPEED', 'RESTORE_SPEED', 'FORGET', 'INVERT_DIRECTION', 'MOMENTUM',
+    'FTOGGLE', 'XFTOGGLE', 'BUILD_CONSIST', 'BREAK_CONSIST', 'XFWD', 'XREV', 'XSAVE_SPEED', 'XRESTORE_SPEED',
+    'POM', 'XPOM', 'READ_LOCO', 'CALL', 'RETURN', 'START', 'START_SHARED', 'START_SEND',
+    'SENDLOCO', 'RANDOM_CALL', 'RANDOM_FOLLOW', 'AUTOSTART', 'PAUSE', 'RESUME', 'KILLALL', 'ENDTASK',
+    'DELAYRANDOM', 'RESERVE', 'FREE', 'FREEALL', 'POWERON', 'POWEROFF', 'SET_TRACK', 'SET_POWER',
+    'SETFREQ', 'JOIN', 'UNJOIN', 'ROUTE_ACTIVE', 'ROUTE_INACTIVE', 'ROUTE_HIDDEN', 'ROUTE_DISABLED', 'ROUTE_CAPTION',
+    'ROTATE', 'ROTATE_DCC', 'MOVETT', 'WAITFORTT', 'SERVO', 'SERVO2', 'CONFIGURE_SERVO', 'FADE',
+    'WAITFOR', 'SET', 'RESET', 'BLINK', 'ANOUT', 'NEOPIXEL', 'BITMAP_AND', 'BITMAP_OR',
+    'BITMAP_XOR', 'BITMAP_SET', 'BITMAP_INC', 'BITMAP_DEC', 'STASH', 'PICKUP_STASH', 'CLEAR_STASH', 'CLEAR_ALL_STASH',
+    'CLEAR_ANY_STASH', 'MESSAGE', 'BROADCAST', 'PRINT', 'LCD', 'SCREEN', 'SERIAL', 'SERIAL1',
+    'SERIAL2', 'SERIAL3', 'SERIAL4', 'SERIAL5', 'SERIAL6', 'PARSE', 'WITHROTTLE', 'PLAY_TRACK',
+    'PLAY_REPEAT', 'PLAY_FOLDER', 'PLAY_VOLUME', 'PLAY_EQ', 'PLAY_PAUSE', 'PLAY_RESUME', 'PLAY_STOP', 'PLAY_RESET',
+    'LCC', 'LCCX', 'ACON', 'ACOF', 'STEALTH', 'STEALTH_GLOBAL', 'ONSENSOR', 'ONCHANGE',
+    'ONBUTTON', 'ONBITMAP', 'ONBLOCKENTER', 'ONBLOCKEXIT', 'ONACTIVATE', 'ONACTIVATEL', 'ONDEACTIVATE', 'ONDEACTIVATEL',
+    'ONCLOSE', 'ONTHROW', 'ONRED', 'ONAMBER', 'ONGREEN', 'ONRAILSYNCON', 'ONRAILSYNCOFF', 'ONCLOCKTIME',
+    'ONCLOCKMINS', 'ONTIME', 'ONOVERLOAD', 'ONROTATE', 'ONACON', 'ONACOF', 'ONLCC', 'ALIAS',
+    'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
+    'ENDIF', 'IFOCCUPIED',
 ]);
 
 const ALIAS_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -277,6 +345,9 @@ export function collectObjectIdReferences(id: number, data: ObjectIdCollections)
     for (const entry of data.sequences ?? []) {
         if (entry.id === id) references.push({ type: 'Sequence', id, label: entry.description || `Sequence ${id}` });
     }
+    for (const entry of data.automations ?? []) {
+        if (entry.id === id) references.push({ type: 'Automation', id, label: entry.description || `Automation ${id}` });
+    }
 
     return references;
 }
@@ -308,6 +379,8 @@ export function listObjectIdsForType(type: AliasTargetType, data: ObjectIdCollec
             return (data.routes ?? []).map(r => ({ id: r.id, label: idAndDescription(r.id, r.description) }));
         case 'Sequence':
             return (data.sequences ?? []).map(s => ({ id: s.id, label: idAndDescription(s.id, s.description ?? '') }));
+        case 'Automation':
+            return (data.automations ?? []).map(a => ({ id: a.id, label: idAndDescription(a.id, a.description) }));
     }
 }
 
@@ -322,6 +395,22 @@ export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
     while ((m = sensorRe.exec(uncommented)) !== null) {
         out.push({ id: parseInt(m[1], 10), pin: parseInt(m[2], 10), description: m[3] });
     }
+
+    // ── JMRI_SENSOR(vpin, count) — bulk-declares `count` sensors starting at `vpin`, each
+    // addressable by its own pin number, exactly as if declared individually via
+    // SENSOR(pin, pin, ""). Expanded here into individual entries rather than kept as one
+    // union variant — the resulting rows are structurally identical to SENSOR-declared ones
+    // (id === pin), so every existing consumer (editor, VPin allocation, validators) needs no
+    // changes to handle them.
+    const jmriRe = /JMRI_SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = jmriRe.exec(uncommented)) !== null) {
+        const start = parseInt(m[1], 10);
+        const count = parseInt(m[2], 10);
+        for (let i = 0; i < count; i++) {
+            out.push({ id: start + i, pin: start + i, description: '' });
+        }
+    }
+
     return out;
 }
 
@@ -334,37 +423,128 @@ export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const sigRe = /SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    const sigRe = /(?<![A-Za-z_])SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
     const out: SignalEntry[] = [];
     let m: RegExpExecArray | null;
     while ((m = sigRe.exec(uncommented)) !== null) {
-        out.push({ red: parseInt(m[1], 10), amber: parseInt(m[2], 10), green: parseInt(m[3], 10), description: m[4] || '' });
+        out.push({ type: 'PIN', red: parseInt(m[1], 10), amber: parseInt(m[2], 10), green: parseInt(m[3], 10), description: m[4] || '' });
     }
+
+    // ── DCC_SIGNAL(id, addr, subAddr) — DCC accessory decoder ─────────────────
+    const dccSigRe = /DCC_SIGNAL\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = dccSigRe.exec(uncommented)) !== null) {
+        out.push({ type: 'DCC', id: parseInt(m[1], 10), addr: parseInt(m[2], 10), subAddr: parseInt(m[3], 10), description: m[4] || '' });
+    }
+
     return out;
 }
 
 export function serializeSignalsToFile(signals: SignalEntry[]): string {
-    return signals.map(s => `SIGNAL(${s.red}, ${s.amber}, ${s.green})`).join('\n');
+    return signals.map(s => (
+        s.type === 'DCC' ? `DCC_SIGNAL(${s.id}, ${s.addr}, ${s.subAddr})` : `SIGNAL(${s.red}, ${s.amber}, ${s.green})`
+    )).join('\n');
 }
+
+/** Matches a DONE, RETURN, or FOLLOW(...) line, however it's indented — the three statements
+ *  EX-RAIL treats as terminal within a block body (DONE halts the task; RETURN pops back to the
+ *  CALL site; FOLLOW is an unconditional GoTo to another route/sequence — DCC-EX's own docs are
+ *  explicit that "execution does not continue past a FOLLOW() call," so a body legitimately ends
+ *  there with no DONE/RETURN at all — see scanBlockBody doc). Leading whitespace is real:
+ *  hand-written EX-RAIL commonly indents DONE to match the body above it (confirmed against a
+ *  real project where every DONE is indented) — an anchored, no-leading-whitespace match here
+ *  would miss it and read straight through to EOF. */
+const BLOCK_TERMINATOR = /^\s*(?:DONE|RETURN)\s*$|^\s*FOLLOW\s*\([^)]*\)\s*$/;
+
+/** Any IF-family conditional opener (IF, IFLOCO, IFRANDOM, IFRED, IFRESERVE, IFTHROWN, ...) —
+ *  every one of them opens a frame that ENDIF must close, and EX-RAIL exclusively uses this
+ *  naming convention for conditionals, so matching the prefix generically (rather than an exact
+ *  list) also covers any such command added later. */
+const IF_OPEN = /^\s*IF\w*\s*\(/;
+const ENDIF = /^\s*ENDIF\s*$/;
 
 /**
  * Scans forward from `start` collecting a ROUTE/SEQUENCE block's body lines, stopping at
- * whichever comes first: a bare (unindented) DONE line, the start of the next block, or EOF.
- * A DONE line found this way is kept as the last body line rather than discarded — DONE is
+ * whichever comes first: a DONE, RETURN, or FOLLOW(...) line at the top level (any indentation),
+ * the start of the next block, or EOF. RETURN is EX-RAIL's own way to end a SEQUENCE invoked via
+ * CALL (it returns to the caller rather than halting the task outright) and FOLLOW is an
+ * unconditional jump to another route/sequence, so both terminate a body exactly as tightly as
+ * DONE does — a body ending in RETURN or FOLLOW with no trailing DONE must not bleed into
+ * whatever follows (confirmed against a real project: a continuously-looping ROUTE that ends in
+ * `FOLLOW(itself)` with no DONE at all, immediately followed by an unrelated AUTOMATION block).
+ *
+ * "Top level" is load-bearing: DONE/RETURN are ordinary EXRAIL statements just as legally used
+ * *inside* an IF/ENDIF branch as an early exit for that path, not only as the body's true final
+ * statement — so this tracks IF-family nesting depth (incrementing on any IF* opener, decrementing
+ * on ENDIF) and only treats a terminator as real at depth 0. A column/indentation check can't make
+ * this distinction on its own: hand-written EXRAIL commonly indents a body's true final DONE to
+ * match the rest of the body, at the exact same column as a DONE nested one level inside a branch
+ * above it.
+ *
+ * The terminator line found this way is kept as the last body line rather than discarded — it's
  * real, user-editable body content (the block canvas renders it as an ordinary block), not a
  * sentinel this parser hides and silently re-adds. Stopping at the next block's own header (not
- * just at DONE) means a body legitimately WITHOUT a DONE — because the user removed it — never
- * swallows the following block's content while scanning for a terminator that isn't there.
+ * just at a terminator) means a body legitimately WITHOUT one — because the user removed it —
+ * never swallows the following block's content while scanning for a terminator that isn't there.
  */
+/** Recognizes the start of ANY of ROUTE/SEQUENCE/AUTOMATION — used as an *additional* stop
+ *  condition alongside each parser's own header pattern (see scanBlockBody's `blockStart` param).
+ *  These three block types are never legally nested inside one another and commonly coexist in
+ *  the same hand-written file, so a ROUTE body scan (say) must stop at a SEQUENCE or AUTOMATION
+ *  header too, not just another ROUTE — otherwise a body missing its own terminator silently
+ *  swallows a whole unrelated block of a different type (confirmed against a real project file
+ *  mixing all three, where exactly this happened before this fix). */
+const ANY_BLOCK_START = /^\s*(?:ROUTE|SEQUENCE|AUTOMATION)\s*\(/;
+
 function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { body: string; next: number } {
     const bodyLines: string[] = [];
     let i = start;
-    while (i < lines.length && !/^DONE\s*$/.test(lines[i]) && !blockStart.test(lines[i])) {
-        bodyLines.push(lines[i]);
-        i++;
-    }
-    if (i < lines.length && /^DONE\s*$/.test(lines[i])) {
-        bodyLines.push(lines[i]);
+    let depth = 0;
+    // Real content is kept in bodyLines verbatim regardless of comments — only the DEPTH/
+    // TERMINATOR checks below look at `checkable`, the comment-free portion of this line. A
+    // real project routinely disables a whole IF/ENDIF cascade inside a /* */ block (often with
+    // the /* sharing a physical line with the first disabled statement) — left unhandled, this
+    // parser's own depth counter would count "IF"/"ENDIF"-shaped text inside the comment as real
+    // control flow and reach depth 0 at the wrong ENDIF, silently truncating the body one
+    // statement short of its true end (confirmed against a real project file with exactly this
+    // shape: a genuinely open IF whose ELSE branch disables a 9-deep nested cascade this way).
+    let inComment = false;
+    while (i < lines.length) {
+        const line = lines[i];
+        let checkable = line;
+
+        if (inComment) {
+            const closeIdx = line.indexOf('*/');
+            if (closeIdx === -1) {
+                bodyLines.push(line);
+                i++;
+                continue;
+            }
+            inComment = false;
+            checkable = line.slice(closeIdx + 2);
+        }
+
+        const openIdx = checkable.indexOf('/*');
+        if (openIdx !== -1) {
+            const afterOpen = checkable.slice(openIdx + 2);
+            const closeIdx = afterOpen.indexOf('*/');
+            if (closeIdx === -1) {
+                inComment = true;
+                checkable = checkable.slice(0, openIdx);
+            } else {
+                checkable = checkable.slice(0, openIdx) + afterOpen.slice(closeIdx + 2);
+            }
+        }
+
+        if (depth === 0 && BLOCK_TERMINATOR.test(checkable)) {
+            bodyLines.push(line);
+            i++;
+            break;
+        }
+        if (depth === 0 && (blockStart.test(checkable) || ANY_BLOCK_START.test(checkable))) break;
+
+        if (IF_OPEN.test(checkable)) depth++;
+        else if (ENDIF.test(checkable)) depth = Math.max(0, depth - 1);
+        bodyLines.push(line);
         i++;
     }
     return { body: bodyLines.join('\n').trim(), next: i };
@@ -373,7 +553,7 @@ function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { bo
 export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
     const lines = fileContent.split('\n');
     const out: RouteEntry[] = [];
-    const routeStart = /^ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const routeStart = /^\s*ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(routeStart);
@@ -398,7 +578,7 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
 export function parseAutomationsFromFile(fileContent: string): AutomationEntry[] {
     const lines = fileContent.split('\n');
     const out: AutomationEntry[] = [];
-    const automationStart = /^AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(automationStart);
@@ -413,6 +593,36 @@ export function parseAutomationsFromFile(fileContent: string): AutomationEntry[]
         i++;
     }
     return out;
+}
+
+/**
+ * Like parseAutomationsFromFile, but also returns what's left of `fileContent` after removing
+ * every AUTOMATION(...) block found. The one-time load migration (see AutomationEntry's doc
+ * comment) uses this to pull a pre-existing project's hand-typed AUTOMATION blocks out of
+ * whatever custom file they were living in, leaving that file's other content untouched.
+ */
+export function extractAutomations(fileContent: string): { automations: AutomationEntry[]; remainder: string } {
+    const lines = fileContent.split('\n');
+    const automations: AutomationEntry[] = [];
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const consumed = new Array<boolean>(lines.length).fill(false);
+    let i = 0;
+    while (i < lines.length) {
+        const m = lines[i].match(automationStart);
+        if (m) {
+            const id = parseInt(m[1], 10);
+            const desc = m[2];
+            const startIdx = i;
+            const { body, next } = scanBlockBody(lines, i + 1, automationStart);
+            for (let k = startIdx; k < next; k++) consumed[k] = true;
+            i = next;
+            automations.push({ id, description: desc, body });
+            continue;
+        }
+        i++;
+    }
+    const remainder = lines.filter((_, idx) => !consumed[idx]).join('\n').trim();
+    return { automations, remainder };
 }
 
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
@@ -430,10 +640,23 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
     return lines.join('\n').trim();
 }
 
+/** Mirrors serializeRoutesToFile exactly — AUTOMATION shares ROUTE's exact shape (id, quoted
+ *  description, DONE-or-user's-own-terminator body). */
+export function serializeAutomationsToFile(automations: AutomationEntry[]): string {
+    const lines: string[] = [];
+    for (const a of automations) {
+        lines.push(`AUTOMATION(${a.id}, "${a.description}")`);
+        const trimmedBody = (a.body ?? '').trim();
+        lines.push(trimmedBody || 'DONE');
+        lines.push('');
+    }
+    return lines.join('\n').trim();
+}
+
 export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
     const lines = fileContent.split('\n');
     const out: SequenceEntry[] = [];
-    const seqStart = /^SEQUENCE\s*\(\s*(\d+)\s*\)\s*(?:\/\/\s*(.*))?$/;
+    const seqStart = /^\s*SEQUENCE\s*\(\s*(\d+)\s*\)\s*(?:\/\/\s*(.*))?$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(seqStart);
@@ -460,6 +683,41 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
         lines.push('');
     }
     return lines.join('\n').trim();
+}
+
+/**
+ * Scans for top-level EXRAIL event-handler blocks (ONSENSOR(200), ONACTIVATE(100, 4),
+ * ONRAILSYNCON, ...) in `fileContent` (designed for myEvents.h, mirroring parseRoutesFromFile's/
+ * parseSequencesFromFile's own dedicated-file scope) — matched by the `ON*` naming convention
+ * EXRAIL itself uses for every event handler, not by importing BLOCK_REGISTRY, so this module
+ * stays framework/UI-free (see its own top-of-file doc comment). `text` captures the header line
+ * and everything through the next block/EOF, via the same scanBlockBody() helper routes/sequences
+ * use — see EventHandlerEntry's own doc comment for why the header line is part of `text` here,
+ * unlike RouteEntry.body/SequenceEntry.body.
+ */
+export function parseEventHandlersFromFile(fileContent: string): EventHandlerEntry[] {
+    const lines = fileContent.split('\n');
+    const out: EventHandlerEntry[] = [];
+    const handlerStart = /^\s*(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*$/;
+    let i = 0;
+    while (i < lines.length) {
+        const m = lines[i].match(handlerStart);
+        if (m) {
+            const command = m[1];
+            const headerLine = lines[i];
+            const { body, next } = scanBlockBody(lines, i + 1, handlerStart);
+            i = next;
+            const text = body ? `${headerLine}\n${body}` : headerLine;
+            out.push({ command, text });
+            continue;
+        }
+        i++;
+    }
+    return out;
+}
+
+export function serializeEventHandlersToFile(handlers: EventHandlerEntry[]): string {
+    return handlers.map(h => h.text.trim()).join('\n\n');
 }
 
 // ─── ROUTE/AUTOMATION/SEQUENCE ID rules ──────────────────────────────────────
@@ -782,7 +1040,9 @@ export function commentInvalidTurnoutLines(text: string): { processedText: strin
     // the Monaco validator handles individual argument errors via squiggles.
     const validServo = /^\s*SERVO_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\w+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
     const validDcc = /^\s*TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
+    const validDccL = /^\s*TURNOUTL\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
     const validPin = /^\s*PIN_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
+    const validVirtual = /^\s*VIRTUAL_TURNOUT\s*\(\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
 
     const invalidLines: string[] = [];
     const processedLines = text.split('\n').map(line => {
@@ -797,7 +1057,16 @@ export function commentInvalidTurnoutLines(text: string): { processedText: strin
             if (!validPin.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
             return line;
         }
-        // Plain TURNOUT — guard against matching the suffix of SERVO_/PIN_ (handled above)
+        if (/\bVIRTUAL_TURNOUT\s*\(/.test(line)) {
+            if (!validVirtual.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
+            return line;
+        }
+        if (/\bTURNOUTL\s*\(/.test(line)) {
+            if (!validDccL.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
+            return line;
+        }
+        // Plain TURNOUT — guard against matching the suffix of SERVO_/PIN_/TURNOUTL (handled above;
+        // the lookbehind alone is enough since "TURNOUT\s*\(" never matches inside "TURNOUTL(")
         if (/(?<![A-Za-z_])TURNOUT\s*\(/.test(line)) {
             if (!validDcc.test(line)) { invalidLines.push(line); return `// [INVALID] ${line}`; }
             return line;
@@ -865,6 +1134,31 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
         });
     }
 
+    // ── TURNOUTL(id, addr[, "desc"]) — DCC accessory, linear address ──────────
+    const dccLRe = /TURNOUTL\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = dccLRe.exec(uncommentedContent)) !== null) {
+        entries.push({
+            type: 'DCCL',
+            id: parseInt(m[1], 10),
+            addr: parseInt(m[2], 10),
+            description: m[3] || '',
+            comment: m[4] ? m[4].trim() : '',
+            defaultState: 'CLOSED',
+        });
+    }
+
+    // ── VIRTUAL_TURNOUT(id[, "desc"]) — no hardware ───────────────────────────
+    const virtualRe = /VIRTUAL_TURNOUT\s*\(\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    while ((m = virtualRe.exec(uncommentedContent)) !== null) {
+        entries.push({
+            type: 'VIRTUAL',
+            id: parseInt(m[1], 10),
+            description: m[2] || '',
+            comment: m[3] ? m[3].trim() : '',
+            defaultState: 'CLOSED',
+        });
+    }
+
     return entries;
 }
 
@@ -876,8 +1170,16 @@ export function serializeTurnoutToFile(turnouts: Turnout[]): string {
             line = `TURNOUT(${t.id}, ${t.addr}, ${t.subAddr}`;
             if (t.description) line += `, "${t.description}"`;
             line += ')';
+        } else if (t.type === 'DCCL') {
+            line = `TURNOUTL(${t.id}, ${t.addr}`;
+            if (t.description) line += `, "${t.description}"`;
+            line += ')';
         } else if (t.type === 'PIN') {
             line = `PIN_TURNOUT(${t.id}, ${t.pin}`;
+            if (t.description) line += `, "${t.description}"`;
+            line += ')';
+        } else if (t.type === 'VIRTUAL') {
+            line = `VIRTUAL_TURNOUT(${t.id}`;
             if (t.description) line += `, "${t.description}"`;
             line += ')';
         } else {
@@ -894,19 +1196,28 @@ export function serializeTurnoutToFile(turnouts: Turnout[]): string {
 
 /**
  * Extracts turnout IDs that are set to thrown at startup via AUTOSTART THROW(id)
- * statements in myAutomation.h.
+ * statements in myAutomation.h/myStartup.h. THROW(...) may reference the turnout
+ * either by its numeric id or by an ALIAS name pointing at it — `aliases` resolves
+ * the latter back to an id (unresolvable names are silently skipped, same as the
+ * old id-only behavior did for anything that failed to parse as a number).
  */
-export function parseDefaultThrownTurnoutIdsFromAutomation(fileContent: string): Set<number> {
+export function parseDefaultThrownTurnoutIdsFromAutomation(fileContent: string, aliases: AliasEntry[] = []): Set<number> {
     const thrownIds = new Set<number>();
     const autostartRe = /AUTOSTART\s*\n([\s\S]*?)\nDONE/g;
     let blockMatch: RegExpExecArray | null;
 
     while ((blockMatch = autostartRe.exec(fileContent)) !== null) {
         const block = blockMatch[1] ?? '';
-        const throwRe = /THROW\s*\(\s*(\d+)\s*\)/g;
+        const throwRe = /THROW\s*\(\s*([A-Za-z_]\w*|\d+)\s*\)/g;
         let throwMatch: RegExpExecArray | null;
         while ((throwMatch = throwRe.exec(block)) !== null) {
-            thrownIds.add(parseInt(throwMatch[1], 10));
+            const token = throwMatch[1];
+            if (/^\d+$/.test(token)) {
+                thrownIds.add(parseInt(token, 10));
+            } else {
+                const id = getAliasIdByName(aliases, token, 'Turnout');
+                if (id !== undefined) thrownIds.add(id);
+            }
         }
     }
 

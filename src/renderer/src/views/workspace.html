@@ -120,7 +120,7 @@
 
         <!-- ── COMPILE button (dev/mock mode only) ── -->
         <button if.bind="isMock" click.trigger="compile()" disabled.bind="isCompiling || !canCompile"
-            title.bind="!canCompile ? 'Select a device with a port before compiling' : ''"
+            title.bind="!canCompile ? (strictCompile && hasBlockingErrors ? 'Fix editor errors before compiling (Strict compile is on)' : 'Select a device with a port before compiling') : ''"
             class="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-semibold text-sm transition-colors shadow-lg shadow-blue-900/30">
             <svg if.bind="!isCompiling" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -135,7 +135,7 @@
 
         <!-- ── COMPILE & UPLOAD button (production only) ── -->
         <button if.bind="!isMock" click.trigger="compileAndUpload()" disabled.bind="isCompiling || !canCompile"
-            title.bind="!canCompile ? 'Select a device with a port before compiling' : ''"
+            title.bind="!canCompile ? (strictCompile && hasBlockingErrors ? 'Fix editor errors before compiling (Strict compile is on)' : 'Select a device with a port before compiling') : ''"
             class="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white font-semibold text-sm transition-colors shadow-lg shadow-green-900/30">
             <svg if.bind="!isCompiling" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -262,21 +262,27 @@
                         class.bind="activeSection === 'config' && activeFileIndex === generalWifiFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">General + WiFi</span>
+                        <span class="truncate flex-1">General + WiFi</span>
+                        <span if.bind="generalWifiHasError" data-testid="error-dot-general-wifi"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectAccessoriesSection()" data-testid="nav-accessories"
                         class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
                         class.bind="activeSection === 'accessories'
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Accessories</span>
+                        <span class="truncate flex-1">Accessories</span>
+                        <span if.bind="accessoriesHasError" data-testid="error-dot-accessories"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectStartup()" data-testid="nav-startup"
                         class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-l-2"
                         class.bind="activeSection === 'config' && activeFileIndex === startupFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Startup</span>
+                        <span class="truncate flex-1">Startup</span>
+                        <span if.bind="startupHasError" data-testid="error-dot-startup"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                     <div click.trigger="selectAdvanced()" data-testid="nav-advanced"
                         title="myAutomation.h — links your other config files together"
@@ -284,7 +290,9 @@
                         class.bind="activeSection === 'config' && activeFileIndex === automationFileIndex
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <span class="truncate">Advanced</span>
+                        <span class="truncate flex-1">Advanced</span>
+                        <span if.bind="automationHasError" data-testid="error-dot-advanced"
+                            title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     </div>
                 </div>
 
@@ -304,6 +312,11 @@
                         <span class="truncate text-xs opacity-40 font-mono"
                             if.bind="friendlyName(file.name) !== file.name">${file.name}</span>
                     </span>
+                    <span if.bind="filesWithErrors.has(file.name)" data-testid="error-dot-${file.name}"
+                        title="This file has errors" class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                    <span if.bind="configEditorState.filesNeedingAlias.has(file.name)" data-testid="alias-warning-dot-${file.name}"
+                        title="This file has objects with no alias (Strict aliases is enabled)"
+                        class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                     <!-- Delete button: only shown on custom (user-created) files -->
                     <button if.bind="configEditorState.isCustomFile(file.name)"
                         click.trigger="removeCustomFile($index, $event)" title="Delete ${file.name}"

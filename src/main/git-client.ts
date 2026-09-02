@@ -52,7 +52,19 @@ export class GitService {
 
     async pull(repoPath: string): Promise<{ success: boolean; error?: string }> {
         try {
-            await this.getGit(repoPath).pull()
+            const git = this.getGit(repoPath)
+            // repoPath is always the app's read-only product-source cache, never a
+            // user working copy — nothing here is ever merged into local work. After
+            // the wizard checks out a release tag, HEAD is left detached (normal for
+            // a tag), and a plain `git pull` fails outright in that state ("You are
+            // not currently on a branch"). Fetch instead when detached; a real branch
+            // checkout (the initial clone) can still fast-forward via pull.
+            const status = await git.status()
+            if (status.detached) {
+                await git.fetch(['--all', '--tags'])
+            } else {
+                await git.pull()
+            }
             return { success: true }
         } catch (err) {
             return { success: false, error: describeGitError(err as Error) }

@@ -32,7 +32,7 @@ export interface CommandStationConfigOptions {
     trackDMode: string
     trackDType: 'dcc' | 'dc'
     trackDLocoId: number
-    startupPowerMode: 'all' | 'individual'
+    startupPowerMode: 'all' | 'individual' | 'off'
     trackAPower: 'ON' | 'OFF'
     trackBPower: 'ON' | 'OFF'
     trackCPower: 'ON' | 'OFF'
@@ -205,10 +205,13 @@ export function parseMyAutomationTrackManager(content: string): Partial<MyAutoma
         opts.hasStackedMotorShield = true
     }
 
-    // Check for power on start
-    if (/POWERON/m.test(autoStartBlock)) {
+    // Check for power on/off at start
+    if (/\bPOWERON\b/m.test(autoStartBlock)) {
         opts.enablePowerOnStart = true
         opts.startupPowerMode = 'all'
+    } else if (/\bPOWEROFF\b/m.test(autoStartBlock)) {
+        opts.enablePowerOnStart = true
+        opts.startupPowerMode = 'off'
     }
 
     // Parse per-track power settings
@@ -312,7 +315,7 @@ export function parseCommandStationConfig(content: string): CommandStationConfig
 export interface MyAutomationOptions {
     enablePowerOnStart: boolean
     hasStackedMotorShield: boolean
-    startupPowerMode: 'all' | 'individual'
+    startupPowerMode: 'all' | 'individual' | 'off'
     trackAMode: string
     trackALocoId: number
     trackAPower: 'ON' | 'OFF'
@@ -380,6 +383,8 @@ export function generateMyAutomation(opts: MyAutomationOptions): string {
         if (opts.enablePowerOnStart) {
             if (opts.startupPowerMode === 'all') {
                 lines.push('POWERON')
+            } else if (opts.startupPowerMode === 'off') {
+                lines.push('POWEROFF')
             } else {
                 lines.push(`SET_POWER(A,${opts.trackAPower})`)
                 lines.push(`SET_POWER(B,${opts.trackBPower})`)

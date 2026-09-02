@@ -11,6 +11,7 @@ const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
     { text: 'Sensor', value: 'Sensor' },
     { text: 'Route', value: 'Route' },
     { text: 'Sequence', value: 'Sequence' },
+    { text: 'Automation', value: 'Automation' },
 ]
 
 export class AliasesEditorCustomElement {

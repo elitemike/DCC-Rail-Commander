@@ -67,6 +67,16 @@ export class InstallerState {
      */
     pendingMigrationOnLoad = false
 
+    /**
+     * One-shot signal set by DeviceWizard's completeWizard() so the workspace
+     * lands on the Roster editor right after setup finishes — Roster isn't a
+     * wizard step of its own, this is just where a future onboarding tutorial
+     * will live. Consumed (and cleared) by workspace.ts's
+     * applyPendingWizardSetup(), called right after loadFromInstallerState()
+     * in both binding() and switchToConfig().
+     */
+    pendingWizardOpenRoster = false
+
     reset(): void {
         this.toolchainReady = false
         this.selectedDevice = null
@@ -82,6 +92,7 @@ export class InstallerState {
         this.detectedBoards = []
         this.activeConfigId = null
         this.pendingMigrationOnLoad = false
+        this.pendingWizardOpenRoster = false
         // NOTE: savedConfigurations is intentionally NOT reset — it persists across wizard runs
     }
 }

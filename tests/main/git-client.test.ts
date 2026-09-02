@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
 const mockGitInstance = {
     clone: vi.fn(),
     pull: vi.fn(),
+    fetch: vi.fn(),
     tags: vi.fn(),
     checkout: vi.fn(),
     status: vi.fn(),
@@ -87,19 +88,46 @@ describe('clone()', () => {
 // ── pull() ────────────────────────────────────────────────────────────────────
 
 describe('pull()', () => {
-    it('returns success=true on successful pull', async () => {
+    it('returns success=true on successful pull when on a branch', async () => {
+        mockGitInstance.status.mockResolvedValue({ detached: false })
         mockGitInstance.pull.mockResolvedValue({})
         const svc = makeService()
         const result = await svc.pull('/my/repo')
         expect(result.success).toBe(true)
+        expect(mockGitInstance.pull).toHaveBeenCalled()
+        expect(mockGitInstance.fetch).not.toHaveBeenCalled()
     })
 
     it('returns success=false with error on failure', async () => {
+        mockGitInstance.status.mockResolvedValue({ detached: false })
         mockGitInstance.pull.mockRejectedValue(new Error('merge conflict'))
         const svc = makeService()
         const result = await svc.pull('/my/repo')
         expect(result.success).toBe(false)
         expect(result.error).toContain('merge conflict')
+    })
+
+    // repoPath is always the app's read-only product-source cache — after the
+    // wizard checks out a release tag, HEAD is left detached, and a plain
+    // `git pull` fails with "You are not currently on a branch". fetch()
+    // should be used instead in that state, without ever throwing.
+    it('fetches instead of pulling when HEAD is detached', async () => {
+        mockGitInstance.status.mockResolvedValue({ detached: true })
+        mockGitInstance.fetch.mockResolvedValue({})
+        const svc = makeService()
+        const result = await svc.pull('/my/repo')
+        expect(result.success).toBe(true)
+        expect(mockGitInstance.fetch).toHaveBeenCalledWith(['--all', '--tags'])
+        expect(mockGitInstance.pull).not.toHaveBeenCalled()
+    })
+
+    it('returns success=false with error when fetch fails on a detached HEAD', async () => {
+        mockGitInstance.status.mockResolvedValue({ detached: true })
+        mockGitInstance.fetch.mockRejectedValue(new Error('could not resolve host'))
+        const svc = makeService()
+        const result = await svc.pull('/my/repo')
+        expect(result.success).toBe(false)
+        expect(result.error).toContain('reach the remote repository')
     })
 })
 

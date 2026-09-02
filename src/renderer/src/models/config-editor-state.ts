@@ -1,6 +1,7 @@
 import { observable, resolve } from 'aurelia'
 import { InstallerState } from './installer-state'
 import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
+import { STACKED_MOTOR_DRIVER } from '../config/commandstation'
 import {
     serializeRosterToFile,
     serializeTurnoutToFile,
@@ -15,6 +16,8 @@ import {
     serializeRoutesToFile,
     parseSequencesFromFile,
     serializeSequencesToFile,
+    parseEventHandlersFromFile,
+    serializeEventHandlersToFile,
     parseAliasesFromFile,
     serializeAliasesToFile,
     parseDefaultThrownTurnoutIdsFromAutomation,
@@ -27,6 +30,8 @@ import {
     validateAliasName,
     validateAliasValue,
     parseAutomationsFromFile,
+    serializeAutomationsToFile,
+    extractAutomations,
     validateSequenceIds,
     type Roster,
     type Turnout,
@@ -35,6 +40,7 @@ import {
     type SignalEntry,
     type RouteEntry,
     type SequenceEntry,
+    type EventHandlerEntry,
     type AutomationEntry,
     type AliasEntry,
     type AliasTargetType,
@@ -207,8 +213,32 @@ export class ConfigEditorState {
     // ── config.h ─────────────────────────────────────────────────────────────
     configHContent = ''
 
+    /**
+     * Whether config.h currently selects the stacked (dual) motor shield — the same
+     * MOTOR_SHIELD_TYPE check track-manager-form.ts's own hasStackedMotorShield uses, re-derived
+     * here from the raw file content rather than that form's local `opts` state so track
+     * availability (see exrail-block-registry.ts's AFTEROVERLOAD block) stays correct even when
+     * the Startup editor/TrackManager form isn't mounted. Tracks A/B always exist; C/D only exist
+     * when this is true (see commandstation.ts's generateMyAutomation()).
+     */
+    get hasStackedMotorShield(): boolean {
+        const match = this.configHContent.match(/^#define\s+MOTOR_SHIELD_TYPE\s+(\S+)$/m)
+        return (match?.[1] ?? '').toUpperCase() === STACKED_MOTOR_DRIVER
+    }
+
     // ── Unsaved-changes tracking ──────────────────────────────────────────────
     hasChanges = false
+
+    /**
+     * Persisted app-wide preference (default on) — when true, every alias-eligible entry
+     * (Turnout, Roster, Sensor, Route, Sequence) must carry an alias: syncAliasForId()
+     * rejects blanking one out, and each editor's own commit path (turnout/roster-editor's
+     * commitBuffer(), sensors-editor's updateSensor(), routes/sequences-editor's
+     * updateRoute()/updateSequence()) refuses to save *any* field change on an entry that
+     * currently lacks an alias, not just alias edits themselves. Loaded/toggled from
+     * workspace.ts's Settings dialog wiring — see setStrictAliases() there.
+     */
+    strictAliases = true
 
     // ── myRoster.h ───────────────────────────────────────────────────────────
     @observable roster: Roster[] = []
@@ -441,6 +471,32 @@ export class ConfigEditorState {
         this._syncToInstallerState()
     }
 
+    // ── myAutomations.h ───────────────────────────────────────────────────
+    // Structurally identical to routes above — AUTOMATION shares ROUTE's exact shape. Not to be
+    // confused with myAutomation.h (singular): that file's role stays the #include block, HAL
+    // Devices managed block, and free-form custom EXRAIL code — see the "Device Settings nav"
+    // section of CLAUDE.md. A pre-existing project's hand-typed AUTOMATION(...) blocks (wherever
+    // they were living — myAutomation.h's own free-form content, or a custom file created via the
+    // "+" button) are moved into this collection by a one-time migration in
+    // loadFromInstallerState(), mirroring the existing myStartup.h split-migration below.
+    @observable automations: AutomationEntry[] = []
+
+    get automationsRaw(): string {
+        const header = buildGeneratorHeader('myAutomations.h', this.installerState.appVersion)
+        const serialized = serializeAutomationsToFile(this.automations)
+        return `${header}\n${serialized}`
+    }
+
+    setAutomationsFromRaw(text: string): void {
+        try {
+            this.automations = parseAutomationsFromFile(text)
+            this.hasChanges = true
+        } catch {
+            // keep existing automations if parse fails
+        }
+        this._syncToInstallerState()
+    }
+
     // ── mySequences.h ─────────────────────────────────────────────────────
     @observable sequences: SequenceEntry[] = []
 
@@ -456,6 +512,25 @@ export class ConfigEditorState {
             this.hasChanges = true
         } catch {
             // keep existing sequences if parse fails
+        }
+        this._syncToInstallerState()
+    }
+
+    // ── myEvents.h ────────────────────────────────────────────────────────
+    @observable eventHandlers: EventHandlerEntry[] = []
+
+    get eventHandlersRaw(): string {
+        const header = buildGeneratorHeader('myEvents.h', this.installerState.appVersion)
+        const serialized = serializeEventHandlersToFile(this.eventHandlers)
+        return `${header}\n${serialized}`
+    }
+
+    setEventHandlersFromRaw(text: string): void {
+        try {
+            this.eventHandlers = parseEventHandlersFromFile(text)
+            this.hasChanges = true
+        } catch {
+            // keep existing event handlers if parse fails
         }
         this._syncToInstallerState()
     }
@@ -488,6 +563,60 @@ export class ConfigEditorState {
         return getPrimaryAliasForId(this.aliases, id, type)?.name ?? ''
     }
 
+    // ── Strict aliases: which existing objects need one ──────────────────────
+    // Getters (not methods) so templates can bind `state.turnoutIdsNeedingAlias.has(t.id)`
+    // directly and have Aurelia's computed-getter tracking pick up changes to
+    // strictAliases/aliases/turnouts — a plain method call in a template binding does
+    // NOT get that tracking (only the top-level getter/property access does), so this
+    // shape matters, not just style. Empty whenever strictAliases is off.
+
+    get turnoutIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.turnouts.filter(t => !getPrimaryAliasForId(this.aliases, t.id, 'Turnout')).map(t => t.id))
+    }
+
+    get sensorIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.sensors.filter(s => !getPrimaryAliasForId(this.aliases, s.id, 'Sensor')).map(s => s.id))
+    }
+
+    /** Keyed by DCC address (Roster's own id field). */
+    get rosterAddressesNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.roster.filter(r => !getPrimaryAliasForId(this.aliases, r.dccAddress, 'Roster')).map(r => r.dccAddress))
+    }
+
+    get routeIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.routes.filter(r => !getPrimaryAliasForId(this.aliases, r.id, 'Route')).map(r => r.id))
+    }
+
+    get sequenceIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.sequences.filter(s => !getPrimaryAliasForId(this.aliases, s.id, 'Sequence')).map(s => s.id))
+    }
+
+    get automationIdsNeedingAlias(): Set<number> {
+        if (!this.strictAliases) return new Set()
+        return new Set(this.automations.filter(a => !getPrimaryAliasForId(this.aliases, a.id, 'Automation')).map(a => a.id))
+    }
+
+    /** Filenames (matching state.configFiles' `name`) of every alias-eligible file with at
+     *  least one un-aliased object — drives the file-list warning dot in workspace.html.
+     *  Independent of Monaco: correct on load even before that file's editor has ever
+     *  been opened, unlike the Monaco-marker-driven error dot (see workspace.ts's
+     *  filesWithErrors). */
+    get filesNeedingAlias(): Set<string> {
+        const files = new Set<string>()
+        if (this.turnoutIdsNeedingAlias.size > 0) files.add('myTurnouts.h')
+        if (this.sensorIdsNeedingAlias.size > 0) files.add('mySensors.h')
+        if (this.rosterAddressesNeedingAlias.size > 0) files.add('myRoster.h')
+        if (this.routeIdsNeedingAlias.size > 0) files.add('myRoutes.h')
+        if (this.sequenceIdsNeedingAlias.size > 0) files.add('mySequences.h')
+        if (this.automationIdsNeedingAlias.size > 0) files.add('myAutomations.h')
+        return files
+    }
+
     getObjectIdReferences(id: number) {
         return collectObjectIdReferences(id, {
             roster: this.roster,
@@ -495,6 +624,7 @@ export class ConfigEditorState {
             sensors: this.sensors,
             routes: this.routes,
             sequences: this.sequences,
+            automations: this.automations,
         })
     }
 
@@ -507,7 +637,7 @@ export class ConfigEditorState {
      * value resolves to.
      */
     getAvailableAliasTargetIds(type: AliasTargetType): { id: number; label: string }[] {
-        const collections = { roster: this.roster, turnouts: this.turnouts, sensors: this.sensors, routes: this.routes, sequences: this.sequences }
+        const collections = { roster: this.roster, turnouts: this.turnouts, sensors: this.sensors, routes: this.routes, sequences: this.sequences, automations: this.automations }
         const used = new Set<number>()
         for (const alias of this.aliases) {
             const numericValue = parseAliasNumericValue(alias.value)
@@ -523,7 +653,7 @@ export class ConfigEditorState {
         // type) — but the id must belong to *some* configured object, or the alias would
         // resolve to nothing.
         if (this.getObjectIdReferences(id).length === 0) {
-            return { ok: false, reason: `Alias value ${id} does not match any configured Roster/Turnout/Sensor/Route/Sequence ID.` }
+            return { ok: false, reason: `Alias value ${id} does not match any configured Roster/Turnout/Sensor/Route/Sequence/Automation ID.` }
         }
         return { ok: true }
     }
@@ -595,6 +725,9 @@ export class ConfigEditorState {
         previousAliasName?: string,
     ): { ok: true } | { ok: false; reason: string } {
         const trimmedName = aliasName.trim()
+        if (trimmedName === '' && this.strictAliases) {
+            return { ok: false, reason: 'An alias is required when Strict aliases is enabled.' }
+        }
         const trimmedPreviousName = previousAliasName?.trim() ?? ''
         const aliases = [...this.aliases]
 
@@ -679,13 +812,6 @@ export class ConfigEditorState {
     // ── Preserved content (non-ROSTER/TURNOUT lines from imported myAutomation.h)
     preservedAutomationContent = ''
 
-    /** AUTOMATION(id, "desc") blocks found in myAutomation.h's free-form content — see
-     *  AutomationEntry doc comment. There is no visual editor for these; this exists so
-     *  automation ids participate in getSequenceIdViolations() below. */
-    get automations(): AutomationEntry[] {
-        return parseAutomationsFromFile(this.preservedAutomationContent)
-    }
-
     /** Combined ROUTE/AUTOMATION/SEQUENCE id list for validateSequenceIds() — see that
      *  function's doc comment for the range/uniqueness rules being checked. */
     get sequenceIdEntries(): SequenceIdEntry[] {
@@ -760,8 +886,10 @@ export class ConfigEditorState {
         'mySensors.h',
         'myRoutes.h',
         'mySequences.h',
+        'myEvents.h',
         'myAliases.h',
         'myAutomation.h',
+        'myAutomations.h',
         'myStartup.h',
     ])
 
@@ -822,7 +950,7 @@ export class ConfigEditorState {
             if (!f) return false
             return f.content.split('\n').some(l => l.trim() && !l.trim().startsWith('//'))
         }
-        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myAliases.h']) {
+        for (const name of ['mySignals.h', 'mySensors.h', 'myRoutes.h', 'mySequences.h', 'myAutomations.h', 'myEvents.h', 'myAliases.h']) {
             if (hasUserContent(name)) includes.push(`#include "${name}"`)
         }
 
@@ -892,7 +1020,9 @@ export class ConfigEditorState {
         this.sensors = []
         this.signals = []
         this.routes = []
+        this.automations = []
         this.sequences = []
+        this.eventHandlers = []
         this.aliases = []
         this.preservedAutomationContent = ''
         this.generatedHalDevicesContent = ''
@@ -915,8 +1045,12 @@ export class ConfigEditorState {
                 this.signals = parseSignalsFromFile(f.content)
             } else if (f.name === 'myRoutes.h') {
                 this.routes = parseRoutesFromFile(f.content)
+            } else if (f.name === 'myAutomations.h') {
+                this.automations = parseAutomationsFromFile(f.content)
             } else if (f.name === 'mySequences.h') {
                 this.sequences = parseSequencesFromFile(f.content)
+            } else if (f.name === 'myEvents.h') {
+                this.eventHandlers = parseEventHandlersFromFile(f.content)
             } else if (f.name === 'myAliases.h') {
                 // Deferred until every other file has been parsed (see below) — alias
                 // target validation needs the fully-populated roster/turnouts/etc.
@@ -983,13 +1117,39 @@ export class ConfigEditorState {
         }
 
         if (startupContent) {
-            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(startupContent)
+            const defaultThrownIds = parseDefaultThrownTurnoutIdsFromAutomation(startupContent, this.aliases)
             if (defaultThrownIds.size > 0) {
                 this.turnouts = this.turnouts.map(t => ({
                     ...t,
                     defaultState: defaultThrownIds.has(t.id) ? 'THROWN' : 'CLOSED',
                 }))
             }
+        }
+
+        // ── Migration: pull any pre-existing hand-typed AUTOMATION(...) blocks out of wherever
+        // they were living before this structured type existed — myAutomation.h's own free-form
+        // content, or a custom file created via the Configuration list's + button (the only two
+        // places CLAUDE.md's own documented model says custom EXRAIL code could go) — into the
+        // new myAutomations.h. Mirrors the myStartup.h split-migration just above; sets `migrated`
+        // the same way so the move is visible in the next Save's diff, not applied silently.
+        const migratedAutomations: AutomationEntry[] = []
+        const fromAutomationFile = extractAutomations(this.preservedAutomationContent)
+        if (fromAutomationFile.automations.length > 0) {
+            migratedAutomations.push(...fromAutomationFile.automations)
+            this.preservedAutomationContent = fromAutomationFile.remainder
+        }
+        for (const f of files) {
+            if (!this.isCustomFile(f.name)) continue
+            const extracted = extractAutomations(f.content)
+            if (extracted.automations.length === 0) continue
+            migratedAutomations.push(...extracted.automations)
+            f.content = extracted.remainder
+        }
+        if (migratedAutomations.length > 0) {
+            this.automations = [...this.automations, ...migratedAutomations]
+            const af = files.find(f => f.name === 'myAutomation.h')
+            if (af) af.content = this.automationPreview
+            migrated = true
         }
 
         this._syncGeneratedTurnoutDefaultsContent()
@@ -1012,8 +1172,18 @@ export class ConfigEditorState {
         if (!names.includes('myRoutes.h')) {
             files.push({ name: 'myRoutes.h', content: buildGeneratorHeader('myRoutes.h', this.installerState.appVersion) + '\n' })
         }
+        if (!names.includes('myAutomations.h')) {
+            // Uses automationsRaw (not a blank generator-header stub, unlike the other builtins
+            // just above) because the migration pass above can have already populated
+            // this.automations with real content pulled out of another file this same load —
+            // a blank stub here would silently drop it until something else triggers a resync.
+            files.push({ name: 'myAutomations.h', content: this.automationsRaw })
+        }
         if (!names.includes('mySequences.h')) {
             files.push({ name: 'mySequences.h', content: buildGeneratorHeader('mySequences.h', this.installerState.appVersion) + '\n' })
+        }
+        if (!names.includes('myEvents.h')) {
+            files.push({ name: 'myEvents.h', content: buildGeneratorHeader('myEvents.h', this.installerState.appVersion) + '\n' })
         }
         if (!names.includes('myAliases.h')) {
             files.push({ name: 'myAliases.h', content: buildGeneratorHeader('myAliases.h', this.installerState.appVersion) + '\n' })
@@ -1065,8 +1235,12 @@ export class ConfigEditorState {
                 f.content = this.signalsRaw
             } else if (f.name === 'myRoutes.h') {
                 f.content = this.routesRaw
+            } else if (f.name === 'myAutomations.h') {
+                f.content = this.automationsRaw
             } else if (f.name === 'mySequences.h') {
                 f.content = this.sequencesRaw
+            } else if (f.name === 'myEvents.h') {
+                f.content = this.eventHandlersRaw
             } else if (f.name === 'myAliases.h') {
                 f.content = this.aliasesRaw
             }
@@ -1094,6 +1268,8 @@ export class ConfigEditorState {
             hasBuiltInContent('mySensors.h') ||
             hasBuiltInContent('myRoutes.h') ||
             hasBuiltInContent('mySequences.h') ||
+            hasBuiltInContent('myAutomations.h') ||
+            hasBuiltInContent('myEvents.h') ||
             hasBuiltInContent('myAliases.h')
         if (!hasAutomation && needsIt) {
             files.push({ name: 'myAutomation.h', content: this.automationPreview })
@@ -1211,7 +1387,7 @@ export class ConfigEditorState {
 
         this.generatedTurnoutDefaultsContent = [
             'AUTOSTART',
-            ...thrownIds.map(id => `  THROW(${id})`),
+            ...thrownIds.map(id => `  THROW(${this.getPrimaryAliasNameForId(id, 'Turnout') || id})`),
             'DONE',
         ].join('\n')
     }

@@ -74,6 +74,13 @@ test.describe('Sensors Editor', () => {
         await addSensor(page)
 
         const row = sensorRows(page).first()
+
+        // Strict aliases is on by default — a freshly-added sensor has no alias yet,
+        // so give it one before any other field edit can commit.
+        const aliasInput = row.locator('alias-picker input')
+        await aliasInput.fill('BLOCK_DETECTOR_1')
+        await aliasInput.blur()
+
         const descInput = row.locator('input[placeholder="Description"]')
         await descInput.fill('Block Detector 1')
         await descInput.blur()
@@ -90,6 +97,13 @@ test.describe('Sensors Editor', () => {
         await addSensor(page)
 
         const row = sensorRows(page).first()
+
+        // Strict aliases is on by default — a freshly-added sensor has no alias yet,
+        // so give it one before any other field edit can commit.
+        const aliasInput = row.locator('alias-picker input')
+        await aliasInput.fill('PLATFORM_OCCUPANCY')
+        await aliasInput.blur()
+
         const idInput = row.locator('input[type="number"]').first()
         await idInput.fill('7')
         await idInput.blur()
@@ -139,6 +153,23 @@ test.describe('Sensors Editor', () => {
     })
 
     // ── Alias support ────────────────────────────────────────────────────────
+
+    test('Strict aliases (on by default): an un-aliased sensor shows a warning dot next to its Alias field, which clears once aliased', async ({ workspacePage: page }) => {
+        await openSensorsEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await switchToVisual(page)
+        await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
+
+        const row = sensorRows(page).first()
+        await expect(row.getByTestId('alias-warning-dot')).toBeVisible()
+
+        const aliasInput = row.locator('alias-picker input')
+        await aliasInput.fill('BLOCK_1')
+        await aliasInput.blur()
+
+        await expect(row.getByTestId('alias-warning-dot')).toHaveCount(0)
+    })
 
     test('setting an alias on a sensor writes ALIAS(...) with type: Sensor to myAliases.h', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)

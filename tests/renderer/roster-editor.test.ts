@@ -645,6 +645,94 @@ describe('RosterEditorCustomElement alias integration', () => {
         expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...existing, dccAddress: 84 })
         expect(syncAliasForId).toHaveBeenCalledWith(42, 84, 'NEW_ALIAS', 'Roster', 'OLD_ALIAS')
     })
+
+    it('rebuilds the tree on an alias-only edit, even though the roster entry data itself is unchanged', () => {
+        // Regression: the strict-aliases warning dot lives in the TreeView (drawNode-rendered,
+        // not Aurelia-bound), so it only repaints via an explicit _rebuildTree() call — an
+        // alias-only edit must still trigger one, or clearing the dot needs an unrelated field
+        // edit (or a tab switch) to become visible.
+        const existing = { dccAddress: 42, name: 'Switcher', functions: [], comment: '' }
+        const rebuildTree = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                roster: [existing],
+                updateRosterEntry: vi.fn(),
+                syncAliasForId: vi.fn().mockReturnValue({ ok: true }),
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+            },
+            editBufferIndex: 0,
+            editBuffer: { ...existing },
+            aliasInput: 'NEW_ALIAS',
+            errorMessage: '',
+            _rebuildTree: rebuildTree,
+        })
+
+        editor.commitBuffer()
+
+        expect(rebuildTree).toHaveBeenCalledOnce()
+    })
+})
+
+describe('RosterEditorCustomElement strict aliases', () => {
+    const LOCO = { dccAddress: 42, name: 'Switcher', functions: [], comment: '' }
+
+    it('blocks the commit — even of an unrelated field, not just the alias — when strictAliases is on and no alias is set', () => {
+        const updateRosterEntry = vi.fn()
+        const syncAliasForId = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: true, updateRosterEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).not.toHaveBeenCalled()
+        expect(syncAliasForId).not.toHaveBeenCalled()
+        expect(editor.errorMessage).toContain('alias')
+    })
+
+    it('allows the commit when strictAliases is on and an alias is present', () => {
+        const updateRosterEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: true, updateRosterEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('THOMAS') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: 'THOMAS',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...LOCO, name: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
+
+    it('allows an aliasless commit when strictAliases is off', () => {
+        const updateRosterEntry = vi.fn()
+        const editor = Object.create(RosterEditorCustomElement.prototype) as RosterEditorCustomElement
+        Object.assign(editor, {
+            state: { roster: [LOCO], strictAliases: false, updateRosterEntry, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...LOCO, name: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+            _rebuildTree: vi.fn(),
+        })
+
+        editor.commitBuffer()
+
+        expect(updateRosterEntry).toHaveBeenCalledWith(0, { ...LOCO, name: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
 })
 
 describe('Alias type comments', () => {

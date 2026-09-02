@@ -37,6 +37,7 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
         sensors: [],
         signals: [],
         routes: [],
+        automations: [],
         sequences: [],
         aliases: [],
         generatedTrackManagerContent: '',
@@ -48,7 +49,9 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
     }
     Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
     Object.defineProperty(state, 'automationPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'automationPreview')!)
+    Object.defineProperty(state, 'automationsRaw', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'automationsRaw')!)
     Object.defineProperty(state, 'customFileNames', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'customFileNames')!)
+    Object.defineProperty(state, 'hasStackedMotorShield', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'hasStackedMotorShield')!)
     return state
 }
 
@@ -67,12 +70,26 @@ describe('ConfigEditorState — myStartup.h', () => {
         expect(state.installerState.configFiles.filter(f => f.name === 'myStartup.h')).toHaveLength(1)
     })
 
+    it('hasStackedMotorShield reflects config.h MOTOR_SHIELD_TYPE — false by default, true for EXCSB1_WITH_EX8874', () => {
+        const singleShieldState = makeState([
+            { name: 'config.h', content: '#define MOTOR_SHIELD_TYPE STANDARD_MOTOR_SHIELD\n' },
+        ])
+        ConfigEditorState.prototype.loadFromInstallerState.call(singleShieldState as any)
+        expect((singleShieldState as any).hasStackedMotorShield).toBe(false)
+
+        const stackedShieldState = makeState([
+            { name: 'config.h', content: '#define MOTOR_SHIELD_TYPE EXCSB1_WITH_EX8874\n' },
+        ])
+        ConfigEditorState.prototype.loadFromInstallerState.call(stackedShieldState as any)
+        expect((stackedShieldState as any).hasStackedMotorShield).toBe(true)
+    })
+
     it('leaves TrackManager/TurnoutDefaults empty when there is nothing to migrate and no myStartup.h', () => {
         const state = makeState([
             { name: 'config.h', content: '// empty\n' },
-            // Custom EXRAIL with no AUTOSTART block at all — not TrackManager-
-            // shaped in either the tagged or pre-tag legacy sense.
-            { name: 'myAutomation.h', content: 'AUTOMATION(1,"My custom automation")\n  DONE' },
+            // Custom EXRAIL with no AUTOSTART block and no AUTOMATION(...) block either — not
+            // TrackManager-shaped, and nothing for the separate AUTOMATION migration to find.
+            { name: 'myAutomation.h', content: '// just a hand-written comment, nothing to migrate' },
         ])
 
         ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
@@ -83,7 +100,10 @@ describe('ConfigEditorState — myStartup.h', () => {
     })
 
     it('migrates legacy TrackManager/TurnoutDefaults blocks out of myAutomation.h into a new myStartup.h', () => {
-        const customCode = 'AUTOMATION(1,"My custom automation")\n  DONE'
+        // Genuinely unrelated custom code — not AUTOMATION-shaped, so the separate AUTOMATION
+        // migration (see the dedicated test below) has nothing to do with it; this test is only
+        // about TrackManager/TurnoutDefaults not clobbering whatever else is in the file.
+        const customCode = '// a genuinely custom comment\nPRINT("hello")\nDONE'
         const legacyAutomationContent = [
             trackManagerBlock(TRACK_MANAGER_BODY),
             '',
@@ -126,6 +146,50 @@ describe('ConfigEditorState — myStartup.h', () => {
 
         // The split must be visible/reviewable in the next Save diff.
         expect((state as any).hasChanges).toBe(true)
+    })
+
+    it('migrates a hand-typed AUTOMATION(...) block out of myAutomation.h into myAutomations.h', () => {
+        const state = makeState([
+            { name: 'config.h', content: '// empty\n' },
+            { name: 'myAutomation.h', content: 'AUTOMATION(1,"My custom automation")\n  DONE' },
+        ])
+
+        ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
+
+        expect((state as any).automations).toEqual([{ id: 1, description: 'My custom automation', body: 'DONE' }])
+        // Moved out, not merely copied — myAutomation.h's own custom content no longer has it.
+        expect((state as any).preservedAutomationContent).not.toContain('AUTOMATION(1')
+        const automationsFile = state.installerState.configFiles.find(f => f.name === 'myAutomations.h')
+        expect(automationsFile).toBeDefined()
+        expect(automationsFile!.content).toContain('AUTOMATION(1, "My custom automation")')
+        expect((state as any).hasChanges).toBe(true)
+    })
+
+    it('migrates a hand-typed AUTOMATION(...) block out of a custom file (created via the + button) into myAutomations.h', () => {
+        const state = makeState([
+            { name: 'config.h', content: '// empty\n' },
+            { name: 'myCustomStuff.h', content: 'ALIAS(SOME_THING, 5)\nAUTOMATION(2,"Another one")\nDONE\n' },
+        ])
+
+        ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
+
+        expect((state as any).automations).toEqual([{ id: 2, description: 'Another one', body: 'DONE' }])
+        const customFile = state.installerState.configFiles.find(f => f.name === 'myCustomStuff.h')
+        expect(customFile!.content).toContain('ALIAS(SOME_THING, 5)')
+        expect(customFile!.content).not.toContain('AUTOMATION(2')
+        expect((state as any).hasChanges).toBe(true)
+    })
+
+    it('leaves myAutomations.h alone (no spurious migration) when no AUTOMATION(...) block exists anywhere', () => {
+        const state = makeState([
+            { name: 'config.h', content: '// empty\n' },
+            { name: 'myAutomation.h', content: '// just a comment' },
+        ])
+
+        ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
+
+        expect((state as any).automations).toEqual([])
+        expect((state as any).hasChanges).toBe(false)
     })
 
     it('migrates a pre-tag untagged legacy TrackManager block (no MANAGED_TRACK_MANAGER_TAG at all)', () => {
@@ -239,5 +303,51 @@ describe('ConfigEditorState — myStartup.h', () => {
 
         expect(state.generatedTurnoutDefaultsContent).toBe('')
         expect(state.installerState.configFiles.find(f => f.name === 'myStartup.h')!.content).not.toContain('THROW(5)')
+    })
+
+    it('_syncGeneratedTurnoutDefaultsContent emits THROW(aliasName) instead of THROW(id) when a Turnout alias exists', () => {
+        const state = {
+            turnouts: [
+                { type: 'SERVO', id: 5, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow', description: 'Aliased', comment: '', defaultState: 'THROWN' },
+                { type: 'SERVO', id: 6, pin: 26, activeAngle: 410, inactiveAngle: 205, profile: 'Slow', description: 'Unaliased', comment: '', defaultState: 'THROWN' },
+            ],
+            aliases: [{ name: 'MyTurnout', value: '5', aliasType: 'Turnout' }],
+            generatedTurnoutDefaultsContent: '',
+            getPrimaryAliasNameForId: ConfigEditorState.prototype.getPrimaryAliasNameForId,
+        }
+
+        ;(ConfigEditorState.prototype as unknown as Record<string, unknown>)._syncGeneratedTurnoutDefaultsContent.call(state)
+
+        expect(state.generatedTurnoutDefaultsContent).toBe('AUTOSTART\n  THROW(MyTurnout)\n  THROW(6)\nDONE')
+    })
+
+    it('resolves an alias-name THROW() in myStartup.h back to the turnout it targets on load', () => {
+        // loadFromInstallerState() resets this.aliases to [] before parsing files (so a
+        // reopened session never retains a stale list), so myAliases.h must be a real file
+        // in this test's config files for the alias to survive to the THROW()-resolution step —
+        // see parseDefaultThrownTurnoutIdsFromAutomation's own dedicated tests in
+        // load-from-folder.test.ts for the resolution logic in isolation.
+        const startupContent = turnoutDefaultsBlock('AUTOSTART\n  THROW(MyTurnout)\nDONE')
+        const state = makeState([
+            { name: 'config.h', content: '// empty\n' },
+            { name: 'myTurnouts.h', content: 'SERVO_TURNOUT(5, 25, 410, 205, Slow, "Aliased")\nSERVO_TURNOUT(6, 26, 410, 205, Slow, "Unaliased")' },
+            { name: 'myAliases.h', content: 'ALIAS(MyTurnout, 5) // type: Turnout' },
+            { name: 'myStartup.h', content: startupContent },
+        ])
+        ;(state as any).normalizeAliasesLenient = (ConfigEditorState.prototype as unknown as Record<string, unknown>)['normalizeAliasesLenient']
+        ;(state as any).normalizeAliasEntry = (ConfigEditorState.prototype as unknown as Record<string, unknown>)['normalizeAliasEntry']
+        ;(state as any).validateAliasTargetId = ConfigEditorState.prototype.validateAliasTargetId
+        ;(state as any).getObjectIdReferences = ConfigEditorState.prototype.getObjectIdReferences
+        ;(state as any).sensors = []
+        ;(state as any).routes = []
+        ;(state as any).sequences = []
+        ;(state as any).automations = []
+
+        ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
+
+        expect((state as any).turnouts).toEqual([
+            expect.objectContaining({ id: 5, defaultState: 'THROWN' }),
+            expect.objectContaining({ id: 6, defaultState: 'CLOSED' }),
+        ])
     })
 })

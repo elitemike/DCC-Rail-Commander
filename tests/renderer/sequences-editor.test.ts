@@ -176,6 +176,61 @@ describe('SequencesEditorCustomElement.updateSequence (id rename)', () => {
     })
 })
 
+describe('SequencesEditorCustomElement strict aliases', () => {
+    it('blocks updateSequence — including a body-only edit routed through makeBodyChangeHandler — when strictAliases is on and no alias is set', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt', body: '' }])
+        state.strictAliases = true
+        editor.selectedId = 1
+
+        editor.makeBodyChangeHandler(1)('THROW(1)\nDONE')
+
+        expect(state.sequences).toEqual([{ id: 1, description: 'Yard shunt', body: '' }])
+    })
+
+    it('shows a warning toast when updateSequence is blocked', () => {
+        const { editor, state, toastShow } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        state.strictAliases = true
+
+        editor.updateSequence(0, { ...state.sequences[0], description: 'New desc' })
+
+        expect(toastShow).toHaveBeenCalledWith(expect.objectContaining({ title: 'Alias Required' }))
+    })
+
+    it('allows updateSequence when strictAliases is on and an alias is present', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 1, description: 'Yard shunt' }],
+            [{ name: 'yardshunt', value: '1', aliasType: 'Sequence' }],
+        )
+        state.strictAliases = true
+
+        editor.updateSequence(0, { ...state.sequences[0], description: 'New desc' })
+
+        expect(state.sequences[0]).toMatchObject({ description: 'New desc' })
+    })
+
+    it('allows an aliasless updateSequence when strictAliases is off', () => {
+        const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])
+        state.strictAliases = false
+
+        editor.updateSequence(0, { ...state.sequences[0], description: 'New desc' })
+
+        expect(state.sequences[0]).toMatchObject({ description: 'New desc' })
+    })
+
+    it('uses the pre-edit id to look up the alias when a rename is in flight, so an aliased sequence can still be renamed', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 1, description: 'Yard shunt' }],
+            [{ name: 'yardshunt', value: '1', aliasType: 'Sequence' }],
+        )
+        state.strictAliases = true
+        editor.selectedId = 1
+
+        editor.updateSequence(0, { ...state.sequences[0], id: 5 })
+
+        expect(state.sequences[0]).toMatchObject({ id: 5 })
+    })
+})
+
 describe('SequencesEditorCustomElement.makeIdChangeHandler', () => {
     it('looks the sequence up by the id captured at bind time and persists the new id', () => {
         const { editor, state } = makeEditor([{ id: 1, description: 'Yard shunt' }])

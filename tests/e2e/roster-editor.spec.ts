@@ -127,6 +127,12 @@ test.describe('Roster Editor', () => {
         // Wait for the detail panel to open (DCC Address spinbutton appears)
         await expect(page.locator('input[type="number"]').first()).toBeVisible({ timeout: 5_000 })
 
+        // Strict aliases is on by default — a freshly-added entry has no alias yet,
+        // so give it one before any other field edit can commit.
+        const newAliasInput = await getDetailTextInput(page, 'Alias')
+        await newAliasInput.fill('GORDON')
+        await newAliasInput.blur()
+
         // Edit the name field — label text is "Name", input is the sibling text input
         const nameInput = page.locator('label:has-text("Name") ~ input[type="text"], label:has-text("Name") + input[type="text"]')
             .or(page.locator('div:has(> label:has-text("Name")) input[type="text"]'))
@@ -248,6 +254,12 @@ test.describe('Roster Editor', () => {
 
         // Edit Gordon's name to "Gordon the Big Engine" via visual
         await page.locator('#roster-treeview li').filter({ hasText: 'Gordon' }).first().locator('.e-fullrow').click()
+
+        // Strict aliases is on by default — this loco has none yet (it was added via raw text).
+        const gordonAliasInput = await getDetailTextInput(page, 'Alias')
+        await gordonAliasInput.fill('GORDON')
+        await gordonAliasInput.blur()
+
         const nameInput = page.locator('label', { hasText: 'Name' }).locator('..').locator('input[type="text"]')
         await nameInput.clear()
         await nameInput.fill('Gordon the Big Engine')
@@ -272,6 +284,23 @@ test.describe('Roster Editor', () => {
         const content = await getMonacoContent(page)
         expect(content).toContain('Steam Release///Dimmer/Mute')
         expect(content).toContain('Mute')
+    })
+
+    test('Strict aliases (on by default): each un-aliased loco shows a warning dot in the tree, which clears once aliased', async ({ workspacePage: page }) => {
+        await openRosterEditor(page)
+
+        const thomasRow = page.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first()
+        await expect(thomasRow.getByTestId('alias-warning-dot')).toBeVisible()
+
+        await thomasRow.locator('.e-fullrow').click()
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('THOMAS_ALIAS')
+        await aliasInput.blur()
+
+        await expect(thomasRow.getByTestId('alias-warning-dot')).toHaveCount(0)
+        // Percy is still unaliased and keeps its dot.
+        const percyRow = page.locator('#roster-treeview li').filter({ hasText: 'Percy' }).first()
+        await expect(percyRow.getByTestId('alias-warning-dot')).toBeVisible()
     })
 
     test('alias from myAliases.h populates in the roster visual editor', async ({ workspacePage: page }) => {

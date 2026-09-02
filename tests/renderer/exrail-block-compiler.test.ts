@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { parseBody, compileBody, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
+import { definedTracksFor, parseBody, compileBody, exrailBodiesEquivalent, type ParsedGraph } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 import { BLOCK_REGISTRY } from '../../src/renderer/src/components/visual-editors/exrail-block-registry'
 
-function parseOk(body: string, kind: 'route' | 'sequence' = 'route'): ParsedGraph {
+describe('definedTracksFor', () => {
+    it('offers only A/B without a stacked motor shield', () => {
+        expect(definedTracksFor(false).map((t) => t.value)).toEqual(['A', 'B'])
+    })
+
+    it('offers A/B/C/D with a stacked motor shield', () => {
+        expect(definedTracksFor(true).map((t) => t.value)).toEqual(['A', 'B', 'C', 'D'])
+    })
+})
+
+function parseOk(body: string, kind: string = 'ROUTE'): ParsedGraph {
     const result = parseBody(body, kind, BLOCK_REGISTRY)
     if (!result.ok) throw new Error(`expected parse to succeed, got: ${result.reason}`)
     return result.graph
@@ -17,6 +27,30 @@ describe('parseBody / compileBody round-trip', () => {
 
     it('round-trips TOGGLE_TURNOUT', () => {
         const body = 'TOGGLE_TURNOUT(200)\nDELAY(500)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips DELAYMINS', () => {
+        const body = 'DELAYMINS(5)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips AT', () => {
+        const body = 'AT(100)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips AFTER', () => {
+        const body = 'AFTER(100, 500)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips AFTEROVERLOAD', () => {
+        const body = 'AFTEROVERLOAD(A)'
         const graph = parseOk(body)
         expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
     })
@@ -76,6 +110,73 @@ describe('parseBody / compileBody round-trip', () => {
         expect(throwNode?.info.paramValues.turnoutId).toBe(200)
     })
 
+    // STEALTH/STEALTH_GLOBAL's `code` param is `kind: 'code'` (gives it a Monaco popup editor —
+    // see ExrailCodeField in exrail-blockly-blocks.ts) but is parsed/emitted exactly like the
+    // 'string' kind it replaced: the variadic-tail path in parseArgsForParams() never branches on
+    // param kind, so raw C++ containing commas inside unquoted function-call parens must survive
+    // the round-trip untouched.
+    it('round-trips STEALTH with raw C++ containing unquoted commas', () => {
+        const body = 'STEALTH(digitalWrite(30, HIGH); digitalWrite(31, LOW);)'
+        const graph = parseOk(body)
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+        expect(node?.info.paramValues.code).toBe('digitalWrite(30, HIGH); digitalWrite(31, LOW);')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    it('round-trips STEALTH_GLOBAL', () => {
+        const body = 'STEALTH_GLOBAL(int counter = 0;)'
+        const graph = parseOk(body)
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+    })
+
+    // Regression: EXRAIL doesn't mind a macro call's argument spanning multiple physical lines
+    // (nor does the C++ compiler) — only this parser's own line-by-line scan needs to recognize
+    // that a statement continues past the first line whenever its parens aren't balanced yet.
+    // Before this fix, a genuinely multi-line STEALTH body failed LINE_RE on its very first
+    // (unbalanced) line, and — critically — whatever came *after* it (a later DONE, another
+    // statement) was never reached at all, since the loop had already returned a parse failure.
+    describe('multi-line statements (paren-balanced across physical lines)', () => {
+        it('parses a STEALTH body whose parens close on a later physical line', () => {
+            const body = 'STEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})'
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('if (x) {\n  digitalWrite(30, HIGH);\n}')
+        })
+
+        it('round-trips a multi-line STEALTH body exactly, embedded newlines and all', () => {
+            const body = 'STEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})'
+            const graph = parseOk(body)
+            expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+        })
+
+        it('still parses whatever comes after a multi-line statement, not just the statement itself', () => {
+            // This is the exact failure mode reported: a multi-line STEALTH swallowing (or never
+            // reaching) the DONE/next statement that follows it in the body.
+            const body = 'THROW(200)\nSTEALTH(if (x) {\n  digitalWrite(30, HIGH);\n})\nCLOSE(201)'
+            const graph = parseOk(body)
+            expect(graph.nodes.map((n) => n.info.blockTypeId)).toEqual(['ROUTE', 'THROW', 'STEALTH', 'CLOSE'])
+            expect(compileBody(graph, BLOCK_REGISTRY)).toBe(body)
+        })
+
+        it('a comment nested inside a multi-line statement\'s own parens stays part of the captured code, not mistaken for a top-level EXRAIL comment', () => {
+            // The `//` here sits at paren-depth > 0 (inside STEALTH's still-open outer paren, and
+            // inside `if (x) {`'s own nesting) — real embedded C++, not an EXRAIL-level comment
+            // terminating the statement early. It must survive verbatim in the captured code.
+            const body = 'STEALTH(if (x) {\n  // a comment\n  digitalWrite(30, HIGH);\n})'
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('if (x) {\n  // a comment\n  digitalWrite(30, HIGH);\n}')
+            expect(node?.info.comment).toBeUndefined()
+        })
+
+        it('handles a statement whose parens balance across more than two lines', () => {
+            const body = 'STEALTH(a();\nb();\nc();)'
+            const graph = parseOk(body)
+            const node = graph.nodes.find((n) => n.info.blockTypeId === 'STEALTH')
+            expect(node?.info.paramValues.code).toBe('a();\nb();\nc();')
+        })
+    })
+
     it('graph structure is preserved through parseBody(compileBody(graph))', () => {
         const body = 'IF(1)\n  THROW(200)\nELSE\n  CLOSE(200)\nENDIF\nDELAY(100)'
         const graph = parseOk(body)
@@ -87,45 +188,63 @@ describe('parseBody / compileBody round-trip', () => {
 
 describe('parseBody failure modes', () => {
     it('rejects an unbalanced ENDIF', () => {
-        const result = parseBody('THROW(200)\nENDIF', 'route', BLOCK_REGISTRY)
+        const result = parseBody('THROW(200)\nENDIF', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ENDIF/)
     })
 
     it('rejects a stray ELSE', () => {
-        const result = parseBody('ELSE\nTHROW(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('ELSE\nTHROW(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ELSE/)
     })
 
     it('rejects an unknown command', () => {
-        const result = parseBody('FROBNICATE(1)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('FROBNICATE(1)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/FROBNICATE/)
     })
 
     it('rejects a missing ENDIF', () => {
-        const result = parseBody('IF(1)\n  THROW(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('IF(1)\n  THROW(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/ENDIF/)
     })
 
     it('rejects mis-cased commands rather than silently correcting them', () => {
-        const result = parseBody('Throw(200)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('Throw(200)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/case-sensitive/)
     })
 
     it('rejects a wrong argument count', () => {
-        const result = parseBody('THROW(200, 201)', 'route', BLOCK_REGISTRY)
+        const result = parseBody('THROW(200, 201)', 'ROUTE', BLOCK_REGISTRY)
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.reason).toMatch(/THROW/)
     })
 
-    it('rejects a body containing a comment rather than dropping it silently', () => {
-        const result = parseBody('THROW(200) // yard switch', 'route', BLOCK_REGISTRY)
-        expect(result.ok).toBe(false)
-        if (!result.ok) expect(result.reason).toMatch(/omment/)
+    it('preserves a trailing comment as the statement\'s own comment, rather than rejecting or dropping it', () => {
+        const graph = parseOk('THROW(200) // yard switch')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        expect(node?.info.comment).toBe('yard switch')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe('THROW(200) // yard switch')
+    })
+
+    it('attaches a standalone comment line to the statement immediately following it', () => {
+        const graph = parseOk('// yard switch\nTHROW(200)')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'THROW')
+        // Trailing '\n' marks "leading-only, no same-line comment" — see commentLines()'s doc
+        // comment in exrail-block-compiler.ts. Without it, this is indistinguishable from a
+        // same-line trailing comment once both collapse to a plain string.
+        expect(node?.info.comment).toBe('yard switch\n')
+        expect(compileBody(graph, BLOCK_REGISTRY)).toBe('// yard switch\nTHROW(200)')
+    })
+
+    it('does not mistake a quoted string containing // for a comment', () => {
+        const graph = parseOk('PRINT("a // b")')
+        const node = graph.nodes.find((n) => n.info.blockTypeId === 'PRINT')
+        expect(node?.info.comment).toBeUndefined()
+        expect(node?.info.paramValues.msg).toBe('a // b')
     })
 
     // Fuzz coverage for "an unknown word must never crash the parser" — see
@@ -152,9 +271,46 @@ describe('parseBody failure modes', () => {
         for (let i = 0; i < 300; i++) {
             const body = randomBody()
             let result: ReturnType<typeof parseBody>
-            expect(() => { result = parseBody(body, Math.random() < 0.5 ? 'route' : 'sequence', BLOCK_REGISTRY) }).not.toThrow()
+            expect(() => { result = parseBody(body, Math.random() < 0.5 ? 'ROUTE' : 'SEQUENCE', BLOCK_REGISTRY) }).not.toThrow()
             expect(typeof result!.ok).toBe('boolean')
             if (!result!.ok) expect(typeof result!.reason).toBe('string')
         }
+    })
+})
+
+describe('exrailBodiesEquivalent', () => {
+    it('treats identical text as equivalent', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\nDELAY(500)', 'THROW(200)\nDELAY(500)')).toBe(true)
+    })
+
+    it('ignores indentation differences', () => {
+        expect(exrailBodiesEquivalent('IF(200)\n  THROW(1)\nENDIF', 'IF(200)\n    THROW(1)\nENDIF')).toBe(true)
+    })
+
+    it('ignores spacing before a trailing comment', () => {
+        expect(exrailBodiesEquivalent(
+            'PARSE("<S 172 172 0>")                 // SNS_PARK_1_ENTRY',
+            'PARSE("<S 172 172 0>") // SNS_PARK_1_ENTRY',
+        )).toBe(true)
+    })
+
+    it('ignores blank lines', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\n\nDELAY(500)', 'THROW(200)\nDELAY(500)')).toBe(true)
+    })
+
+    it('preserves internal spacing inside string literals', () => {
+        expect(exrailBodiesEquivalent('PARSE("<S 172 172 0>")', 'PARSE("<S172 172 0>")')).toBe(false)
+    })
+
+    it('flags a changed argument value', () => {
+        expect(exrailBodiesEquivalent('THROW(200)', 'THROW(201)')).toBe(false)
+    })
+
+    it('flags a dropped trailing comment', () => {
+        expect(exrailBodiesEquivalent('THROW(200) // note', 'THROW(200)')).toBe(false)
+    })
+
+    it('flags a dropped standalone comment with nothing left to attach to', () => {
+        expect(exrailBodiesEquivalent('THROW(200)\n// trailing note', 'THROW(200)')).toBe(false)
     })
 })

@@ -355,6 +355,17 @@ describe('generateMyAutomation', () => {
             expect(out.indexOf('SET_TRACK(B,PROG)')).toBeLessThan(out.indexOf('POWERON'))
         })
 
+        it('uses POWEROFF when startupPowerMode is off', () => {
+            const out = generateMyAutomation(baseAutoOpts({
+                enablePowerOnStart: true,
+                startupPowerMode: 'off',
+            }))
+            expect(out).toContain('POWEROFF')
+            expect(out).not.toContain('POWERON')
+            expect(out).not.toContain('SET_POWER(')
+            expect(out.indexOf('SET_TRACK(B,PROG)')).toBeLessThan(out.indexOf('POWEROFF'))
+        })
+
         it('uses SET_POWER per track when startupPowerMode is individual', () => {
             const out = generateMyAutomation(baseAutoOpts({
                 enablePowerOnStart: true,
@@ -537,6 +548,15 @@ describe('parseMyAutomationTrackManager', () => {
         })
     })
 
+    describe('POWEROFF parsing', () => {
+        it('sets enablePowerOnStart and startupPowerMode off when POWEROFF found', () => {
+            const content = 'AUTOSTART\n  SET_TRACK(A,MAIN)\n  POWEROFF\nDONE'
+            const opts = parseMyAutomationTrackManager(content)
+            expect(opts.enablePowerOnStart).toBe(true)
+            expect(opts.startupPowerMode).toBe('off')
+        })
+    })
+
     describe('SET_POWER parsing', () => {
         it('sets startupPowerMode individual and trackAPower when SET_POWER(A,...) present', () => {
             const content = 'AUTOSTART\n  SET_TRACK(A,MAIN)\n  SET_POWER(A,ON)\nDONE'
@@ -572,6 +592,14 @@ describe('parseMyAutomationTrackManager', () => {
             const parsed = parseMyAutomationTrackManager(content)
             expect(parsed.enablePowerOnStart).toBe(true)
             expect(parsed.startupPowerMode).toBe('all')
+        })
+
+        it('round-trips POWEROFF (off mode)', () => {
+            const opts = baseAutoOpts({ enablePowerOnStart: true, startupPowerMode: 'off' })
+            const content = generateMyAutomation(opts)
+            const parsed = parseMyAutomationTrackManager(content)
+            expect(parsed.enablePowerOnStart).toBe(true)
+            expect(parsed.startupPowerMode).toBe('off')
         })
 
         it('round-trips individual SET_POWER with mixed ON/OFF', () => {

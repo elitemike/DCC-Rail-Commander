@@ -147,6 +147,8 @@ interface WorkspaceFixtures {
     ioExpanderPage: Page
     rosterGroupedApp: ElectronApplication
     rosterGroupedPage: Page
+    onboardingApp: ElectronApplication
+    onboardingPage: Page
 }
 
 // ── Shared: seed temp dir + launch Electron ───────────────────────────────────
@@ -371,6 +373,38 @@ async function launchCsb1StackedApp(): Promise<{ app: ElectronApplication; testD
     return { app, testDataDir }
 }
 
+// ── Onboarding (home screen, no saved configs) — drives the "New Device" wizard ──
+
+async function launchOnboardingApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-onboarding-'))
+
+    const args = [
+        ELECTRON_MAIN,
+        '--mock-device',
+        '--mock-upload',
+        '--skip-startup',
+        `--test-data-dir=${testDataDir}`,
+        '--disable-gpu',
+        '--no-sandbox',
+        '--offscreen',
+        '--js-flags=--no-expose-wasm',
+    ]
+
+    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+    return { app, testDataDir }
+}
+
+async function navigateToOnboarding(app: ElectronApplication): Promise<Page> {
+    const page = await app.firstWindow()
+    page.on('dialog', (dialog) => dialog.accept().catch(() => undefined))
+    await page.waitForLoadState('domcontentloaded')
+    await page.evaluate(() => {
+        document.querySelectorAll('[id^="ej2-licensing"]').forEach(el => el.remove())
+    }).catch(() => undefined)
+    await expect(page.getByText('New Device', { exact: true })).toBeVisible({ timeout: 15_000 })
+    return page
+}
+
 // ── Shared test base with workspace fixtures ──────────────────────────────────
 
 async function navigateToIOExpanderWorkspace(app: ElectronApplication): Promise<Page> {
@@ -438,6 +472,19 @@ export const test = base.extend<WorkspaceFixtures>({
 
     rosterGroupedPage: async ({ rosterGroupedApp }, use) => {
         await use(await navigateToWorkspace(rosterGroupedApp))
+    },
+
+    // ── Onboarding / "New Device" wizard ────────────────────────────────────
+    // eslint-disable-next-line no-empty-pattern
+    onboardingApp: async ({ }, use) => {
+        const { app, testDataDir } = await launchOnboardingApp()
+        await use(app)
+        await app.close()
+        cleanupDir(testDataDir)
+    },
+
+    onboardingPage: async ({ onboardingApp }, use) => {
+        await use(await navigateToOnboarding(onboardingApp))
     },
 })
 

@@ -13,8 +13,11 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
         routes: [],
         sequences: [],
         aliases: [],
+        automations: [],
+        preservedAutomationContent: '',
         normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
         normalizeAliasEntry: (ConfigEditorState.prototype as unknown as Record<string, unknown>).normalizeAliasEntry,
+        isCustomFile: ConfigEditorState.prototype.isCustomFile,
         _syncGeneratedTurnoutDefaultsContent: vi.fn(),
     }
 }
