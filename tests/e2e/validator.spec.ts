@@ -133,6 +133,13 @@ test.describe('Validators', () => {
             ].join('\n'))
             await expectNoErrorSquiggle(page)
         })
+
+        test('unrecognised macro name (not just a case mismatch) — error squiggle', async ({ workspacePage: page }) => {
+            await openRawRoster(page)
+            // "Ros" isn't ROSTER under any casing — a genuinely unknown command, not a typo Monaco can case-fix.
+            await setMonacoContent(page, 'Ros("")')
+            await expectErrorSquiggle(page)
+        })
     })
 
     // ── SERVO_TURNOUT validator tests ─────────────────────────────────────────
@@ -166,6 +173,124 @@ test.describe('Validators', () => {
             await openRawTurnouts(page)
             await setMonacoContent(page, 'SERVO_TURNOUT(200, 25, 410)')
             await expectErrorSquiggle(page)
+        })
+    })
+
+    // ── Unknown-command checks also apply to EXRAIL script files ────────────────
+    // (myAutomation.h and friends), not just the closed-vocabulary object-definition
+    // files above — EXRAIL is a closed macro DSL everywhere.
+
+    test.describe('unrecognised commands in EXRAIL script files', () => {
+        async function openAutomationTab(page: Page) {
+            await page.getByText('Advanced', { exact: true }).first().click()
+            await expect(page.locator('automation-editor div.monaco-editor')).toBeVisible()
+        }
+
+        test('a call that is not a defined EXRAIL command gets an error squiggle in myAutomation.h', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'myCustomFunction(200)')
+            await expectErrorSquiggle(page)
+        })
+
+        test('valid EXRAIL commands in myAutomation.h stay squiggle-free', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Test")\n  THROW(200)\n  DELAY(500)\nDONE')
+            await expectNoErrorSquiggle(page)
+        })
+
+        test('trailing text after a valid call gets an error squiggle', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+            await expectErrorSquiggle(page)
+        })
+
+        test('squiggle clears once the trailing text is removed', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse") asfdsadf\nDONE')
+            await expectErrorSquiggle(page)
+
+            await setMonacoContent(page, 'ROUTE(1, "Yard Reverse")\nDONE')
+            await expectNoErrorSquiggle(page)
+        })
+
+        // Regression: a STEALTH/STEALTH_GLOBAL body is arbitrary C++ and may legitimately
+        // span multiple physical lines — the validator used to give up after one line and
+        // treat every following C++ line as its own EXRAIL statement, firing a false
+        // "allows only one command per line" squiggle plus "not a recognised EXRAIL command"
+        // on identifiers like `if`/`digitalWrite` in call position.
+        test('a multi-line STEALTH body stays squiggle-free', async ({ workspacePage: page }) => {
+            await openAutomationTab(page)
+            await setMonacoContent(page, [
+                'ROUTE(1, "Test")',
+                'STEALTH(if (x) {',
+                '  digitalWrite(30, HIGH);',
+                '  delay(500);',
+                '})',
+                'DONE',
+            ].join('\n'))
+            await expectNoErrorSquiggle(page)
+        })
+    })
+
+    // ── Strict aliases (on by default) flags pre-existing un-aliased objects too ─
+    // — not just new edits (see turnout-editor.ts's commitBuffer() etc. for the
+    // add/edit-time gate). Loading a folder of existing EXRAIL with no myAliases.h
+    // must show what needs an alias, not silently pass until someone tries to edit it.
+
+    test.describe('Strict aliases — existing objects with no alias', () => {
+        test('an existing turnout with no alias gets a warning squiggle on load, with no edits made', async ({ workspacePage: page }) => {
+            // workspacePage's seeded myTurnouts.h has no matching myAliases.h entries.
+            await openRawTurnouts(page)
+            await expectWarningSquiggle(page)
+            // It must not also read as a compile-blocking error.
+            await expect(page.locator('.squiggly-error')).toHaveCount(0)
+        })
+
+        test('adding a matching alias clears that turnout\'s warning squiggle', async ({ workspacePage: page }) => {
+            await page.getByText('Aliases', { exact: true }).first().click()
+            await expect(page.getByRole('button', { name: 'Raw' })).toBeVisible()
+            await page.getByRole('button', { name: 'Raw' }).click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, 'ALIAS(MAIN_JUNCTION, 200) // type: Turnout\nALIAS(YARD_ENTRY, 201) // type: Turnout')
+
+            await openRawTurnouts(page)
+            await expect(page.locator('.squiggly-warning')).toHaveCount(0)
+        })
+
+        test('an existing roster entry with no alias gets a warning squiggle on load', async ({ workspacePage: page }) => {
+            await openRawRoster(page)
+            await expectWarningSquiggle(page)
+        })
+
+        test('turning Strict aliases off clears the warning squiggle on an existing un-aliased turnout', async ({ workspacePage: page }) => {
+            await openRawTurnouts(page)
+            await expectWarningSquiggle(page)
+
+            await page.getByTestId('settings-button').click()
+            await page.getByTestId('settings-strict-aliases').uncheck({ force: true })
+            await page.getByRole('button', { name: 'Done' }).click()
+
+            await expect(page.locator('.squiggly-warning')).toHaveCount(0)
+        })
+
+        test('the sidebar file list shows an amber dot for myTurnouts.h/myRoster.h on load, with no file ever opened', async ({ workspacePage: page }) => {
+            // Deliberately never opens Turnouts/Roster — this dot is driven by
+            // ConfigEditorState directly (configEditorState.filesNeedingAlias), not by
+            // Monaco markers, specifically so it doesn't need a Raw tab ever mounted.
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toBeVisible()
+            await expect(page.getByTestId('alias-warning-dot-myRoster.h')).toBeVisible()
+        })
+
+        test('the sidebar dot for myTurnouts.h clears once every turnout has an alias', async ({ workspacePage: page }) => {
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toBeVisible()
+
+            await page.getByText('Aliases', { exact: true }).first().click()
+            await expect(page.getByRole('button', { name: 'Raw' })).toBeVisible()
+            await page.getByRole('button', { name: 'Raw' }).click()
+            await expect(page.locator('div.monaco-editor')).toBeVisible()
+            await setMonacoContent(page, 'ALIAS(MAIN_JUNCTION, 200) // type: Turnout\nALIAS(YARD_ENTRY, 201) // type: Turnout')
+
+            await expect(page.getByTestId('alias-warning-dot-myTurnouts.h')).toHaveCount(0)
         })
     })
 })

@@ -24,6 +24,25 @@ export class SensorsEditorCustomElement {
      */
     private readonly _idBeforeEdit = new Map<number, number>()
 
+    /**
+     * Snapshot of a row's full entry, captured on `focusin` of the row (before any
+     * field's `value.two-way` binding has a chance to mutate it live). Because id/pin/
+     * description bind two-way directly onto `state.sensors[idx]` (no edit-buffer, unlike
+     * turnout/roster editors), a blocked strict-aliases commit in updateSensor() must
+     * explicitly revert to this snapshot — otherwise the DOM edit the user just typed is
+     * already live in the model regardless of whether updateSensor() "applies" it.
+     */
+    private readonly _rowBeforeEdit = new Map<number, SensorEntry>()
+
+    /** `focusin.trigger` on the row container — see `_rowBeforeEdit`. Only the first focus
+     *  in an edit session captures a snapshot; later focuses within the same uncommitted
+     *  session must not overwrite it with an already-live-mutated value. */
+    captureRowBeforeEdit(idx: number): void {
+        if (this._rowBeforeEdit.has(idx)) return
+        const s = this.state.sensors[idx]
+        if (s) this._rowBeforeEdit.set(idx, { ...s })
+    }
+
     attached(): void {
         // Aurelia's if.bind caches and reuses this same component instance across
         // hide/show cycles — re-apply the current default-editor-view preference on
@@ -78,6 +97,25 @@ export class SensorsEditorCustomElement {
         // lookups elsewhere (alias id matching, EXRAIL reference validation)
         // don't silently fail to match a numeric target.
         const entry: SensorEntry = { ...s, id: Number(s.id), pin: Number(s.pin) }
+        // Strict aliases: block *any* field save on a sensor that currently has no
+        // alias, not just alias edits themselves — set one via the alias-picker
+        // first, which goes through makeAliasChangeHandler()/syncAliasForId() below
+        // and is unaffected by this gate. Checked by the *pre-edit* id when an id
+        // change is in flight — the alias-carry-forward below hasn't run yet, so
+        // the alias (if any) still lives on the old id at this point.
+        const aliasLookupId = this._idBeforeEdit.get(idx) ?? entry.id
+        if (this.state.strictAliases && !this.state.getPrimaryAliasNameForId(aliasLookupId, 'Sensor')) {
+            // The field(s) the user just edited are already live in state.sensors[idx]
+            // (two-way binding, not an edit-buffer) — revert to the pre-edit snapshot so
+            // the block actually takes visible effect, not just skips syncAll()/alias-carry.
+            const snapshot = this._rowBeforeEdit.get(idx)
+            if (snapshot) this.state.sensors = this.state.sensors.map((v, i) => i === idx ? { ...snapshot } : v)
+            this._rowBeforeEdit.delete(idx)
+            this._idBeforeEdit.delete(idx)
+            this.toastService.show({ title: 'Alias Required', content: 'This sensor requires an alias when Strict aliases is enabled.', cssClass: 'e-toast-warning' })
+            return
+        }
+        this._rowBeforeEdit.delete(idx)
         const previousId = this._idBeforeEdit.get(idx)
         this._idBeforeEdit.delete(idx)
         this.state.sensors = this.state.sensors.map((v, i) => i === idx ? entry : v)

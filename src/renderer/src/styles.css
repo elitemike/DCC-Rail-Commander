@@ -51,6 +51,15 @@ button:focus-visible {
     outline: none;
 }
 
+/* ── Classic (non-native-<dialog>) dialog backdrop ────────────────────── */
+/* DialogDomRendererClassic (used only by DeviceWizard — see home.ts/
+   workspace.ts) renders its overlay as a plain <au-dialog-overlay> element
+   with no default styling, unlike a native <dialog>'s browser-drawn
+   ::backdrop. Dim it to match. */
+au-dialog-overlay {
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
 /* ── Custom element host sizing ───────────────────────────────────────── */
 /* Aurelia renders custom elements as inline by default; make them fill   */
 /* their flex parent so height cascades correctly down to Monaco.          */
@@ -67,7 +76,9 @@ monaco-editor,
 sensors-editor,
 signals-editor,
 routes-editor,
+automations-editor,
 sequences-editor,
+event-handlers-editor,
 aliases-editor,
 exrail-block-canvas,
 throttle-panel {

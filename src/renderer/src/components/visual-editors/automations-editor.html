@@ -1,0 +1,110 @@
+<template>
+    <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+        <div class="flex items-center gap-0 border-b border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-gray-900/60 shrink-0 px-2">
+            <button click.trigger="setTab('visual')"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'visual' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
+                Visual
+            </button>
+            <button click.trigger="setTab('raw')" data-testid="editor-tab-raw"
+                class="px-4 py-2.5 text-sm font-medium border-b-2 transition-all focus:outline-none"
+                class.bind="activeTab === 'raw' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
+                Raw
+            </button>
+            <span class="ml-auto flex items-baseline gap-1.5 px-3 py-2">
+                <span class="text-xs text-gray-500 dark:text-gray-400">${state.automations.length} entries</span>
+                <span class="text-xs text-gray-600 font-mono">myAutomations.h</span>
+            </span>
+        </div>
+
+        <!-- ── Visual tab ─────────────────────────────────────────────────── -->
+        <div class="${activeTab === 'visual' ? '' : 'hidden'}" style="flex:1;min-height:0;overflow:hidden;">
+            <div id="automations-splitter" style="height:100%;width:100%;">
+
+                <!-- Sidebar -->
+                <div class="flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+                    <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
+                        <span
+                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Automations</span>
+                        <button click.trigger="addAutomation()"
+                            class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
+                            title="Add new automation">+</button>
+                    </div>
+
+                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Automations">
+                        <a repeat.for="a of state.automations" click.trigger="selectEntry(a)"
+                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
+                            class.bind="selectedId === a.id
+                            ? 'bg-blue-900/60 text-white font-medium'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
+                            <span class="flex-1 min-w-0 truncate" title.bind="getDisplayName(a)">${getDisplayName(a)}</span>
+                            <span if.bind="state.automationIdsNeedingAlias.has(a.id)" data-testid="alias-warning-dot"
+                                title="No alias set (Strict aliases is enabled)"
+                                class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                            <button
+                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                click.trigger="removeAutomation($index, $event)" title="Remove">×</button>
+                        </a>
+                    </nav>
+
+                    <div if.bind="state.automations.length === 0" class="flex-1 flex items-center justify-center p-4">
+                        <p class="text-gray-600 text-xs text-center">No automations.<br>Click + to add one.</p>
+                    </div>
+                </div>
+
+                <!-- Detail panel -->
+                <div class="flex flex-col h-full overflow-hidden">
+                    <div if.bind="selectedAutomation" class="flex flex-col h-full min-h-0">
+                        <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
+                            <span class="text-xs font-mono text-gray-500 dark:text-gray-400 shrink-0">Automation #${selectedAutomation.id}</span>
+                            <input type="text" value.two-way="selectedAutomation.description"
+                                focus.trigger="captureDescriptionBeforeEdit()"
+                                blur.trigger="updateAutomation(state.automations.indexOf(selectedAutomation), selectedAutomation)"
+                                placeholder="Description" aria-label="Automation description"
+                                class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
+                            <button click.trigger="setRowTab(selectedAutomation, 'blocks')" disabled.bind="!canUseBlocks(selectedAutomation)"
+                                title.bind="canUseBlocks(selectedAutomation) ? '' : 'This body can\'t be edited visually yet — switch to Raw.'"
+                                data-testid="row-tab-blocks"
+                                class="px-2.5 py-1 rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                class.bind="selectedTab === 'blocks' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                                Blocks
+                            </button>
+                            <button click.trigger="setRowTab(selectedAutomation, 'text')"
+                                data-testid="row-tab-raw"
+                                class="px-2.5 py-1 rounded text-xs font-medium"
+                                class.bind="selectedTab === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
+                                Raw
+                            </button>
+                        </div>
+
+                        <div if.bind="selectedTab === 'blocks'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            <exrail-block-canvas component.ref="blockCanvas" kind="AUTOMATION" initial-body.bind="selectedAutomation.body" defined.bind="defined"
+                                header-id.bind="selectedAutomation.id" header-alias.bind="selectedAutomationAlias" header-description.bind="selectedAutomation.description"
+                                on-body-change.bind="makeBodyChangeHandler(selectedAutomation.id)"
+                                on-id-change.bind="makeIdChangeHandler(selectedAutomation.id)"
+                                on-alias-change.bind="makeAliasChangeHandler(selectedAutomation.id)"></exrail-block-canvas>
+                        </div>
+                        <monaco-editor else component.ref="rowRawEditor" value.one-time="rowRawSnapshot"
+                            language="cpp" filename.bind="rowRawFilename" data-testid="row-body-monaco"
+                            on-text-change.bind="onRowRawChange"></monaco-editor>
+                    </div>
+
+                    <div if.bind="!selectedAutomation" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                        <p if.bind="state.automations.length > 0">Select an automation to edit its body.</p>
+                        <p if.bind="state.automations.length === 0">No automations. Click + to add one.</p>
+                    </div>
+                </div>
+            </div><!-- end #automations-splitter -->
+        </div><!-- end visual tab -->
+
+        <!-- ── Raw tab ────────────────────────────────────────────────────── -->
+        <div class="${activeTab === 'raw' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : 'hidden'}">
+            <monaco-editor component.ref="rawEditor" value.to-view="rawSnapshot" language="cpp" filename="myAutomations.h"
+                data-testid="file-body-monaco" on-text-change.bind="onRawChange"></monaco-editor>
+        </div>
+
+    </div>
+</template>

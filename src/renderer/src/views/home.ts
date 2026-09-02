@@ -1,7 +1,8 @@
 import { resolve } from 'aurelia'
 import { Router } from '@aurelia/router'
-import { IDialogService } from '@aurelia/dialog'
+import { IDialogService, DialogDomRendererClassic } from '@aurelia/dialog'
 import { InstallerState } from '../models/installer-state'
+import { ConfigEditorState } from '../models/config-editor-state'
 import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
 import { GitService } from '../services/git.service'
@@ -16,6 +17,7 @@ import type { SavedConfiguration } from '../models/saved-configuration'
 import type { DetectedBoardInfo } from '../../../types/ipc'
 import { buildScratchPath } from '../utils/board-key'
 import { isProductUserFile, isExampleConfigFile, collectExampleConfigFiles } from '../utils/product-source-files'
+import { importExistingProject as runProjectImport, buildHalDevicesFile } from '../models/project-importer'
 
 /** File extensions we care about when scanning a loaded folder. */
 const HEADER_EXTENSIONS = ['.h']
@@ -35,6 +37,7 @@ export class Home {
     private readonly router = resolve(Router)
     private readonly dialogService = resolve(IDialogService)
     readonly state = resolve(InstallerState)
+    private readonly configEditorState = resolve(ConfigEditorState)
     private readonly preferences = resolve(PreferencesService)
     private readonly files = resolve(FileService)
     private readonly git = resolve(GitService)
@@ -57,7 +60,17 @@ export class Home {
     async openNewDevice(): Promise<void> {
         this.state.reset()
         const result = await this.dialogService
-            .open({ component: () => DeviceWizard })
+            .open({
+                component: () => DeviceWizard,
+                // DeviceWizard mounts <track-manager-form>, whose Syncfusion
+                // dropdown popups portal to document.body — that renders
+                // BEHIND the app-wide native-<dialog> renderer's top-layer
+                // (showModal(), unbeatable by z-index), making them
+                // unclickable. The classic div-based overlay doesn't use the
+                // top layer, so normal stacking lets the popups show through.
+                renderer: DialogDomRendererClassic,
+                options: { lock: true, startingZIndex: 1000 },
+            })
             .whenClosed((r) => r)
         if (typeof result === 'object' && result !== null && 'status' in result && (result as any).status === 'ok') {
             await this.router.load('workspace')
@@ -304,6 +317,228 @@ export class Home {
         }
 
         await this.router.load('workspace')
+    }
+
+    /**
+     * Reads an existing, hand-scattered EX-RAIL project (arbitrary filenames, content mixed
+     * across files) strictly read-only, aggregates it via `importExistingProject()` (see
+     * project-importer.ts's own doc comment for the three problems that solves), and writes the
+     * result into a brand-new folder the user picks — the original folder is never modified.
+     * Structurally parallel to `loadFromFolder()` (reuses the same `resolveSketchPath()` for
+     * device/product/scratch-path resolution and the same `SavedConfiguration` shape), but reads
+     * from one folder and writes into a different, empty one instead of editing in place.
+     */
+    async importExistingProject(): Promise<void> {
+        const sourceFolder = await this.files.selectDirectory()
+        if (!sourceFolder) return
+
+        const entries = await this.files.listDir(sourceFolder)
+        const hFiles = entries.filter(e => HEADER_EXTENSIONS.some(ext => e.endsWith(ext)))
+        if (hFiles.length === 0) {
+            this.toastService.show({
+                title: 'Nothing to Import',
+                content: 'The selected folder has no .h config files.',
+                cssClass: 'e-toast-danger',
+            })
+            return
+        }
+
+        const sourceFiles = await Promise.all(
+            hFiles.map(async (name) => ({ name, content: await this.files.readFile(`${sourceFolder}/${name}`) })),
+        )
+
+        let result: ReturnType<typeof runProjectImport>
+        try {
+            result = runProjectImport(sourceFiles)
+        } catch (err) {
+            this.toastService.show({
+                title: 'Import Failed',
+                content: err instanceof Error ? err.message : 'Could not analyze the selected folder.',
+                cssClass: 'e-toast-danger',
+            })
+            return
+        }
+
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../components/dialogs/import-summary-dialog').then(m => m.ImportSummaryDialog).catch(() => null),
+            model: { result, outputFileCount: result.configFiles.length },
+        })
+        const summaryOutcome = await dialog.closed
+        if (summaryOutcome.status !== 'ok') return // user reviewed and cancelled
+
+        // The summary dialog's own "Enforce aliases on this project" checkbox — see its own doc
+        // comment on why it defaults off. Stored on this project's own SavedConfiguration below
+        // (SavedConfiguration.strictAliases), NOT the app-wide preference — this project makes its
+        // own choice from here on, without changing the default new/other projects use.
+        const strictAliasesChoice = (summaryOutcome as any).value as boolean
+        this.configEditorState.strictAliases = strictAliasesChoice
+
+        // HAL accessory devices parsed from a bare, untagged `HAL(...)` line (the normal shape
+        // for a hand-written project) carry only the generic catalog board name — offer to label
+        // them now, before the import is finalized, since there's no other point where the
+        // original wiring context ("which MCP23017 is this") is still available. Optional: Skip
+        // leaves the generic names in place.
+        const defaultLabeledHalDevices = result.halDevices.filter(d => d.isDefaultLabel)
+        if (defaultLabeledHalDevices.length > 0) {
+            const { dialog: halLabelDialog } = await this.dialogService.open({
+                component: () =>
+                    import('../components/dialogs/hal-device-label-dialog').then(m => m.HalDeviceLabelDialog).catch(() => null),
+                model: { devices: defaultLabeledHalDevices },
+            })
+            const halLabelOutcome = await halLabelDialog.closed
+            if (halLabelOutcome.status === 'ok') {
+                const labels = (halLabelOutcome as any).value as Map<string, string>
+                if (labels.size > 0) {
+                    const updatedHalDevices = result.halDevices.map(d => {
+                        const custom = labels.get(d.instanceId)
+                        return custom ? { ...d, label: custom, isDefaultLabel: false } : d
+                    })
+                    const halFile = buildHalDevicesFile(updatedHalDevices)
+                    const idx = result.configFiles.findIndex(f => f.name === 'myAutomation.h')
+                    if (idx >= 0) result.configFiles[idx] = halFile
+                    else result.configFiles.push(halFile)
+                }
+            }
+        }
+
+        const destFolder = await this.files.selectDirectory()
+        if (!destFolder) return
+
+        const destEntries = await this.files.listDir(destFolder).catch(() => [] as string[])
+        if (destEntries.length > 0) {
+            const proceed = await this._confirm(
+                'Folder Not Empty',
+                `"${destFolder}" already has files in it. Continuing will write the imported project's files into it, possibly overwriting files with the same name. Continue?`,
+            )
+            if (!proceed) return
+        }
+
+        // ── Device resolution — same sources loadFromFolder() checks, minus the
+        // "reconcile a previously-saved port" step: a hand-rolled project's config.h
+        // essentially never already carries this app's own device header. ──
+        const configHFile = sourceFiles.find(f => f.name === 'config.h' || f.name === 'myConfig.h')
+        let device: DetectedBoardInfo | null = configHFile ? parseDeviceFromHeader(configHFile.content) : null
+
+        if (!device && configHFile) {
+            const motorMatch = /^#define\s+MOTOR_SHIELD_TYPE\s+(\S+)/m.exec(configHFile.content)
+            const motorDriver = motorMatch?.[1]?.toUpperCase() ?? ''
+            if (motorDriver.startsWith('EXCSB1')) {
+                const impliedFqbn = 'esp32:esp32:esp32'
+                try {
+                    const liveBoards = await this.pio.listBoards()
+                    const match = liveBoards.find(b => b.fqbn === impliedFqbn || b.fqbn.startsWith(impliedFqbn + ':'))
+                    device = match ?? { name: 'EX-CSB1', fqbn: impliedFqbn, port: '', protocol: 'serial' }
+                } catch {
+                    device = { name: 'EX-CSB1', fqbn: impliedFqbn, port: '', protocol: 'serial' }
+                }
+            }
+        }
+
+        if (!device) {
+            const pickerOutcome = await this.dialogService
+                .open({ component: () => DevicePickerDialog })
+                .whenClosed((r) => r)
+            if ((pickerOutcome as any).status === 'cancel') return
+            device = (pickerOutcome as any).value as DetectedBoardInfo | null
+        }
+
+        const selectedDevice: DetectedBoardInfo = device ?? { name: 'Unknown', port: '', fqbn: '', protocol: 'serial' }
+
+        if (!selectedDevice.port && selectedDevice.fqbn) {
+            const portOutcome = await this.dialogService
+                .open({ component: () => DevicePickerDialog, model: { initialFqbn: selectedDevice.fqbn, portOnly: true } })
+                .whenClosed((r) => r)
+            if ((portOutcome as any).status === 'cancel') return
+            const picked = (portOutcome as any).value as DetectedBoardInfo | null
+            if (picked?.port) {
+                selectedDevice.port = picked.port
+                if (!selectedDevice.fqbn || picked.fqbn.startsWith(selectedDevice.fqbn)) selectedDevice.fqbn = picked.fqbn
+            }
+        }
+
+        const configFiles = result.configFiles.map(f => ({ ...f }))
+        const finalConfigH = configFiles.find(f => f.name === 'config.h')
+        if (finalConfigH) finalConfigH.content = injectDeviceHeader(finalConfigH.content, selectedDevice)
+
+        // Same mechanism as loadFromFolder's "no .ino, product match" branch: destFolder becomes
+        // sourceFolder (the user's real, browsable project home — never touched again except on
+        // Save), while an internal scratch dir is what PlatformIO actually compiles from.
+        const { scratchPath, repoPath, productKey, sourceFolder: resolvedSourceFolder } =
+            await this.resolveSketchPath(destFolder, configFiles.map(f => f.name), [], selectedDevice)
+
+        await this.files.mkdir(destFolder).catch(() => { /* already exists */ })
+        for (const f of configFiles) {
+            await this.files.writeFile(`${destFolder}/${f.name}`, f.content)
+            if (scratchPath !== destFolder) {
+                await this.files.writeFile(`${scratchPath}/${f.name}`, f.content)
+            }
+        }
+
+        const folderName = destFolder.split(/[\\/]/).filter(Boolean).pop() ?? destFolder
+
+        const config: SavedConfiguration = {
+            id: `import-${Date.now()}`,
+            name: folderName,
+            deviceName: selectedDevice.name,
+            devicePort: selectedDevice.port,
+            deviceFqbn: selectedDevice.fqbn,
+            deviceSerialNumber: selectedDevice.serialNumber,
+            product: productKey ?? '',
+            productName: productKey ? (productDetails[productKey]?.productName ?? 'Imported Project') : 'Imported Project',
+            version: '',
+            repoPath: repoPath ?? destFolder,
+            scratchPath,
+            configFiles,
+            lastModified: new Date().toISOString(),
+            sourceFolder: resolvedSourceFolder ?? undefined,
+            strictAliases: strictAliasesChoice,
+        }
+
+        const existing = Array.isArray(this.state.savedConfigurations) ? this.state.savedConfigurations : []
+        this.state.savedConfigurations = [...existing, config]
+        await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
+
+        this.state.selectedDevice = selectedDevice
+        this.state.selectedProduct = config.product || null
+        this.state.selectedVersion = config.version || null
+        this.state.repoPath = config.repoPath
+        this.state.scratchPath = scratchPath
+        this.state.sourceFolder = resolvedSourceFolder
+        this.state.configFiles = config.configFiles.map(f => ({ ...f }))
+        this.state.activeConfigId = config.id
+        this.state.pendingMigrationOnLoad = false
+
+        // Force a full resync now, not just loadFromInstallerState() — myAutomation.h's
+        // #include list (computed from the now-populated roster/turnouts/etc collections) must
+        // be correct before the workspace first renders it, not only after the user's first edit.
+        this.configEditorState.loadFromInstallerState()
+        this.configEditorState.syncAll()
+
+        const reviewCount = result.aliasReview.length
+        this.toastService.show({
+            title: 'Project Imported',
+            content: reviewCount > 0
+                ? `Imported into "${folderName}". ${reviewCount} alias${reviewCount === 1 ? '' : 'es'} need manual review — see myAliases.h.`
+                : `Imported into "${folderName}".`,
+            cssClass: reviewCount > 0 ? 'e-toast-warning' : 'e-toast-success',
+        })
+
+        await this.router.load('workspace')
+    }
+
+    private async _confirm(title: string, message: string): Promise<boolean> {
+        try {
+            const { dialog } = await this.dialogService.open({
+                component: () =>
+                    import('../components/dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                model: { title, message },
+            })
+            const outcome = await dialog.closed
+            return outcome.status === 'ok'
+        } catch {
+            return window.confirm(`${title}\n\n${message}`)
+        }
     }
 
     /**

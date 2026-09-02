@@ -53,6 +53,7 @@ export function buildWorkspaceFromGraph(workspace: Blockly.Workspace, graph: Par
             const value = info.paramValues[p.name]
             if (value !== undefined) block.setFieldValue(fieldStringFor(value), p.name)
         }
+        if (info.comment !== undefined) block.setCommentText(info.comment)
         // A rendered (browser) workspace produces BlockSvg instances, which need
         // initSvg()+render() instead of the headless initModel() — both classes
         // exist under the Node build too (just unused), so instanceof works in
@@ -150,6 +151,21 @@ export function buildGraphFromWorkspace(workspace: Blockly.Workspace, registry: 
         return values
     }
 
+    /** `Block.getCommentText()` returns `''` (not `null`) for a block whose comment icon exists
+     *  but was left empty — normalized to `undefined` so an empty bubble round-trips the same as
+     *  no bubble at all, matching parseBody()'s own `info.comment === undefined` convention.
+     *  Deliberately doesn't strip parseBody's trailing-`\n` "leading-only" marker (see
+     *  commentLines() in exrail-block-compiler.ts) before/after the bubble: a leading-only
+     *  comment's bubble shows one trailing blank line, and leaving that line in place (vs.
+     *  deleting it) is what tells compileBody whether to keep re-emitting the comment above the
+     *  statement or fold it onto the statement's own line. Stripping it here for a tidier bubble
+     *  would silently flip every leading-only comment to trailing the moment a user opens Blocks
+     *  mode and saves — the exact silent-rewrite this whole comment-handling path exists to avoid. */
+    function readComment(block: Blockly.Block): string | undefined {
+        const text = block.getCommentText()
+        return text ? text : undefined
+    }
+
     function walkChain(block: Blockly.Block | null, sourceId: string | undefined, portKey: 'next' | 'then' | 'else'): void {
         let current = block
         let prevId = sourceId
@@ -157,7 +173,7 @@ export function buildGraphFromWorkspace(workspace: Blockly.Workspace, registry: 
             const def = byId.get(current.type)
             if (!def) break
             const id = nextId(current.id)
-            const info: CanvasNodeInfo = { blockTypeId: def.id, paramValues: readParamValues(current, def) }
+            const info: CanvasNodeInfo = { blockTypeId: def.id, paramValues: readParamValues(current, def), comment: readComment(current) }
             nodes.push({ id, info })
 
             if (prevId !== undefined) {
@@ -187,7 +203,12 @@ export function buildGraphFromWorkspace(workspace: Blockly.Workspace, registry: 
 
     const hatDef = byId.get(hatBlock.type)
     const hatId = nextId(hatBlock.id)
-    nodes.push({ id: hatId, info: { blockTypeId: hatDef?.id ?? hatBlock.type, paramValues: {} } })
+    // A param-flavored hat (e.g. ONSENSOR — including a zero-arg one like ONRAILSYNCON) has real
+    // fields on its own block face — read them the same way any stack block's params are read. An
+    // id/alias-flavored hat (ROUTE/SEQUENCE) has no def.params at all, so this is `{}` for those
+    // exactly as before.
+    const hatParamValues = hatDef?.paramFlavoredHat ? readParamValues(hatBlock, hatDef) : {}
+    nodes.push({ id: hatId, info: { blockTypeId: hatDef?.id ?? hatBlock.type, paramValues: hatParamValues } })
     walkChain(hatBlock.getNextBlock(), hatId, 'next')
 
     return { nodes, connectors, hatNodeId: hatId }

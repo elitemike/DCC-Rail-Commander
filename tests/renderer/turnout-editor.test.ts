@@ -369,3 +369,72 @@ describe('TurnoutEditorCustomElement alias integration', () => {
         expect(editor.errorMessage).toContain('Yard Entry')
     })
 })
+
+describe('TurnoutEditorCustomElement strict aliases', () => {
+    const TURNOUT = {
+        type: 'SERVO' as const,
+        id: 200,
+        pin: 25,
+        activeAngle: 410,
+        inactiveAngle: 205,
+        profile: 'Slow' as const,
+        description: 'Main Line Junction',
+        comment: '',
+        defaultState: 'CLOSED' as const,
+    }
+
+    it('blocks the commit — even of an unrelated field, not just the alias — when strictAliases is on and no alias is set', () => {
+        const updateTurnoutEntry = vi.fn()
+        const syncAliasForId = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [TURNOUT], strictAliases: true, updateTurnoutEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            // Only the description changed — the alias field was never touched.
+            editBuffer: { ...TURNOUT, description: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).not.toHaveBeenCalled()
+        expect(syncAliasForId).not.toHaveBeenCalled()
+        expect(editor.errorMessage).toContain('alias')
+    })
+
+    it('allows the commit when strictAliases is on and an alias is present', () => {
+        const updateTurnoutEntry = vi.fn()
+        const syncAliasForId = vi.fn().mockReturnValue({ ok: true })
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [TURNOUT], strictAliases: true, updateTurnoutEntry, syncAliasForId, getPrimaryAliasNameForId: vi.fn().mockReturnValue('YARD_TURNOUT') },
+            editBufferIndex: 0,
+            editBuffer: { ...TURNOUT, description: 'Renamed' },
+            aliasInput: 'YARD_TURNOUT',
+            errorMessage: '',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).toHaveBeenCalledWith(0, { ...TURNOUT, description: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
+
+    it('allows an aliasless commit when strictAliases is off', () => {
+        const updateTurnoutEntry = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [TURNOUT], strictAliases: false, updateTurnoutEntry, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...TURNOUT, description: 'Renamed' },
+            aliasInput: '',
+            errorMessage: '',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).toHaveBeenCalledWith(0, { ...TURNOUT, description: 'Renamed' })
+        expect(editor.errorMessage).toBe('')
+    })
+})

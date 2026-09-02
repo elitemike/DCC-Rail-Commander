@@ -13,7 +13,7 @@
 
             <ul if.bind="thrownTurnouts.length > 0" class="flex flex-col gap-1">
                 <li repeat.for="t of thrownTurnouts" class="text-sm text-gray-700 dark:text-gray-300">
-                    <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#${t.id}</span>
+                    <span class="font-mono text-xs text-gray-500 dark:text-gray-400">${turnoutLabel(t)}</span>
                     <span if.bind="t.description">${t.description}</span>
                 </li>
             </ul>

@@ -2,7 +2,7 @@ import { queueTask, resolve } from 'aurelia'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SequenceEntry } from '../../utils/myAutomationParser'
-import { parseBody } from './exrail-block-compiler'
+import { definedTracksFor, parseBody } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import type { DefinedObjects } from './exrail-block-compiler'
 import { ToastService } from '../../services/toast.service'
@@ -41,6 +41,7 @@ export class SequencesEditorCustomElement {
             routes: this.state.routes,
             sequences: this.state.sequences,
             aliases: this.state.aliases,
+            tracks: definedTracksFor(this.state.hasStackedMotorShield),
         }
     }
 
@@ -56,7 +57,7 @@ export class SequencesEditorCustomElement {
     }
 
     canUseBlocks(s: SequenceEntry): boolean {
-        return parseBody(s.body, 'sequence', BLOCK_REGISTRY).ok
+        return parseBody(s.body, 'SEQUENCE', BLOCK_REGISTRY).ok
     }
 
     private static readonly SEQ_HEADER_RE = /^SEQUENCE\s*\(\s*\d+\s*\)\s*(?:\/\/\s*(.*))?$/
@@ -258,13 +259,46 @@ export class SequencesEditorCustomElement {
         }
     }
 
+    /** `focus.trigger` on the description input — see updateSequence()'s strict-aliases block below.
+     *  Description is the only field.two-way-bound directly onto the live `state.sequences` entry
+     *  (id/body come through explicit callback params instead), so it's the only one that needs
+     *  an explicit pre-edit snapshot to revert to when a commit is blocked. */
+    private _descriptionBeforeEdit: string | undefined = undefined
+    captureDescriptionBeforeEdit(): void {
+        this._descriptionBeforeEdit = this.selectedSequence?.description
+    }
+
     updateSequence(idx: number, s: SequenceEntry) {
         // `value.two-way` on `<input type="text">` (description) round-trips through the DOM's
         // `.value`, always a string, but `id` comes from makeIdChangeHandler()'s already-numeric
         // callback param — Number() here is a no-op for that path and just guards the description-
         // only path, where `s` is a spread of the existing (already-numeric) entry.
         const entry: SequenceEntry = { ...s, id: Number(s.id) }
-        const previousId = this.state.sequences[idx]?.id ?? null
+        const existing = this.state.sequences[idx]
+        const previousId = existing?.id ?? null
+        // A block-canvas field unrelated to this sequence's own data (its ALIAS field, most
+        // notably) can trigger an incidental re-commit of the *unchanged* body/description/id
+        // as a side effect of Blockly's own async field-commit ordering — not a real edit. Only
+        // gate genuine changes, or an incidental resync racing an in-flight alias assignment
+        // would itself get blocked and toast, even though nothing the user actually touched
+        // here was left unsaved.
+        const isRealChange = !existing || existing.id !== entry.id || existing.description !== entry.description || existing.body !== entry.body
+        // Strict aliases: block *any* real field save (description, id, or body — including a
+        // Blocks-tab edit routed here via makeBodyChangeHandler()) on a sequence that currently
+        // has no alias. Checked by the pre-edit id when an id change is in flight, same reasoning
+        // as sensors-editor.ts's updateSensor().
+        if (isRealChange && this.state.strictAliases && !this.state.getPrimaryAliasNameForId(previousId ?? entry.id, 'Sequence')) {
+            // Description is already live in state.sequences[idx] (two-way binding, not an
+            // edit-buffer) — revert it so the block actually takes visible effect.
+            if (this._descriptionBeforeEdit !== undefined) {
+                const revertTo = this._descriptionBeforeEdit
+                this.state.sequences = this.state.sequences.map((v, i) => i === idx ? { ...v, description: revertTo } : v)
+            }
+            this._descriptionBeforeEdit = undefined
+            this.toastService.show({ title: 'Alias Required', content: 'This sequence requires an alias when Strict aliases is enabled.', cssClass: 'e-toast-warning' })
+            return
+        }
+        this._descriptionBeforeEdit = undefined
         this.state.sequences = this.state.sequences.map((v, i) => i === idx ? entry : v)
         if (previousId !== null && previousId !== entry.id) {
             this.selectedId = entry.id

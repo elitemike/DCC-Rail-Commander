@@ -1,5 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import * as Blockly from 'blockly/core'
+
+// exrail-blockly-blocks.ts (imported below) imports the real monaco-editor package (for
+// ExrailCodeField's Monaco popup) — that package touches `window` at module scope, which
+// crashes under vitest's node environment. Not exercised by these tests, but the import itself
+// still runs at module load — same reason dccex-validators.test.ts mocks it.
+vi.mock('monaco-editor', () => ({
+    editor: { create: vi.fn() },
+}))
+
 import { parseBody, compileBody } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 import { BLOCK_REGISTRY } from '../../src/renderer/src/components/visual-editors/exrail-block-registry'
 import { registerExrailBlocks, setWorkspaceDefined } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
@@ -21,7 +30,7 @@ const DEFINED: DefinedObjects = {
     signals: [],
 }
 
-function roundTrip(body: string, kind: 'route' | 'sequence' = 'route'): string {
+function roundTrip(body: string, kind: string = 'ROUTE'): string {
     const parsed = parseBody(body, kind, BLOCK_REGISTRY)
     if (!parsed.ok) throw new Error(`expected parse to succeed, got: ${parsed.reason}`)
 
@@ -77,6 +86,26 @@ describe('buildWorkspaceFromGraph / buildGraphFromWorkspace round-trip', () => {
         expect(roundTrip(body)).toBe(body)
     })
 
+    it('round-trips a trailing comment on a statement', () => {
+        const body = 'THROW(200) // note'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a leading standalone comment attached to the next statement', () => {
+        const body = '// setting up\nTHROW(200)'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a multi-line comment (leading lines plus a trailing line)', () => {
+        const body = '// line one\n// line two\nTHROW(200) // line three'
+        expect(roundTrip(body)).toBe(body)
+    })
+
+    it('round-trips a comment on a statement nested inside IF/ENDIF', () => {
+        const body = 'IF(1)\n  THROW(200) // note\nENDIF'
+        expect(roundTrip(body)).toBe(body)
+    })
+
     it('round-trips an empty body', () => {
         expect(roundTrip('')).toBe('')
     })
@@ -88,6 +117,6 @@ describe('buildWorkspaceFromGraph / buildGraphFromWorkspace round-trip', () => {
 
     it('round-trips a sequence body (SEQUENCE hat, not ROUTE)', () => {
         const body = 'THROW(200)\nDELAY(250)'
-        expect(roundTrip(body, 'sequence')).toBe(body)
+        expect(roundTrip(body, 'SEQUENCE')).toBe(body)
     })
 })

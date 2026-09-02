@@ -20,6 +20,11 @@ export class TurnoutDefaultsSummaryCustomElement {
         return this.editorState.turnouts.filter(t => t.defaultState === 'THROWN')
     }
 
+    turnoutLabel(t: Turnout): string {
+        const alias = this.editorState.getPrimaryAliasNameForId(t.id, 'Turnout')
+        return alias || `#${t.id}`
+    }
+
     goToTurnouts(): void {
         try {
             window.dispatchEvent(new CustomEvent('exinst:navigate-file', { detail: { filename: 'myTurnouts.h' } }))

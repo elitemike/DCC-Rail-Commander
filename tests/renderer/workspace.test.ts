@@ -1,4 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
+
+// Workspace pulls in dccex-validators.ts (strict-compile's error-marker check), which imports
+// the real monaco-editor package — that package touches `window` at module scope and crashes
+// under vitest's node environment, same reason exrail-block-registry.test.ts and
+// dccex-validators.test.ts mock it.
+vi.mock('monaco-editor', () => ({
+    MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+    editor: {
+        setModelMarkers: vi.fn(),
+        getModels: () => [],
+        getModelMarkers: () => [],
+        onDidCreateModel: vi.fn(),
+        onDidChangeMarkers: vi.fn(() => ({ dispose: vi.fn() })),
+    },
+}))
+
 import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { DetectedBoardInfo, SerialDeviceInfo } from '../../src/types/ipc'
 
@@ -28,6 +44,10 @@ function makeWorkspace(opts: {
     selectedVersion?: string | null
     tags?: string[]
     useLatestProdVersion?: boolean
+    strictCompile?: boolean
+    hasBlockingErrors?: boolean
+    filesWithErrors?: Set<string>
+    configFiles?: { name: string; content: string }[]
 } = {}) {
     const workspace = Object.create(Workspace.prototype) as Workspace
 
@@ -44,7 +64,7 @@ function makeWorkspace(opts: {
     Object.assign(workspace, {
         state: {
             selectedDevice: opts.device === undefined ? { ...DEVICE } : opts.device,
-            configFiles: [{ name: 'config.h', content: '' }],
+            configFiles: opts.configFiles ?? [{ name: 'config.h', content: '' }],
             scratchPath: '/scratch',
             sourceFolder: null,
             savedConfigurations: [],
@@ -52,7 +72,7 @@ function makeWorkspace(opts: {
             repoPath: opts.repoPath === undefined ? '/repo' : opts.repoPath,
             selectedVersion: opts.selectedVersion ?? null,
         },
-        configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn() },
+        configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn(), strictAliases: true },
         toastService: { show: toastShowFn },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
         files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
@@ -78,6 +98,9 @@ function makeWorkspace(opts: {
         portConnected: opts.portConnected ?? false,
         autoConnectMonitor: opts.autoConnectMonitor ?? true,
         showMonitorOnConnect: opts.showMonitorOnConnect ?? true,
+        strictCompile: opts.strictCompile ?? false,
+        hasBlockingErrors: opts.hasBlockingErrors ?? false,
+        filesWithErrors: opts.filesWithErrors ?? new Set<string>(),
         activeSection: 'config',
         activeBottomTab: 'output',
         isCompiling: false,
@@ -474,6 +497,101 @@ describe('Workspace.setUseLatestProdVersion', () => {
 
         expect(workspace.useLatestProdVersion).toBe(false)
         expect(preferencesSetFn).toHaveBeenCalledWith('useLatestProdVersion', false)
+    })
+})
+
+describe('Workspace.setStrictCompile', () => {
+    it('updates the field and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.strictCompile = false
+
+        workspace.setStrictCompile(true)
+
+        expect(workspace.strictCompile).toBe(true)
+        expect(preferencesSetFn).toHaveBeenCalledWith('strictCompile', true)
+    })
+})
+
+describe('Workspace.setStrictAliases', () => {
+    it('updates the field, mirrors it onto configEditorState, and persists it to preferences', () => {
+        const { workspace, preferencesSetFn } = makeWorkspace()
+        workspace.strictAliases = true
+
+        workspace.setStrictAliases(false)
+
+        expect(workspace.strictAliases).toBe(false)
+        expect(workspace.configEditorState.strictAliases).toBe(false)
+        expect(preferencesSetFn).toHaveBeenCalledWith('strictAliases', false)
+    })
+})
+
+// ── canCompile — device gating plus, when strictCompile is on, the error-marker gate ──
+
+describe('Workspace.canCompile', () => {
+    it('is true for a fully-selected device when strictCompile is off, even with blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: false, hasBlockingErrors: true })
+        expect(workspace.canCompile).toBe(true)
+    })
+
+    it('is true when strictCompile is on but there are no blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: true, hasBlockingErrors: false })
+        expect(workspace.canCompile).toBe(true)
+    })
+
+    it('is false when strictCompile is on and there are blocking errors', () => {
+        const { workspace } = makeWorkspace({ strictCompile: true, hasBlockingErrors: true })
+        expect(workspace.canCompile).toBe(false)
+    })
+
+    it('stays false for an incomplete device selection regardless of strictCompile', () => {
+        const { workspace } = makeWorkspace({ device: null, strictCompile: false, hasBlockingErrors: false })
+        expect(workspace.canCompile).toBe(false)
+    })
+})
+
+// ── fileHasError() and the Device Settings row *HasError getters — the file-list error dot ──
+
+describe('Workspace.fileHasError', () => {
+    it('is false for a filename not present in filesWithErrors', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(workspace.fileHasError('mySensors.h')).toBe(false)
+    })
+
+    it('is true for a filename present in filesWithErrors', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(workspace.fileHasError('myRoster.h')).toBe(true)
+    })
+})
+
+describe('Workspace Device Settings row *HasError getters', () => {
+    it('generalWifiHasError is true when either config.h or myConfig.h has an error', () => {
+        const { workspace: a } = makeWorkspace({ filesWithErrors: new Set(['config.h']) })
+        expect(a.generalWifiHasError).toBe(true)
+
+        const { workspace: b } = makeWorkspace({ filesWithErrors: new Set(['myConfig.h']) })
+        expect(b.generalWifiHasError).toBe(true)
+
+        const { workspace: c } = makeWorkspace({ filesWithErrors: new Set(['myRoster.h']) })
+        expect(c.generalWifiHasError).toBe(false)
+    })
+
+    it('startupHasError tracks myStartup.h', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myStartup.h']) })
+        expect(workspace.startupHasError).toBe(true)
+    })
+
+    it('accessoriesHasError and automationHasError both track myAutomation.h, since Accessories is a slice of it', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set(['myAutomation.h']) })
+        expect(workspace.accessoriesHasError).toBe(true)
+        expect(workspace.automationHasError).toBe(true)
+    })
+
+    it('all *HasError getters are false when filesWithErrors is empty', () => {
+        const { workspace } = makeWorkspace({ filesWithErrors: new Set() })
+        expect(workspace.generalWifiHasError).toBe(false)
+        expect(workspace.startupHasError).toBe(false)
+        expect(workspace.accessoriesHasError).toBe(false)
+        expect(workspace.automationHasError).toBe(false)
     })
 })
 

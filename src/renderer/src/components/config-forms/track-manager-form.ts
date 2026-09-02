@@ -40,6 +40,7 @@ export class TrackManagerFormCustomElement {
     readonly startupPowerModes = [
         { value: 'all', label: 'All tracks on (POWERON)' },
         { value: 'individual', label: 'Individual tracks (SET_POWER)' },
+        { value: 'off', label: 'All tracks off (POWEROFF)' },
     ]
     readonly powerOptions = ['ON', 'OFF']
 
@@ -264,7 +265,7 @@ export class TrackManagerFormCustomElement {
             fields: { text: 'text', value: 'value' },
             value: this.opts.startupPowerMode,
             change: (args) => {
-                this.opts.startupPowerMode = args.value as 'all' | 'individual'
+                this.opts.startupPowerMode = args.value as 'all' | 'individual' | 'off'
                 this.opts.enablePowerOnStart = true
                 this.onFieldChange()
             },

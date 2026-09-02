@@ -1,16 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // Minimal Monaco mock — only the constants the validators actually use.
+let mockModelMarkers: Array<{ severity: number; resource?: { path: string } }> = []
 vi.mock('monaco-editor', () => ({
     MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
     editor: {
         setModelMarkers: vi.fn(),
         getModels: () => [],
         onDidCreateModel: vi.fn(),
+        getModelMarkers: () => mockModelMarkers,
+        onDidChangeMarkers: vi.fn(() => ({ dispose: vi.fn() })),
     },
 }))
 
-import { _runValidatorsForTest } from '../../src/renderer/src/config/dccex-validators'
+import * as monaco from 'monaco-editor'
+import { _runValidatorsForTest, hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels } from '../../src/renderer/src/config/dccex-validators'
 
 // Convenience constants that mirror the mock values above.
 const ERROR = 8
@@ -428,5 +432,161 @@ describe('validateSequenceIdRules — wired through _runValidatorsForTest', () =
         // even though id 10 collides elsewhere.
         const markers = _runValidatorsForTest('myAutomation.h', '// no automations here', undefined, entries)
         expect(markers).toHaveLength(0)
+    })
+})
+
+// ── hasErrorMarkers() / onMarkersChanged() — the strict-compile gate ────────────
+
+describe('hasErrorMarkers', () => {
+    it('is false when there are no markers at all', () => {
+        mockModelMarkers = []
+        expect(hasErrorMarkers()).toBe(false)
+    })
+
+    it('is false when markers exist but are all below Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING }]
+        expect(hasErrorMarkers()).toBe(false)
+    })
+
+    it('is true when at least one marker is Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING }, { severity: ERROR }]
+        expect(hasErrorMarkers()).toBe(true)
+    })
+})
+
+describe('onMarkersChanged', () => {
+    it('invokes the callback when monaco reports a markers change', () => {
+        const callback = vi.fn()
+        onMarkersChanged(callback)
+
+        const [handler] = vi.mocked(monaco.editor.onDidChangeMarkers).mock.calls.at(-1)!
+        handler([] as never)
+
+        expect(callback).toHaveBeenCalled()
+    })
+})
+
+describe('filesWithErrorMarkers', () => {
+    it('is empty when there are no markers at all', () => {
+        mockModelMarkers = []
+        expect(filesWithErrorMarkers()).toEqual(new Set())
+    })
+
+    it('excludes files whose markers are all below Error severity', () => {
+        mockModelMarkers = [{ severity: WARNING, resource: { path: '/myRoster.h' } }]
+        expect(filesWithErrorMarkers()).toEqual(new Set())
+    })
+
+    it('includes the filename of any model with an Error-severity marker, stripped of its leading slash', () => {
+        mockModelMarkers = [
+            { severity: WARNING, resource: { path: '/myRoster.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+        ]
+        expect(filesWithErrorMarkers()).toEqual(new Set(['myAutomation.h']))
+    })
+
+    it('collects filenames from multiple errored models', () => {
+        mockModelMarkers = [
+            { severity: ERROR, resource: { path: '/myRoster.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+            { severity: ERROR, resource: { path: '/myAutomation.h' } },
+        ]
+        expect(filesWithErrorMarkers()).toEqual(new Set(['myRoster.h', 'myAutomation.h']))
+    })
+})
+
+// ── validateAliasRequired() — Strict aliases' "existing object has no alias yet" gap ────────
+
+describe('validateAliasRequired (via _runValidatorsForTest\'s strictAliasesData)', () => {
+    it('does not run when strictAliasesData is not supplied — Strict aliases off leaves existing objects alone', () => {
+        expect(_runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")')).toHaveLength(0)
+    })
+
+    it('flags a ROSTER entry with no matching alias', () => {
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")', undefined, undefined, [])
+        expect(markers.some(m => m.message === 'This roster has no alias — required while Strict aliases is enabled.')).toBe(true)
+    })
+
+    it('does not flag a ROSTER entry that already has a matching alias', () => {
+        const aliases = [{ name: 'THOMAS', value: '3', aliasType: 'Roster' as const }]
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")', undefined, undefined, aliases)
+        expect(markers.filter(m => m.message.includes('has no alias'))).toHaveLength(0)
+    })
+
+    it('does not match an alias of a different type on the same numeric id', () => {
+        // id 3 is aliased, but as a Turnout, not a Roster — the roster entry is still unaliased.
+        const aliases = [{ name: 'SOME_TURNOUT', value: '3', aliasType: 'Turnout' as const }]
+        const markers = _runValidatorsForTest('myRoster.h', 'ROSTER(3, "Thomas", "LIGHT/HORN")', undefined, undefined, aliases)
+        expect(markers.some(m => m.message.includes('has no alias'))).toBe(true)
+    })
+
+    it('flags each unaliased turnout, across all three turnout macros', () => {
+        const markers = _runValidatorsForTest(
+            'myTurnouts.h',
+            [
+                'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+                'TURNOUT(1, 100, 0, "Yard Exit")',
+                'PIN_TURNOUT(2, 22, "Siding")',
+            ].join('\n'),
+            undefined, undefined, [],
+        )
+        expect(markers.filter(m => m.message.includes('has no alias'))).toHaveLength(3)
+    })
+
+    it('only flags the turnout still missing an alias, once one is added for another', () => {
+        const aliases = [{ name: 'MAIN_JUNCTION', value: '200', aliasType: 'Turnout' as const }]
+        const markers = _runValidatorsForTest(
+            'myTurnouts.h',
+            [
+                'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+                'TURNOUT(1, 100, 0, "Yard Exit")',
+            ].join('\n'),
+            undefined, undefined, aliases,
+        )
+        const flagged = markers.filter(m => m.message.includes('has no alias'))
+        expect(flagged).toHaveLength(1)
+        expect(flagged[0].message).toContain('turnout')
+    })
+
+    it('flags an unaliased sensor', () => {
+        const markers = _runValidatorsForTest('mySensors.h', 'SENSOR(1, 17, "Yard Entrance")', undefined, undefined, [])
+        expect(markers.some(m => m.message === 'This sensor has no alias — required while Strict aliases is enabled.')).toBe(true)
+    })
+
+    it('flags an unaliased route (by its header line)', () => {
+        const markers = _runValidatorsForTest('myRoutes.h', 'ROUTE(1, "Main Route")\nTHROW(200)\nDONE', undefined, undefined, [])
+        expect(markers.some(m => m.message === 'This route has no alias — required while Strict aliases is enabled.')).toBe(true)
+    })
+
+    it('flags an unaliased sequence (by its header line)', () => {
+        const markers = _runValidatorsForTest('mySequences.h', 'SEQUENCE(1)\nTHROW(200)\nDONE', undefined, undefined, [])
+        expect(markers.some(m => m.message === 'This sequence has no alias — required while Strict aliases is enabled.')).toBe(true)
+    })
+
+    it('does not run on files that only reference objects rather than define them', () => {
+        const markers = _runValidatorsForTest('myAutomation.h', 'ROUTE(1, "Test")\nTHROW(200)\nDONE', undefined, undefined, [])
+        expect(markers.filter(m => m.message.includes('has no alias'))).toHaveLength(0)
+    })
+
+    it('does not flag a commented-out definition line', () => {
+        const markers = _runValidatorsForTest('myRoster.h', '// ROSTER(3, "Thomas", "LIGHT/HORN")', undefined, undefined, [])
+        expect(markers).toHaveLength(0)
+    })
+})
+
+describe('revalidateAllModels', () => {
+    it('re-validates every currently-open model, not just the one being edited', () => {
+        const fakeModels = [
+            { uri: { path: '/myRoster.h' }, getValue: () => 'ROSTER(3, "Thomas", "LIGHT/HORN")' },
+            { uri: { path: '/myTurnouts.h' }, getValue: () => 'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main")' },
+        ]
+        const getModelsSpy = vi.spyOn(monaco.editor, 'getModels').mockReturnValue(fakeModels as never)
+        const setMarkersSpy = vi.mocked(monaco.editor.setModelMarkers)
+        setMarkersSpy.mockClear()
+
+        revalidateAllModels()
+
+        expect(setMarkersSpy).toHaveBeenCalledTimes(2)
+        getModelsSpy.mockRestore()
     })
 })

@@ -155,6 +155,25 @@ describe('header round-trip with roster data', () => {
         expect(Array.from(ids).sort((a, b) => a - b)).toEqual([200, 204])
     })
 
+    it('resolves an ALIAS name inside AUTOSTART THROW() back to the turnout id it targets', () => {
+        const automation = [
+            'AUTOSTART',
+            '  THROW(MyTurnout)',
+            '  THROW(204)',
+            'DONE',
+        ].join('\n')
+
+        const aliases = [{ name: 'MyTurnout', value: '200', aliasType: 'Turnout' as const }]
+        const ids = parseDefaultThrownTurnoutIdsFromAutomation(automation, aliases)
+        expect(Array.from(ids).sort((a, b) => a - b)).toEqual([200, 204])
+    })
+
+    it('ignores a THROW() alias name with no matching Turnout alias rather than throwing', () => {
+        const automation = ['AUTOSTART', '  THROW(Unknown)', 'DONE'].join('\n')
+        const ids = parseDefaultThrownTurnoutIdsFromAutomation(automation, [])
+        expect(ids.size).toBe(0)
+    })
+
     it('serializeRosterToFile output with header still parses cleanly', () => {
         const roster = parseRosterFromFile(ROSTER_CONTENT)
         const serialized = serializeRosterToFile(roster)

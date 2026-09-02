@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as Blockly from 'blockly/core'
-import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
+
+// exrail-blockly-blocks.ts imports the real monaco-editor package (for ExrailCodeField's Monaco
+// popup) — that package touches `window` at module scope, which crashes under vitest's node
+// environment. Not exercised by these tests (nothing here opens the field's editor), but the
+// import itself still runs at module load, so it must be mocked regardless — same reason
+// dccex-validators.test.ts mocks it.
+vi.mock('monaco-editor', () => ({
+    editor: { create: vi.fn() },
+}))
+
+import { registerExrailBlocks, setWorkspaceDefined, setWorkspaceSelfId, collapseCodeWhitespace } from '../../src/renderer/src/components/visual-editors/exrail-blockly-blocks'
 import type { DefinedObjects } from '../../src/renderer/src/components/visual-editors/exrail-block-compiler'
 
 registerExrailBlocks()
@@ -134,5 +144,110 @@ describe('ExrailAliasField (hat block ALIAS field)', () => {
         block.setFieldValue('brand_new_name', 'ALIAS')
         expect(warn).toHaveBeenCalledWith(null, 'alias')
         workspace.dispose()
+    })
+})
+
+describe('ExrailCodeField (STEALTH/STEALTH_GLOBAL code field)', () => {
+    function makeCodeBlock(type: 'STEALTH' | 'STEALTH_GLOBAL' = 'STEALTH') {
+        const workspace = new Blockly.Workspace()
+        const block = workspace.newBlock(type)
+        block.initModel()
+        return { workspace, block }
+    }
+
+    it('shows a placeholder on the block face when no code has been entered yet', () => {
+        const { block, workspace } = makeCodeBlock()
+        expect(block.getField('code')!.getText()).toBe('(click to edit C++ code)')
+        workspace.dispose()
+    })
+
+    it('collapses newlines and repeated whitespace into one line for the block-face preview', () => {
+        const { block, workspace } = makeCodeBlock()
+        block.setFieldValue('if (digitalRead(30)==LOW) {\n  doSomething();\n}', 'code')
+        expect(block.getField('code')!.getText()).toBe('if (digitalRead(30)==LOW) { doSomething(); }')
+        workspace.dispose()
+    })
+
+    it('preserves the raw multi-line value itself — only the block-face preview text is collapsed', () => {
+        const { block, workspace } = makeCodeBlock()
+        const code = 'line1();\nline2();'
+        block.setFieldValue(code, 'code')
+        expect(block.getFieldValue('code')).toBe(code)
+        workspace.dispose()
+    })
+
+    it('is used by STEALTH_GLOBAL too, not just STEALTH', () => {
+        const { block, workspace } = makeCodeBlock('STEALTH_GLOBAL')
+        expect(block.getField('code')!.getText()).toBe('(click to edit C++ code)')
+        workspace.dispose()
+    })
+})
+
+describe('collapseCodeWhitespace', () => {
+    // Preview-text only (getText_()'s block-face label) — see ExrailCodeField's _onHide(), which
+    // commits the raw multi-line value untouched. EXRAIL doesn't mind a macro argument spanning
+    // multiple physical lines, and neither does the C++ compiler; only Blockly's SVG text element
+    // (no line-wrapping) needs a single-line version, purely for display.
+    it('collapses a genuinely multi-line if-statement to one line', () => {
+        const typed = 'if (digitalRead(30) == LOW) {\n  digitalWrite(31, HIGH);\n}'
+        expect(collapseCodeWhitespace(typed)).toBe('if (digitalRead(30) == LOW) { digitalWrite(31, HIGH); }')
+    })
+
+    it('never contains a newline in its output, regardless of input shape', () => {
+        const typed = '\n\nline1();\n\n\tline2();\r\n  line3();\n'
+        expect(collapseCodeWhitespace(typed)).not.toMatch(/[\r\n]/)
+    })
+
+    it('collapses tabs and repeated spaces along with newlines', () => {
+        expect(collapseCodeWhitespace('a();\t\t  \n  b();')).toBe('a(); b();')
+    })
+
+    it('trims leading and trailing whitespace', () => {
+        expect(collapseCodeWhitespace('\n  code();  \n')).toBe('code();')
+    })
+
+    it('leaves already-single-line code untouched (aside from trimming)', () => {
+        expect(collapseCodeWhitespace('digitalWrite(30, HIGH);')).toBe('digitalWrite(30, HIGH);')
+    })
+
+    it('collapses whitespace-only input to an empty string', () => {
+        expect(collapseCodeWhitespace('   \n\t  \n')).toBe('')
+    })
+
+    // Regression: an earlier version collapsed every line break to a plain space with no regard
+    // for `//` comments — flattened onto one line, a comment that used to correctly terminate at
+    // a real line break instead swallowed everything after it, including a STEALTH call's own
+    // closing paren. Converting each `//` comment to a block comment first (before flattening)
+    // keeps it correctly scoped to just its own original line's content.
+    it('converts a trailing // comment to a block comment so flattening does not swallow the next line', () => {
+        const typed = 'foo(); // does a thing\nbar();'
+        expect(collapseCodeWhitespace(typed)).toBe('foo(); /* does a thing */ bar();')
+    })
+
+    it('converts a whole-line // comment to a block comment', () => {
+        const typed = '// explain what this does\nfoo();'
+        expect(collapseCodeWhitespace(typed)).toBe('/* explain what this does */ foo();')
+    })
+
+    it('does not treat // inside a string literal as a comment', () => {
+        const typed = 'F("http://example.com")'
+        expect(collapseCodeWhitespace(typed)).toBe('F("http://example.com")')
+    })
+
+    it('handles the exact reported case: an end-of-line comment followed by more real code', () => {
+        const typed = [
+            'void myFilter(Print * stream, byte & opcode) {',
+            '  // use command <U locoId> to display name from roster',
+            '  if (opcode == \'U\') {',
+            '    opcode=0;',
+            '  }',
+            '}',
+        ].join('\n')
+        const collapsed = collapseCodeWhitespace(typed)
+        // Every line's actual code must still be present — none of it silently commented away.
+        expect(collapsed).toContain("if (opcode == 'U') {")
+        expect(collapsed).toContain('opcode=0;')
+        expect(collapsed).toContain('}')
+        expect(collapsed).not.toMatch(/[\r\n]/)
     })
 })

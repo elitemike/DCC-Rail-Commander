@@ -9,6 +9,7 @@ import { getCompletions } from '../config/file-configs'
 import { registerDiagnosticProviders, revalidateModel } from '../config/dccex-validators'
 import { ConfigEditorState } from '../models/config-editor-state'
 import { buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
+import { definedTracksFor } from './visual-editors/exrail-block-compiler'
 import { getSharedConfigEditorState, setSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { ThemeService } from '../services/theme.service'
 
@@ -121,6 +122,8 @@ function registerProviders(): void {
                     sensors: sharedState.sensors,
                     routes: sharedState.routes,
                     sequences: sharedState.sequences,
+                    signals: sharedState.signals,
+                    tracks: definedTracksFor(sharedState.hasStackedMotorShield),
                 })
 
                 suggestions.push(

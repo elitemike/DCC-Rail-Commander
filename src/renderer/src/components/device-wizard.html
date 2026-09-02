@@ -1,7 +1,7 @@
 <template>
     <!-- This template is rendered inside the native <dialog> element by @aurelia/dialog.
          No backdrop/overlay wrapper needed — the dialog plugin provides that. -->
-    <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl" style="width: 540px;">
+    <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl" style="width: 760px;">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/10">
@@ -30,7 +30,7 @@
             </nav>
 
             <!-- Step content -->
-            <div class="px-6 py-5 overflow-y-auto" style="height: 20rem;">
+            <div class="px-6 py-5 overflow-y-auto" style="height: 44rem;">
 
                 <!-- ─── Step 0: Device ─────────────────────────────────── -->
                 <div if.bind="step === 0" class="space-y-4">
@@ -60,6 +60,11 @@
                         </button>
                     </div>
 
+                    <div if.bind="selectedBoard && !isDeviceSupported(selectedProduct)"
+                        class="bg-amber-900/20 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-sm">
+                        ${selectedBoard.name} is not supported by EX-CommandStation.
+                    </div>
+
                     <div if.bind="boards.length === 0 && !scanning"
                         class="bg-amber-900/20 border border-amber-500/20 rounded-xl p-4 text-amber-300 text-sm">
                         No devices detected. Make sure your board is plugged in via USB and try Rescan.
@@ -69,31 +74,8 @@
                     </div>
                 </div>
 
-                <!-- ─── Step 1: Product ──────────────────────────────────── -->
-                <div if.bind="step === 1" class="space-y-3">
-                    <p class="text-gray-700 dark:text-gray-300 text-sm">Choose the DCC-EX software product to install.</p>
-
-                    <button repeat.for="product of products" disabled.bind="!isDeviceSupported(product.key)"
-                        click.trigger="selectedProduct = product.key"
-                        class="w-full text-left border rounded-xl p-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        class.bind="selectedProduct === product.key
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50'
-                        : 'border-gray-200 dark:border-white/10 bg-gray-900/5 dark:bg-white/5 hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-900/10 dark:hover:bg-white/10'">
-                        <div class="flex items-start gap-3">
-                            <div class="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                                class.bind="selectedProduct === product.key ? 'bg-blue-400' : 'bg-gray-600'"></div>
-                            <div>
-                                <p class="text-gray-900 dark:text-white text-sm font-medium">${product.name}</p>
-                                <p class="text-gray-500 dark:text-gray-400 text-xs mt-0.5">${product.description}</p>
-                                <p if.bind="!isDeviceSupported(product.key)" class="text-amber-400/70 text-xs mt-1">Not
-                                    supported by ${selectedBoard.name}</p>
-                            </div>
-                        </div>
-                    </button>
-                </div>
-
-                <!-- ─── Step 2: Version ─────────────────────────────────── -->
-                <div if.bind="step === 2" class="space-y-4">
+                <!-- ─── Step 1: Version ─────────────────────────────────── -->
+                <div if.bind="step === 1" class="space-y-4">
                     <p class="text-gray-700 dark:text-gray-300 text-sm">Select the version to install.</p>
 
                     <div if.bind="versionBusy" class="flex items-center gap-3 text-blue-300 text-sm py-4">
@@ -108,7 +90,7 @@
                     <div if.bind="!versionBusy && versions.length > 0">
                         <select value.bind="selectedVersion"
                             class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
-                            <option repeat.for="v of versions" value.bind="v">${v}</option>
+                            <option repeat.for="v of versions" value.bind="v">${v}${v === recommendedVersion ? ' (Recommended)' : ''}</option>
                         </select>
                         <p class="text-gray-500 text-xs mt-2">
                             The repository will be cloned and checked out at the chosen tag.
@@ -124,8 +106,124 @@
                     </div>
                 </div>
 
-                <!-- ─── Step 3: Confirm ─────────────────────────────────── -->
+                <!-- ─── Step 2: WiFi (EX-CSB1 only) ─────────────────────── -->
+                <div if.bind="step === 2" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Set up WiFi for this EX-CSB1.</p>
+
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="wifiMode" model.bind="'ap'" checked.bind="wifiMode" />
+                            Access Point (create network)
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input type="radio" name="wifiMode" model.bind="'sta'" checked.bind="wifiMode" />
+                            Station (join existing network)
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Hostname</label>
+                        <input value.bind="wifiHostname" type="text" placeholder="dccex"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">
+                            Network Name (SSID)${wifiMode === 'ap' ? ' — optional' : ''}
+                        </label>
+                        <input value.bind="wifiSsid" type="text" data-testid="wizard-wifi-ssid"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        <p if.bind="wifiMode === 'ap'" class="text-gray-500 text-xs mt-1.5">
+                            Leave blank to use the auto-generated <span class="font-mono">DCCEX_xxxxxx</span> name
+                            (xxxxxx comes from this board's WiFi MAC address).
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">
+                            Password${wifiMode === 'ap' ? ' — optional' : ''}
+                        </label>
+                        <input value.bind="wifiPassword" type="password"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        <p if.bind="wifiMode === 'ap'" class="text-gray-500 text-xs mt-1.5">
+                            Leave blank to use the auto-generated <span class="font-mono">PASS_xxxxxx</span> password
+                            (same xxxxxx suffix as the SSID). Both the SSID and password are shown on the
+                            EX-CSB1's OLED screen after it boots.
+                        </p>
+                    </div>
+
+                    <div if.bind="wifiMode === 'ap'">
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Channel</label>
+                        <input value.bind="wifiChannel" type="number" min="1" max="11"
+                            class="w-24 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                    </div>
+                </div>
+
+                <!-- ─── Step 3: Hardware (EX-CSB1 only) ─────────────────── -->
+                <!-- OLED display type/scroll mode plus the stacked motor
+                     shield choice share one pane — both are config.h
+                     device-hardware settings — but stay visually separated
+                     (own subheading + divider) since they're logically
+                     unrelated hardware choices. -->
                 <div if.bind="step === 3" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Hardware settings for this EX-CSB1.</p>
+
+                    <h3 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">Display</h3>
+
+                    <div class="bg-blue-900/20 border border-blue-500/20 rounded-xl p-3 text-blue-300 text-sm">
+                        EX-CSB1 boards typically use a 132×64 OLED display. If your screen doesn't display
+                        correctly, try a different display type below.
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Display Type</label>
+                        <select value.bind="oledDisplay" data-testid="wizard-oled-display"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                            <option repeat.for="d of displays" value.bind="d.value">${d.label}</option>
+                        </select>
+                    </div>
+
+                    <div if.bind="oledDisplay !== 'NONE'">
+                        <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Scroll Mode</label>
+                        <select value.bind="oledScrollMode"
+                            class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-blue-500">
+                            <option repeat.for="s of scrollModes" model.bind="s.value">${s.label}</option>
+                        </select>
+                    </div>
+
+                    <hr class="border-gray-200 dark:border-white/10" />
+
+                    <h3 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">Motor Drive</h3>
+
+                    <div if.bind="showStackedMotorShieldOption"
+                        class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input checked.bind="hasStackedMotorShield" type="checkbox" class="mt-0.5" />
+                            <span class="text-sm text-gray-200">
+                                This EX-CSB1 has a stacked motor shield (use <span
+                                    class="font-mono">EXCSB1_WITH_EX8874</span>)
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ─── Step 4: Track Power (EX-CSB1 only) ──────────────── -->
+                <!-- Same live component as the Startup section's Visual tab
+                     (see startup-editor.html) — DCC/DC/Mixed mode, per-track
+                     type, PROG, and power, all writing straight through
+                     ConfigEditorState (loaded from this device in
+                     goNext()'s step===1 handler). Its Syncfusion dropdown
+                     popups only render correctly because this dialog is
+                     opened with DialogDomRendererClassic instead of the
+                     app-wide native-<dialog> renderer — see home.ts/
+                     workspace.ts's openNewDevice()/addNewDevice(). -->
+                <div if.bind="step === 4" class="space-y-4">
+                    <p class="text-gray-700 dark:text-gray-300 text-sm">Configure track power for this EX-CSB1.</p>
+                    <track-manager-form></track-manager-form>
+                </div>
+
+                <!-- ─── Step 5: Confirm ──────────────────────────────────── -->
+                <div if.bind="step === 5" class="space-y-4">
                     <p class="text-gray-700 dark:text-gray-300 text-sm">Review your selections and give this device a name.</p>
 
                     <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-4 space-y-2.5">
@@ -139,32 +237,40 @@
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-500 dark:text-gray-400">Product</span>
-                            <span class="text-gray-900 dark:text-white font-medium">${products.find(p => p.key ===
-                                selectedProduct)?.name}</span>
+                            <span class="text-gray-900 dark:text-white font-medium">${productName}</span>
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-500 dark:text-gray-400">Version</span>
                             <span class="text-blue-300">${selectedVersion}</span>
                         </div>
+                        <template if.bind="isCsb1Board">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-500 dark:text-gray-400">WiFi</span>
+                                <span class="text-gray-700 dark:text-gray-300">
+                                    ${wifiMode === 'ap' ? 'Access Point' : 'Station'}${wifiMode === 'sta' ? ' — ' + wifiSsid : ''}
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-500 dark:text-gray-400">Display</span>
+                                <span class="text-gray-700 dark:text-gray-300">${selectedDisplayLabel}</span>
+                            </div>
+                            <div if.bind="showStackedMotorShieldOption" class="flex justify-between text-sm">
+                                <span class="text-gray-500 dark:text-gray-400">Motor Shield</span>
+                                <span class="text-gray-700 dark:text-gray-300">${hasStackedMotorShield ? 'Stacked (EXCSB1_WITH_EX8874)' : 'Standard (EXCSB1)'}</span>
+                            </div>
+                            <div class="flex justify-between gap-4 text-sm">
+                                <span class="text-gray-500 dark:text-gray-400 shrink-0">Track Power</span>
+                                <span class="text-gray-700 dark:text-gray-300 text-right">${trackPowerSummary}</span>
+                            </div>
+                        </template>
                     </div>
 
                     <div>
                         <label class="block text-gray-700 dark:text-gray-300 text-sm mb-1.5">Device Name</label>
-                        <input value.bind="deviceNickname" type="text" placeholder="e.g. My Layout Controller"
+                        <input value.bind="deviceNickname" ref="deviceNicknameEl" type="text" placeholder="e.g. My Layout Controller" data-testid="wizard-device-nickname"
                             class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
                         <p class="text-gray-500 text-xs mt-1.5">A friendly name to identify this device in DCC-Rail-Commander.
                         </p>
-                    </div>
-
-                    <div if.bind="showStackedMotorShieldOption"
-                        class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-xl p-3.5">
-                        <label class="flex items-start gap-3 cursor-pointer">
-                            <input checked.bind="hasStackedMotorShield" type="checkbox" class="mt-0.5" />
-                            <span class="text-sm text-gray-200">
-                                This EX-CSB1 has a stacked motor shield (use <span
-                                    class="font-mono">EXCSB1_WITH_EX8874</span>)
-                            </span>
-                        </label>
                     </div>
 
                     <div if.bind="finishError"
@@ -188,7 +294,7 @@
                 </button>
                 <button click.trigger="goNext()" disabled.bind="!canGoNext || finishing || versionBusy"
                     class="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white text-sm font-semibold transition-colors">
-                    ${finishing ? 'Setting up...' : (step === 3 ? 'Finish' : 'Next')}
+                    ${finishing ? 'Setting up...' : (isLastStep ? 'Finish' : 'Next')}
                 </button>
             </div>
         </div>

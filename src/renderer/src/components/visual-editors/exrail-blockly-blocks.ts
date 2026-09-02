@@ -15,9 +15,18 @@
  *            input and a fixed ELSE statement input (not a togglable
  *            mutator — EXRAIL only ever needs one condition + optional single
  *            else, never controls_if's arbitrary N-way if/elseif/else)
+ *
+ * A param-flavored hat's nextStatement, plus every trigger-marker block's own previous/next
+ * (BlockTypeDef.triggerMarkerFor — see exrail-block-registry.ts's alsoTriggerVariant()), use
+ * Blockly connection *checks* (EXRAIL_TRIGGER_CHECK/EXRAIL_BODY_CHECK below) rather than `null`
+ * (accept-anything): a marker's previousStatement only advertises the trigger check, so it can
+ * only ever connect directly under the hat or under another marker, never mid-body or inside a
+ * branch's THEN/ELSE — no mutator bubble needed, ordinary stacking already gives Blockly's own
+ * n-input mechanism for free here.
  */
 import * as Blockly from 'blockly/core'
 import * as BlocklyEnMsg from 'blockly/msg/en'
+import * as monaco from 'monaco-editor'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
 import { optionsForRefKind, REF_KINDS } from './exrail-block-compiler'
 import type { BlockParamDef, BlockParamKind, BlockTypeDef, DefinedObjects } from './exrail-block-compiler'
@@ -138,11 +147,38 @@ class ExrailRefField extends Blockly.FieldDropdown {
     override getOptions(_useCache?: boolean): Array<[string, string]> {
         const ws = this.getSourceBlock()?.workspace
         const defined = ws ? getWorkspaceDefined(ws) : null
-        if (!defined) return [['(no objects defined)', '']]
+        if (!defined) {
+            // Toolbox flyout preview blocks render in the flyout's own workspace, which never
+            // gets a setWorkspaceDefined() registration (only the real canvas workspace does —
+            // see exrail-block-canvas.ts) — so this is "can't resolve the project's objects from
+            // here", not "the project has none". Say so distinctly from the genuine-empty-state
+            // message below, which would otherwise misleadingly suggest nothing's been defined
+            // yet even when the block already shows real options once dragged onto the canvas.
+            return [[ws?.isFlyout ? 'Make a selection…' : '(no objects defined)', '']]
+        }
         const current = this.getValue() ?? undefined
         const opts = optionsForRefKind(this.kind, defined, current)
         if (opts.length === 0) return [['(none defined)', '']]
         return opts.map((o) => [o.label, String(o.value)])
+    }
+
+    /**
+     * FieldDropdown's own getText_() reads a `selectedOption` cache that's only refreshed inside
+     * doValueUpdate_() by matching the field's *current* value against getOptions() — and only
+     * overwrites the cache on a match. A flyout preview block is constructed with a real seeded
+     * value (e.g. turnout id "1", from exrail-blockly-toolbox.ts's defaultFieldsFor()) but before
+     * the field is attached to a source block, at which point our getOptions() override above
+     * can't resolve anything and returns a single placeholder option whose value is always `''`
+     * — that never matches "1", so the cache is never overwritten with the placeholder's *label*
+     * either, freezing it at whatever getOptions() happened to return on that very first
+     * pre-attachment call. Recomputing the label directly here — instead of trusting that cache —
+     * keeps it correctly live across attachment the same way getOptions() itself already is.
+     */
+    protected override getText_(): string | null {
+        const opts = this.getOptions()
+        const value = this.getValue()
+        const match = opts.find((o) => o[1] === value)
+        return (match ?? opts[0])?.[0] ?? null
     }
 
     // Widened param type (rather than `{ kind: BlockParamKind; value?: string }`) so this
@@ -267,9 +303,183 @@ class ExrailAliasField extends Blockly.FieldTextInput {
     }
 }
 
+/**
+ * Converts a `//` line comment (outside any double-quoted string) into an equivalent block
+ * comment (asterisk-delimited, C-style) on the same line. Used only for ExrailCodeField's
+ * block-face *preview* text (getText_() below) — Blockly's SVG text element can't show real line
+ * breaks, so multi-line code gets flattened onto one line for display, and a `//` comment that
+ * used to correctly terminate at a real line break would otherwise swallow everything that
+ * follows it once flattened. The *committed* value (what's actually compiled — see _onHide()) is
+ * never touched by this: EXRAIL doesn't care about embedded line breaks inside a macro call's
+ * argument, so there's no reason to flatten it there, and doing so previously corrupted any code
+ * containing a `//` comment (see the regression test below for the exact failure).
+ */
+function blockifyLineComment(line: string): string {
+    let inStr = false
+    let esc = false
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (inStr) {
+            if (esc) { esc = false; continue }
+            if (ch === '\\') { esc = true; continue }
+            if (ch === '"') inStr = false
+            continue
+        }
+        if (ch === '"') { inStr = true; continue }
+        if (ch === '/' && line[i + 1] === '/') {
+            const before = line.slice(0, i)
+            const comment = line.slice(i + 2).trim()
+            return comment === '' ? before.trimEnd() : `${before}/* ${comment} */`
+        }
+    }
+    return line
+}
+
+/**
+ * Block-face preview text for ExrailCodeField's `code` value — every `//` line comment converted
+ * to a block comment first (see blockifyLineComment() above for why), then every line break/run
+ * of whitespace collapsed to one space so it renders as a single readable line. Exported purely so
+ * this specific rule is unit-testable without needing to drive Blockly's DropDownDiv/a real Monaco
+ * instance.
+ */
+export function collapseCodeWhitespace(raw: string): string {
+    return raw.split('\n').map(blockifyLineComment).join(' ').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * STEALTH/STEALTH_GLOBAL's `code` param — literal, potentially multi-statement C++, not an
+ * EXRAIL argument. Blockly's stock `field_input` is a single-line inline text box (Enter commits
+ * rather than inserting a newline), a poor fit for real code. This swaps the editing surface for
+ * a full Monaco instance with C++ syntax highlighting, popped open in a Blockly.DropDownDiv
+ * anchored to the field — the same floating-widget primitive field_colour's picker uses — while
+ * still extending FieldTextInput so block-face rendering/serialization/fromJson work unchanged;
+ * only showEditor_() (how editing is initiated) is replaced.
+ *
+ * The popup itself can be edited across multiple lines (real newlines, comfortable formatting),
+ * but the *committed* value is always collapsed to one line on close (_onHide()) — EXRAIL's body
+ * format is one statement per line, so a literal newline reaching the compiler breaks the
+ * round-trip. Collapsing doesn't change the code's meaning (C++ doesn't care about line breaks
+ * inside a statement), just its stored form — see _onHide()'s own comment for the full reasoning.
+ */
+class ExrailCodeField extends Blockly.FieldTextInput {
+    private monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null
+
+    constructor(value?: string) {
+        super(value ?? '')
+        // Longer than FieldInput's default — this is a preview of a whole code block, not a
+        // short identifier, so give it more room before ellipsis-truncating on the block face.
+        this.maxDisplayLength = 60
+    }
+
+    /** Collapses newlines/runs of whitespace into single spaces so multi-line code still renders
+     *  as one readable line on the block face — Blockly's SVG text element has no line-wrapping. */
+    protected override getText_(): string | null {
+        const raw = this.getValue()
+        if (raw === null || raw === undefined) return null
+        const collapsed = collapseCodeWhitespace(raw)
+        return collapsed === '' ? '(click to edit C++ code)' : collapsed
+    }
+
+    /** Bypasses FieldInput's own inline `<input>` editor entirely — opens a DropDownDiv containing
+     *  a real Monaco instance instead. `onFinishEditing_`/widgetDispose_ (FieldInput's normal
+     *  commit hooks) are never invoked on this path; commit happens directly in `_onHide()`. */
+    protected override showEditor_(): void {
+        const block = this.getSourceBlock()
+        if (!block) return
+
+        const container = document.createElement('div')
+        container.style.cssText = 'width:560px;height:280px;'
+        // Blockly's own keyboard shortcuts (Delete/Backspace deletes the selected block, etc.)
+        // listen on the workspace — stop key events here from bubbling out of the popup so
+        // typing/deleting code never also mutates the canvas underneath it. Escape is the one
+        // exception: handled explicitly (close the popup) rather than let it bubble, since
+        // stopping propagation would otherwise also swallow Blockly's own "Escape closes the
+        // open widget" shortcut and leave the popup stuck open.
+        container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { Blockly.DropDownDiv.hideIfOwner(this); return }
+            e.stopPropagation()
+        })
+        container.addEventListener('keyup', (e) => e.stopPropagation())
+
+        const contentDiv = Blockly.DropDownDiv.getContentDiv()
+        contentDiv.style.padding = '0'
+        contentDiv.appendChild(container)
+
+        Blockly.DropDownDiv.showPositionedByField(this, () => this._onHide())
+
+        this.monacoEditor = monaco.editor.create(container, {
+            value: this.getValue() ?? '',
+            language: 'cpp',
+            theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs',
+            // Deliberately NOT automaticLayout: true — this popup's size is fixed (set on
+            // `container` above), so there's nothing for it to react to, and its ResizeObserver
+            // has been observed firing *during* DropDownDiv's own hide/dismiss animation (a
+            // container-size change as the popup collapses), racing this.monacoEditor.dispose()
+            // in _onHide() below and throwing "Model is disposed!" from inside Monaco's own
+            // internals — a real, reproducible crash (not just this field failing to close) when
+            // dismissing by clicking outside the popup rather than pressing Escape.
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineHeight: 20,
+            fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+        })
+        this.monacoEditor.focus()
+    }
+
+    /** DropDownDiv's onHide callback — fires on outside click, Escape, or the field being
+     *  re-triggered elsewhere. Reads Monaco's final content back into the field's own value,
+     *  which (via the normal Field.setValue()/doValueUpdate_ path) fires Blockly's standard
+     *  change event exactly like any other field edit — no host-callback plumbing needed here,
+     *  unlike ExrailIdField/ExrailAliasField's hat-specific synchronous reporting.
+     *
+     * Commits the raw value as-is — trimmed of leading/trailing whitespace only, embedded line
+     * breaks left completely untouched. EXRAIL genuinely doesn't mind a macro call's argument
+     * spanning multiple physical lines (see parseBody()'s own paren-balanced multi-line statement
+     * handling), and neither does the C++ compiler. An earlier version of this method collapsed
+     * every line break to a space before committing, which actively corrupted any code containing
+     * a `//` line comment: flattened onto one line, the comment no longer terminates at a real
+     * line break and instead swallows everything after it — including, in the reported case, the
+     * STEALTH call's own closing paren and everything the compiler was supposed to see next.
+     *
+     * Defensively tolerant of `dispose()` itself throwing (observed as a genuine, reproducible
+     * "Model is disposed!" crash from Monaco's internals under some dismiss paths, even with
+     * automaticLayout off above) and of being invoked more than once for the same popup (Blockly
+     * doesn't guarantee this callback only ever fires once) — neither should ever be able to
+     * lose the user's edit or throw an uncaught exception out of a Blockly-internal callback.
+     */
+    private _onHide(): void {
+        const editor = this.monacoEditor
+        if (editor === null) return
+        this.monacoEditor = null
+        let raw: string
+        try {
+            raw = editor.getValue()
+        } catch {
+            raw = this.getValue() ?? ''
+        }
+        try {
+            editor.dispose()
+        } catch {
+            // Already torn down by something else (see comment above) — nothing left to clean up.
+        }
+        this.setValue(raw.trim())
+    }
+
+    static override fromJson(options: Record<string, unknown>): ExrailCodeField {
+        return new ExrailCodeField(typeof options.text === 'string' ? options.text : '')
+    }
+}
+
+/** See the "connection checks" note atop this file's own doc comment. */
+const EXRAIL_BODY_CHECK = 'ExrailBody'
+const EXRAIL_TRIGGER_CHECK = 'ExrailTrigger'
+
 const EXRAIL_REF_FIELD_TYPE = 'field_exrail_ref'
 const EXRAIL_ID_FIELD_TYPE = 'field_exrail_id'
 const EXRAIL_ALIAS_FIELD_TYPE = 'field_exrail_alias'
+const EXRAIL_CODE_FIELD_TYPE = 'field_exrail_code'
 
 function fieldJsonFor(param: BlockParamDef): Record<string, unknown> {
     if (REF_KINDS.has(param.kind)) {
@@ -277,6 +487,9 @@ function fieldJsonFor(param: BlockParamDef): Record<string, unknown> {
     }
     if (param.kind === 'number') {
         return { type: 'field_number', name: param.name, value: 0 }
+    }
+    if (param.kind === 'code') {
+        return { type: EXRAIL_CODE_FIELD_TYPE, name: param.name, text: '' }
     }
     return { type: 'field_input', name: param.name, text: '' }
 }
@@ -286,17 +499,23 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
     const json: Record<string, unknown> = {
         type: def.id,
         colour: def.color,
-        tooltip: def.label,
+        tooltip: def.description ?? def.label,
     }
     if (def.helpUrl) json.helpUrl = def.helpUrl
 
-    if (def.shape === 'hat') {
+    if (def.shape === 'hat' && !def.paramFlavoredHat) {
         // The hat block's own id/alias isn't an EXRAIL emit param (compileBody() never emits the
         // hat node — see exrail-block-compiler.ts's walk()) — these two fields are editable
         // directly on the block, but what they edit (RouteEntry.id/myAliases.h) lives in
         // ConfigEditorState, not the compiled body. ExrailBlockCanvasCustomElement seeds them from
         // its headerId/headerAlias bindables and reports edits back out via onIdChange/
         // onAliasChange — see that file's _applyHeaderFields()/_onWorkspaceEvent().
+        //
+        // This is the ROUTE/SEQUENCE-only shape — a `paramFlavoredHat` (e.g. ONSENSOR, or a
+        // zero-arg one like ONRAILSYNCON) has no id/alias concept at all and falls through to the
+        // ordinary params-driven branch below, exactly like a stack block; see
+        // exrail-block-compiler.ts's parseEventHandlerBlock()/compileEventHandlerBlock() for how
+        // those params round-trip to/from the header line.
         json.message0 = `${def.label} #%1 alias %2`
         json.args0 = [
             { type: EXRAIL_ID_FIELD_TYPE, name: 'ID', value: MIN_SEQUENCE_ID },
@@ -312,14 +531,28 @@ function jsonFor(def: BlockTypeDef): Record<string, unknown> {
 
     if (def.shape === 'branch') {
         json.message1 = '%1'
-        json.args1 = [{ type: 'input_statement', name: 'THEN' }]
+        json.args1 = [{ type: 'input_statement', name: 'THEN', check: EXRAIL_BODY_CHECK }]
         json.message2 = 'else'
         json.message3 = '%1'
-        json.args3 = [{ type: 'input_statement', name: 'ELSE' }]
+        json.args3 = [{ type: 'input_statement', name: 'ELSE', check: EXRAIL_BODY_CHECK }]
     }
 
-    if (def.shape !== 'hat') json.previousStatement = null
-    if (def.shape !== 'cap') json.nextStatement = null
+    // A trigger-marker's previousStatement only advertises EXRAIL_TRIGGER_CHECK — it can only ever
+    // connect under the hat's own nextStatement or another marker's, never under a plain body
+    // block's nextStatement (which only advertises EXRAIL_BODY_CHECK) or inside a branch's
+    // THEN/ELSE (checked above). Its nextStatement advertises both, so either another marker or
+    // the real body can follow it.
+    if (def.shape !== 'hat') {
+        json.previousStatement = def.triggerMarkerFor !== undefined ? EXRAIL_TRIGGER_CHECK : EXRAIL_BODY_CHECK
+    }
+    if (def.shape !== 'cap') {
+        json.nextStatement = def.triggerMarkerFor !== undefined ? [EXRAIL_TRIGGER_CHECK, EXRAIL_BODY_CHECK] : EXRAIL_BODY_CHECK
+    }
+    // A param-flavored hat's nextStatement additionally accepts a leading marker; an id/alias-
+    // flavored hat (ROUTE/SEQUENCE/AUTOMATION) has no marker concept at all, so stays body-only.
+    if (def.shape === 'hat' && def.paramFlavoredHat) {
+        json.nextStatement = [EXRAIL_TRIGGER_CHECK, EXRAIL_BODY_CHECK]
+    }
 
     return json
 }
@@ -345,5 +578,6 @@ export function registerExrailBlocks(): void {
     Blockly.fieldRegistry.register(EXRAIL_REF_FIELD_TYPE, ExrailRefField)
     Blockly.fieldRegistry.register(EXRAIL_ID_FIELD_TYPE, ExrailIdField)
     Blockly.fieldRegistry.register(EXRAIL_ALIAS_FIELD_TYPE, ExrailAliasField)
+    Blockly.fieldRegistry.register(EXRAIL_CODE_FIELD_TYPE, ExrailCodeField)
     Blockly.defineBlocksWithJsonArray(BLOCK_REGISTRY.map(jsonFor))
 }

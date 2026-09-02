@@ -22,15 +22,18 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             routes: [],
             sequences: [],
             aliases: [],
+            automations: [],
+            preservedAutomationContent: '',
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
+            isCustomFile: ConfigEditorState.prototype.isCustomFile,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 
         ConfigEditorState.prototype.loadFromInstallerState.call(state as any)
 
         expect(state.sensors).toEqual([{ id: 1, pin: 30, description: 'Occupancy' }])
-        expect(state.signals).toEqual([{ red: 22, amber: 23, green: 24, description: '' }])
+        expect(state.signals).toEqual([{ type: 'PIN', red: 22, amber: 23, green: 24, description: '' }])
         expect(state.routes).toEqual([{ id: 1, description: 'Main to Siding', body: 'DONE' }])
         expect(state.sequences).toEqual([{ id: 1, description: '', body: 'DONE' }])
     })
@@ -50,8 +53,11 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             routes: [{ id: 1, description: 'stale', body: '' }],
             sequences: [{ id: 1, body: 'stale' }],
             aliases: [],
+            automations: [],
+            preservedAutomationContent: '',
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
+            isCustomFile: ConfigEditorState.prototype.isCustomFile,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 

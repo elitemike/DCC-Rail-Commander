@@ -1,4 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Workspace pulls in dccex-validators.ts (strict-compile's error-marker check), which imports
+// the real monaco-editor package — that package touches `window` at module scope and crashes
+// under vitest's node environment.
+vi.mock('monaco-editor', () => ({
+    MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+    editor: {
+        setModelMarkers: vi.fn(),
+        getModels: () => [],
+        getModelMarkers: () => [],
+        onDidCreateModel: vi.fn(),
+        onDidChangeMarkers: vi.fn(() => ({ dispose: vi.fn() })),
+    },
+}))
+
 import { Workspace } from '../../src/renderer/src/views/workspace'
 import type { InstallerState } from '../../src/renderer/src/models/installer-state'
 import type { PlatformIoService } from '../../src/renderer/src/services/platformio.service'
