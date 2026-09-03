@@ -124,8 +124,9 @@ test.describe('Config Editor — EX-CommandStation', () => {
     test('General tab shows display dropdown', async ({ workspacePage }) => {
         await openDeviceSettings(workspacePage)
 
-        // Display section label is visible
-        await expect(workspacePage.locator('commandstation-config-form').getByText('Display')).toBeVisible()
+        // Display section label is visible — exact match, since the section also has a help
+        // paragraph mentioning "display" in passing ("If nothing shows on the display after...").
+        await expect(workspacePage.locator('commandstation-config-form').getByText('Display', { exact: true })).toBeVisible()
         // At least two SF DropDownList wrappers (motor driver + display) are rendered
         const ddlWrappers = workspacePage.locator('commandstation-config-form .e-ddl')
         await expect(ddlWrappers.nth(1)).toBeVisible()

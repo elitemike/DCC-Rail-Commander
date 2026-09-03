@@ -220,7 +220,7 @@ test.describe('EXRAIL block canvas', () => {
         await expect(page.locator('[data-id="n1"]')).toBeVisible()
     })
 
-    test('falls back to Raw mode for a body Blocks mode cannot parse', async ({ workspacePage: page }) => {
+    test('a trailing // comment on a statement renders natively in Blocks mode instead of disabling it', async ({ workspacePage: page }) => {
         await openRoutesEditor(page)
 
         const rawButton = page.getByTestId('row-tab-raw')
@@ -230,15 +230,20 @@ test.describe('EXRAIL block canvas', () => {
         const editor = rowEditor.locator('div.monaco-editor')
         await editor.click()
         await page.keyboard.press('Control+A')
-        await page.keyboard.type('ROUTE(1, "Main Line")\nTHROW(200) // inline comment not supported yet')
+        await page.keyboard.type('ROUTE(1, "Main Line")\nTHROW(200) // a comment on this line')
         // Row commits happen via the Monaco 300ms debounce (see rowRawEditor.onTextChange in
         // routes-editor.ts), not blur — wait it out instead of blurring.
         await page.waitForTimeout(500)
 
-        // Comments aren't supported by the block parser yet — Blocks must be disabled,
-        // not silently mangle the hand-edited text.
+        // A statement's trailing comment is preserved as that block's own Blockly comment icon
+        // (see exrail-blockly-bridge.ts's block.setCommentText()) and re-emitted faithfully by
+        // compileBody() — Blocks stays enabled, nothing forces a fallback to Raw.
         const blocksButton = page.getByRole('button', { name: 'Blocks' })
-        await expect(blocksButton).toBeDisabled()
+        await expect(blocksButton).toBeEnabled()
+        await blocksButton.click()
+
+        await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('[data-id="n1"] .blocklyCommentIcon')).toBeVisible()
     })
 
     test('editing in Blocks mode updates the Raw myRoutes.h view', async ({ workspacePage: page }) => {

@@ -101,8 +101,9 @@ test('new device wizard: no product step, recommends latest Prod tag, Confirm st
     await expect(page.getByText('Access Point')).toBeVisible()
     await expect(page.getByText('OLED 132×64 (EX-CSB1)')).toBeVisible()
     await expect(page.getByText('Standard (EXCSB1)')).toBeVisible()
-    // Track Power was never touched — the review falls back to firmware defaults.
-    await expect(page.getByText('All tracks on at startup', { exact: false })).toBeVisible()
+    // Track Power was never touched — the review falls back to the wizard's default
+    // (all tracks off — see device-wizard.ts's TRACK_POWER_SUMMARY).
+    await expect(page.getByText('All tracks off at startup', { exact: false })).toBeVisible()
 
     // The whole review must be visible without scrolling the step container.
     const container = page.locator('div.overflow-y-auto').first()

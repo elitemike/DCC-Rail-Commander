@@ -87,6 +87,12 @@ async function addTurnoutOnBoardChannel(page: import('@playwright/test').Page, b
     await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
     await page.getByTitle('Add new turnout').click()
 
+    // Turnout-kind picker (turnout-type-dialog.ts) shows first, defaulting to Servo —
+    // accept the default to get to the pin picker.
+    const typeDialog = page.getByRole('dialog')
+    await expect(typeDialog.getByRole('heading', { name: 'New Turnout' })).toBeVisible()
+    await typeDialog.getByRole('button', { name: 'Continue' }).click()
+
     const pinDialog = page.getByRole('dialog')
     await expect(pinDialog.getByText('Select Pin', { exact: true })).toBeVisible()
     await pinDialog.locator('[data-field="pin-source"]').selectOption({ label: boardOptionLabel })

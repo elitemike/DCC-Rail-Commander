@@ -250,6 +250,11 @@ test.describe('Servo Calibration', () => {
 
         await page.getByTitle('Add new turnout').click()
 
+        // Turnout-kind picker (turnout-type-dialog.ts) shows first, defaulting to Servo —
+        // accept the default to get to the pin picker.
+        await expect(dialog(page).getByRole('heading', { name: 'New Turnout' })).toBeVisible()
+        await dialog(page).getByRole('button', { name: 'Continue' }).click()
+
         await expect(dialog(page).getByText('Select Pin', { exact: true })).toBeVisible()
         await dialog(page).getByRole('button', { name: 'Continue' }).click()
 
