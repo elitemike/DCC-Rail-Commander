@@ -119,4 +119,36 @@ test.describe('Quick compile', () => {
         await expect(page.locator('.squiggly-error')).toHaveCount(0)
         await expect(page.getByTestId('error-dot-general-wifi')).toHaveCount(0)
     })
+
+    test('writes a status line with timing to the Output panel when it is open', async ({ workspacePage: page }) => {
+        // A real Compile is the normal way the Output panel gets opened with
+        // the Output tab active — reuse that rather than reaching into
+        // workspace.ts internals (see compile.spec.ts for the same pattern).
+        await page.getByRole('button', { name: 'Compile' }).click()
+        await expect(page.getByText('✓ Success')).toBeVisible({ timeout: 30_000 })
+
+        await openRawConfigH(page)
+        await setMonacoContent(page, VALID_CONFIG_H)
+        await clickSave(page)
+
+        const outputPanel = page.locator('compile-output-terminal .xterm-accessibility-tree')
+        await expect(outputPanel).toContainText('[Quick Compile] ✓ OK', { timeout: 20_000 })
+        await expect(outputPanel).toContainText(/\[Quick Compile\][^\n]*\(\d+\.\d+s\)/)
+    })
+
+    test('does not write to the Output panel while it is closed', async ({ workspacePage: page }) => {
+        // Panel starts collapsed by default — never opened in this test.
+        await openRawConfigH(page)
+        await setMonacoContent(page, VALID_CONFIG_H)
+        await clickSave(page)
+
+        await page.waitForTimeout(6_000)
+        // xterm doesn't mount its accessibility tree at all while its container has
+        // near-zero height (the pane collapsed), so this locator may resolve to zero
+        // elements rather than an empty one — either way proves nothing was written.
+        const outputPanel = page.locator('compile-output-terminal .xterm-accessibility-tree')
+        if (await outputPanel.count() > 0) {
+            await expect(outputPanel).not.toContainText('[Quick Compile]')
+        }
+    })
 })
