@@ -2,7 +2,7 @@
 
 ## Compiling
 
-Click **Compile** (or **Compile & Upload**, on production builds) in the title bar. Before building, the app:
+Click **Compile & Upload** in the title bar. Before building, the app:
 
 1. Automatically saves every unsaved config file — you never need to Save first.
 2. Confirms which firmware version is checked out, switching branches/tags if you changed the version selector.
@@ -20,8 +20,8 @@ When it finishes, the Output tab shows **✓ Success** or **✗ Failed**. Use **
 build to share the log, or **✕ Clear** to reset it before the next attempt.
 
 !!! tip "Compile is always real"
-    Compiling never depends on a device being connected, and mock/dev mode never fakes it — it's the same
-    bundled PlatformIO build every time, hardware attached or not. Only the *upload* step needs a real board.
+    Compiling never depends on a device being connected — it's the same bundled PlatformIO build every time,
+    hardware attached or not. Only the *upload* step needs a real board.
 
 ## Strict Compile
 
@@ -31,12 +31,6 @@ failure) — catching mistakes before they reach the compiler rather than after.
 
 ## Uploading
 
-On production (non-mock) builds, the title bar's Compile button becomes **Compile & Upload** — a successful
-compile is immediately followed by flashing the connected board over its serial port. Nothing further to do:
-if the compile output shows ✓ Success and a board is connected at the selected port, the upload runs
-automatically as the next step.
-
-!!! note "Mock/dev builds"
-    In `--mock-device`/dev builds the button only ever reads **Compile** — upload is faked at the IPC layer so
-    the UI and build pipeline can be exercised without a real board attached (see the **DEV MOCK** badge in the
-    title bar). Compilation itself is identical to a production build.
+A successful compile is immediately followed by flashing the connected board over its serial port. Nothing
+further to do: if the compile output shows ✓ Success and a board is connected at the selected port, the upload
+runs automatically as the next step.
