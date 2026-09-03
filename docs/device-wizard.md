@@ -11,7 +11,9 @@ by loading or importing an existing folder instead (see [Getting Started](gettin
 !!! note "Officially supported: EX-CommandStation on EX-CSB1"
     The board list below can show other Arduino-compatible boards, but right now the only board officially
     supported through the wizard is the **EX-CSB1** — it's also the only board where the wizard's WiFi,
-    Hardware, and Track Power steps apply (see below).
+    Hardware, and Track Power steps apply (see below). Other boards' config files still work fine — set them
+    up outside the wizard (**Load from Folder**/**Import Existing Project**) and edit them the same as any
+    other project, including every editor's **Raw** tab.
 
 ![New Device Wizard, Select Device step, showing a detected EX-CSB1 board](assets/screenshots/wizard-select-device.png)
 
