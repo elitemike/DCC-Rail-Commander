@@ -107,6 +107,25 @@ export interface UploadResult {
     error?: string
 }
 
+/** One compiler diagnostic from a Quick Compile syntax-only check — see quickCompile() in src/main/platformio.ts. */
+export interface QuickCompileDiagnostic {
+    /** Filename relative to the scratch dir, e.g. "config.h" — always one of the user's own editable files. */
+    file: string
+    line: number
+    column: number
+    severity: 'error' | 'warning'
+    message: string
+}
+
+export interface QuickCompileResult {
+    /** True iff there are zero error-severity diagnostics (warnings alone don't fail it). */
+    success: boolean
+    diagnostics: QuickCompileDiagnostic[]
+    durationMs: number
+    /** Set when the check couldn't run at all (e.g. no PlatformIO target for this FQBN) — distinct from a successful check that found diagnostics. */
+    error?: string
+}
+
 export interface PlatformIoElectronApi {
     /** True once the bundled runtime is present and its toolchains are seeded. */
     isRuntimeReady: () => Promise<boolean>
@@ -120,6 +139,8 @@ export interface PlatformIoElectronApi {
     listBoards: () => Promise<DetectedBoardInfo[]>
     compile: (sketchPath: string, fqbn: string, verbose?: boolean) => Promise<CompileResult>
     upload: (sketchPath: string, fqbn: string, port: string, verbose?: boolean) => Promise<UploadResult>
+    /** Syntax-only check of the user's own sketch files — see quickCompile() in src/main/platformio.ts. */
+    quickCompile: (sketchPath: string, fqbn: string) => Promise<QuickCompileResult>
     browseToolchainPack: () => Promise<string | null>
     importToolchainPack: (archivePath: string) => Promise<{ success: boolean; error?: string }>
     onProgress: (cb: (payload: { phase: string; message: string }) => void) => () => void

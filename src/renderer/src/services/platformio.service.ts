@@ -3,6 +3,7 @@ import type {
     DetectedBoardInfo,
     CompileResult,
     UploadResult,
+    QuickCompileResult,
 } from '../../../types/ipc'
 
 /** Wraps window.platformio (contextBridge API) for the renderer. */
@@ -46,6 +47,10 @@ export class PlatformIoService {
 
     async upload(sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<UploadResult> {
         return window.platformio.upload(sketchPath, fqbn, port, verbose)
+    }
+
+    async quickCompile(sketchPath: string, fqbn: string): Promise<QuickCompileResult> {
+        return window.platformio.quickCompile(sketchPath, fqbn)
     }
 
     async browseToolchainPack(): Promise<string | null> {

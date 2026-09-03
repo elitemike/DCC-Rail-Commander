@@ -13,9 +13,9 @@
 
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
-import { writeFile, readdir, mkdtemp, rm, cp } from 'fs/promises'
-import { tmpdir } from 'os'
-import { execFile, spawn } from 'child_process'
+import { writeFile, readFile, readdir, mkdtemp, rm, cp } from 'fs/promises'
+import { tmpdir, cpus } from 'os'
+import { execFile, exec, spawn, type ChildProcess } from 'child_process'
 import { extract as tarExtract } from 'tar'
 import type { UsbManager } from './usb-manager'
 import {
@@ -37,6 +37,14 @@ import {
     bundledVersion,
     readManifest,
 } from './pio-runtime'
+import {
+    filterSketchEntries,
+    toSyntaxOnlyCommand,
+    parseDiagnostics,
+    dedupeDiagnostics,
+    type CompileDbEntry,
+} from './quick-compile'
+import type { QuickCompileResult, QuickCompileDiagnostic } from '../types/ipc'
 
 export interface PioRunResult {
     success: boolean
@@ -55,6 +63,17 @@ export interface DetectedBoard {
 /** Build/upload subprocess timeout. Matches the previous backend's 5 minutes. */
 const RUN_TIMEOUT_MS = 300_000
 
+/**
+ * Quick Compile's own, much shorter subprocess timeouts — it's meant to be
+ * fast (compiledb generation and a syntax-only pass are each a second or two
+ * in practice; see the feature/quick_compile design notes), and it runs
+ * automatically on every Save, so a stuck subprocess should be killed well
+ * before it could ever compete with `RUN_TIMEOUT_MS`-scale real build/upload
+ * work or block the app for anywhere near that long.
+ */
+const QUICK_COMPILE_COMPILEDB_TIMEOUT_MS = 30_000
+const QUICK_COMPILE_SYNTAX_TIMEOUT_MS = 15_000
+
 /** Used only to test for blank lines — the ANSI itself is kept and forwarded so xterm can render color. */
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1B\[[0-9;]*[A-Za-z]/g
@@ -69,7 +88,25 @@ export class PlatformIoService {
      */
     private queue: Promise<unknown> = Promise.resolve()
 
+    /**
+     * Live child processes spawned by quick-compile's compiledb generation and
+     * per-file syntax-only checks — tracked so `killQuickCompileProcesses()` can
+     * force-kill them on app quit. Unlike a real compile/upload (bounded by
+     * `RUN_TIMEOUT_MS` and expected to run to completion), quick-compile fires
+     * automatically on every Save with nothing in the UI ever awaiting it, so a
+     * still-running one at quit time is normal, not exceptional — same
+     * reasoning as `PythonRunner.killAll()`'s own job tracking (see
+     * `window-all-closed` in index.ts).
+     */
+    private readonly quickCompileProcesses = new Set<ChildProcess>()
+
     constructor(private readonly usb: UsbManager) { }
+
+    /** Force-kills any in-flight quick-compile subprocess — called on app quit (see index.ts's `window-all-closed`), same pattern as `PythonRunner.killAll()`. */
+    killQuickCompileProcesses(): void {
+        for (const child of this.quickCompileProcesses) child.kill()
+        this.quickCompileProcesses.clear()
+    }
 
     setProgressCallback(cb: (phase: string, message: string) => void): void {
         this.progressCallback = cb
@@ -227,6 +264,136 @@ export class PlatformIoService {
 
     async upload(sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<PioRunResult> {
         return this.enqueue(() => this.runBuild('upload', sketchPath, fqbn, port, verbose))
+    }
+
+    /**
+     * Syntax-only check of the user's own sketch files — see the design writeup in
+     * the `feature/quick_compile` plan. Compiles nothing for real: generates (or
+     * reuses a cached) `compile_commands.json` via `pio run -t compiledb`, then
+     * re-runs each project-root translation unit's exact compiler command with
+     * `-fsyntax-only` appended, in parallel, bypassing SCons/pio entirely for the
+     * actual check. Routed through the same `enqueue()` as compile/upload — it
+     * must not race a real build over the shared `.pio/build` dir.
+     */
+    async quickCompile(sketchPath: string, fqbn: string): Promise<QuickCompileResult> {
+        return this.enqueue(() => this.runQuickCompile(sketchPath, fqbn))
+    }
+
+    /** compile_commands.json entries, keyed by scratchPath, cached until the sketch's own source-file list changes. */
+    private readonly compileDbCache = new Map<string, { sourceKey: string; entries: CompileDbEntry[] }>()
+
+    private async runQuickCompile(sketchPath: string, fqbn: string): Promise<QuickCompileResult> {
+        const started = Date.now()
+        const fail = (error: string): QuickCompileResult =>
+            ({ success: false, diagnostics: [], durationMs: Date.now() - started, error })
+
+        const target = resolveTarget(fqbn)
+        if (!target) return fail(`No PlatformIO build target is defined for board "${fqbn}".`)
+        if (!hasBundledRuntime()) return fail('The bundled build runtime is missing from this installation.')
+        const platform = platformName(target.platform)
+        if (!isPlatformInstalled(platform)) {
+            return fail(`The ${platform} toolchain is not installed. Import a toolchain pack for ${target.label} to build for this board.`)
+        }
+
+        try {
+            await this.writeProjectConfig(sketchPath, target)
+        } catch (err) {
+            return fail(`Could not write platformio.ini: ${(err as Error).message}`)
+        }
+
+        let entries: CompileDbEntry[]
+        try {
+            entries = await this.getSketchCompileDbEntries(sketchPath, target)
+        } catch (err) {
+            return fail(`Could not resolve build commands: ${(err as Error).message}`)
+        }
+
+        const diagnostics = dedupeDiagnostics(await this.runSyntaxOnlyChecks(entries))
+        return {
+            success: !diagnostics.some((d) => d.severity === 'error'),
+            diagnostics,
+            durationMs: Date.now() - started,
+        }
+    }
+
+    /**
+     * Returns the project-root (user-editable) compile_commands.json entries for
+     * `sketchPath`/`target`, regenerating via `pio run -t compiledb` only when the
+     * sketch's own source-file list has changed since the last call — config-file
+     * edits alone (config.h, etc.) never invalidate this, since those are headers,
+     * not separate translation units.
+     */
+    private async getSketchCompileDbEntries(sketchPath: string, target: BoardTarget): Promise<CompileDbEntry[]> {
+        const rootFiles = (await readdir(sketchPath)).filter((f) => /\.(cpp|ino)$/i.test(f)).sort()
+        const sourceKey = rootFiles.join(',')
+
+        const cached = this.compileDbCache.get(sketchPath)
+        if (cached && cached.sourceKey === sourceKey) return cached.entries
+
+        const args = ['-m', 'platformio', 'run', '-e', target.env, '--project-dir', sketchPath, '-t', 'compiledb']
+        const result = await this.execPio(args, sketchPath)
+        if (!result.success) throw new Error(result.error || result.output || 'compiledb generation failed')
+
+        const raw = await readFile(join(sketchPath, 'compile_commands.json'), 'utf-8')
+        const allEntries = JSON.parse(raw) as CompileDbEntry[]
+        const entries = filterSketchEntries(allEntries)
+
+        this.compileDbCache.set(sketchPath, { sourceKey, entries })
+        return entries
+    }
+
+    /**
+     * Runs every entry's compiler command with `-fsyntax-only` and parses their
+     * combined output. Capped well below `cpus().length` — real DCC-EX projects
+     * have dozens of sketch-root files, and this runs automatically on every
+     * Save, so spawning one compiler process per core at once would peg every
+     * CPU right as the renderer is also busy re-rendering after a save; a
+     * modest cap keeps quick-compile itself fast without competing that hard
+     * for machine resources.
+     */
+    private async runSyntaxOnlyChecks(entries: CompileDbEntry[]): Promise<QuickCompileDiagnostic[]> {
+        const concurrency = Math.max(1, Math.min(4, cpus().length))
+        const diagnostics: QuickCompileDiagnostic[] = []
+        let index = 0
+
+        const worker = async (): Promise<void> => {
+            while (index < entries.length) {
+                const entry = entries[index++]
+                const output = await this.execShell(toSyntaxOnlyCommand(entry.command), entry.directory)
+                diagnostics.push(...parseDiagnostics(output))
+            }
+        }
+
+        await Promise.all(Array.from({ length: Math.min(concurrency, entries.length) }, () => worker()))
+        return diagnostics
+    }
+
+    /** Runs a PlatformIO subcommand without streaming progress — currently only quick-compile's compiledb generation, an internal step that isn't something the Output panel needs to show, and which should never take anywhere near as long as a real build. */
+    private execPio(args: string[], cwd: string): Promise<PioRunResult> {
+        return new Promise((resolvePromise) => {
+            const child = execFile(pythonExe(), args, { cwd, env: pioEnv(), timeout: QUICK_COMPILE_COMPILEDB_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+                this.quickCompileProcesses.delete(child)
+                resolvePromise({ success: !err, output: stdout, error: err ? (stderr || stdout || err.message) : undefined })
+            })
+            this.quickCompileProcesses.add(child)
+        })
+    }
+
+    /**
+     * Runs one already-fully-formed shell command line (a compile_commands.json
+     * entry, already shell-quoted by PlatformIO) and returns its combined
+     * stdout+stderr — `-fsyntax-only` diagnostics are all that's wanted here, and
+     * a non-zero exit (a real syntax error) is expected, not a failure to
+     * surface as an error.
+     */
+    private execShell(command: string, cwd: string): Promise<string> {
+        return new Promise((resolvePromise) => {
+            const child = exec(command, { cwd, env: pioEnv(), timeout: QUICK_COMPILE_SYNTAX_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 }, (_err, stdout, stderr) => {
+                this.quickCompileProcesses.delete(child)
+                resolvePromise(`${stdout}\n${stderr}`)
+            })
+            this.quickCompileProcesses.add(child)
+        })
     }
 
     private enqueue<T>(fn: () => Promise<T>): Promise<T> {

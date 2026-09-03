@@ -191,6 +191,16 @@ app.whenReady().then(() => {
     })
 })
 
+// Fires on every app.quit()/app.exit() path, unlike 'window-all-closed' — which
+// only fires when the user closes the last window, not when something (e.g. a
+// test harness) tells the app to quit directly. Quick-compile's own subprocesses
+// need killing here too: an ipcMain.handle('pio:quick-compile', ...) call left
+// pending when Electron tears down can otherwise leave the whole quit sequence
+// hanging on a promise nothing is ever going to settle.
+app.on('before-quit', () => {
+    platformIoService.killQuickCompileProcesses()
+})
+
 app.on('window-all-closed', () => {
     usbManager.dispose()
     pythonRunner.killAll()

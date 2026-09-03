@@ -8,6 +8,7 @@ import type {
     DetectedBoardInfo,
     CompileResult,
     UploadResult,
+    QuickCompileResult,
 } from '../types/ipc'
 
 // ── USB API ──────────────────────────────────────────────────────────────────
@@ -131,6 +132,9 @@ const platformIoApi = {
 
     upload: (sketchPath: string, fqbn: string, port: string, verbose?: boolean): Promise<UploadResult> =>
         ipcRenderer.invoke('pio:upload', sketchPath, fqbn, port, verbose),
+
+    quickCompile: (sketchPath: string, fqbn: string): Promise<QuickCompileResult> =>
+        ipcRenderer.invoke('pio:quick-compile', sketchPath, fqbn),
 
     browseToolchainPack: (): Promise<string | null> =>
         ipcRenderer.invoke('pio:browse-toolchain-pack'),
