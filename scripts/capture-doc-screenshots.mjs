@@ -198,6 +198,7 @@ async function captureOnboardingAndWizard() {
         await page.waitForSelector('text=Setup New Device', { timeout: 10_000 })
         await page.waitForTimeout(1500) // let device scan settle
 
+        // ── Step 0: Select Device ──
         await step('select CSB1 board', async () => {
             const csb1 = page.locator('button', { hasText: /CSB1/i }).first()
             if (await csb1.count() > 0) await csb1.click()
@@ -205,10 +206,9 @@ async function captureOnboardingAndWizard() {
         })
         await shot(page, 'wizard-select-device')
 
-        await step('advance to Confirm', async () => {
-            // Next: Select Device -> Select Version
+        // ── Step 1: Select Version ──
+        await step('advance to Select Version', async () => {
             await page.getByRole('button', { name: 'Next' }).click()
-            await page.waitForTimeout(500)
             // Wait for version list (network fetch of tags) — generous timeout.
             await page.waitForFunction(
                 () => {
@@ -217,14 +217,39 @@ async function captureOnboardingAndWizard() {
                 },
                 { timeout: 45_000 },
             ).catch(() => undefined)
-            await page.getByRole('button', { name: 'Next' }).click() // -> WiFi
             await page.waitForTimeout(300)
-            await page.getByRole('button', { name: 'Next' }).click() // -> Hardware
+        })
+        await shot(page, 'wizard-select-version')
+
+        // ── Step 2: WiFi ──
+        await step('advance to WiFi', async () => {
+            await page.getByRole('button', { name: 'Next' }).click()
+            await page.waitForSelector('text=Set up WiFi', { timeout: 5000 })
             await page.waitForTimeout(300)
-            await page.getByRole('button', { name: 'Next' }).click() // -> Track Power
+        })
+        await shot(page, 'wizard-wifi')
+
+        // ── Step 3: Hardware ──
+        await step('advance to Hardware', async () => {
+            await page.getByRole('button', { name: 'Next' }).click()
+            await page.waitForSelector('text=Hardware settings', { timeout: 5000 })
+            await page.waitForTimeout(300)
+        })
+        await shot(page, 'wizard-hardware')
+
+        // ── Step 4: Track Power ──
+        await step('advance to Track Power', async () => {
+            await page.getByRole('button', { name: 'Next' }).click()
+            await page.waitForSelector('track-manager-form', { timeout: 5000 })
             await page.waitForTimeout(500)
-            await page.getByRole('button', { name: 'Next' }).click() // -> Confirm
+        })
+        await shot(page, 'wizard-track-power')
+
+        // ── Step 5: Confirm ──
+        await step('advance to Confirm', async () => {
+            await page.getByRole('button', { name: 'Next' }).click()
             await page.waitForSelector('text=Review your selections', { timeout: 10_000 })
+            await page.waitForTimeout(300)
         })
         await shot(page, 'wizard-confirm')
     } finally {
