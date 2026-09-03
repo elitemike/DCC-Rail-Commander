@@ -42,14 +42,6 @@ Each saved device is completely independent — its own configuration files, its
 Setting up a second device (even the exact same board model, even the exact same physical board again) always
 starts from a clean template; it never copies another device's roster, turnouts, or other configuration over.
 
-## Mock mode
-
-If you're evaluating the app without hardware attached, development builds support a `--mock-device` flag that
-fakes USB device discovery so you can walk through the full wizard and workspace. Compiling is always real
-against the bundled toolchain — only device discovery and firmware upload are faked. You'll see a **DEV MOCK**
-badge in the title bar whenever mock mode is active, so it's never ambiguous whether you're driving real
-hardware.
-
 ## Next steps
 
 - New board in hand → [New Device Wizard](device-wizard.md)
