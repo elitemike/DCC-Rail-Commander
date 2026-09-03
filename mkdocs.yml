@@ -1,0 +1,93 @@
+site_name: DCC Rail Commander
+site_description: User guide for DCC-Rail-Commander, an Electron/Aurelia installer and configuration tool for DCC-EX Arduino products.
+site_url: https://elitemike.github.io/DCC-Rail-Commander/
+repo_url: https://github.com/elitemike/DCC-Rail-Commander
+repo_name: elitemike/DCC-Rail-Commander
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: materialx
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tracking
+    - toc.follow
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - glightbox
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/elitemike/DCC-Rail-Commander
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - New Device Wizard: device-wizard.md
+  - Workspace Overview: workspace-overview.md
+  - Device Settings:
+      - General + WiFi: config/general-wifi.md
+      - Accessories (HAL Devices): config/accessories.md
+      - Startup: config/startup.md
+      - Advanced: config/advanced.md
+  - Configuration Files:
+      - Roster: config/roster.md
+      - Turnouts: config/turnouts.md
+      - Sensors: config/sensors.md
+      - Signals: config/signals.md
+      - Routes: config/routes.md
+      - Sequences: config/sequences.md
+      - Automations: config/automations.md
+      - Event Handlers: config/event-handlers.md
+      - Aliases: config/aliases.md
+  - Compile & Upload: compile-upload.md
+  - Serial Monitor: monitor.md
+  - Throttle: throttle.md
+  - Preferences: preferences.md
