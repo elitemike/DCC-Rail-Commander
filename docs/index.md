@@ -1,13 +1,17 @@
 # DCC Rail Commander
 
 **DCC Rail Commander** is a cross-platform desktop app for configuring, building, and flashing firmware for
-[DCC-EX](https://dcc-ex.com) Arduino-based products — **EX-CommandStation**, **EX-IOExpander**, and
-**EX-Turntable**. It replaces hand-editing `#define`s and EX-RAIL scripts with visual editors, while still
-letting you drop into raw text whenever you want to.
+[DCC-EX](https://dcc-ex.com) Arduino-based products. It replaces hand-editing `#define`s and EX-RAIL scripts
+with visual editors, while still letting you drop into raw text whenever you want to.
 
 !!! warning "Not an official DCC-EX project"
     DCC Rail Commander works with DCC-EX products, but it is developed and maintained **independently**. It
     receives no support from the DCC-EX team. For official DCC-EX support, see [dcc-ex.com](https://dcc-ex.com).
+
+!!! note "Current support"
+    Right now, **EX-CommandStation** is the only officially supported product, and only on the **EX-CSB1**
+    board, set up through the [New Device Wizard](device-wizard.md)'s guided visual setup. Other boards and
+    products (EX-IOExpander, EX-Turntable) aren't officially supported yet.
 
 ## What this guide covers
 

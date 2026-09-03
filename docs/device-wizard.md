@@ -8,6 +8,11 @@ boards that support it — WiFi, display/motor hardware, and startup track power
 Currently the wizard provisions **EX-CommandStation** firmware; EX-IOExpander and EX-Turntable are configured
 by loading or importing an existing folder instead (see [Getting Started](getting-started.md)).
 
+!!! note "Officially supported: EX-CommandStation on EX-CSB1"
+    The board list below can show other Arduino-compatible boards, but right now the only board officially
+    supported through the wizard is the **EX-CSB1** — it's also the only board where the wizard's WiFi,
+    Hardware, and Track Power steps apply (see below).
+
 ![New Device Wizard, Select Device step, showing a detected EX-CSB1 board](assets/screenshots/wizard-select-device.png)
 
 ## Step 1 — Select Device

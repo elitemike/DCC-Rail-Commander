@@ -26,7 +26,7 @@ The first time you open DCC Rail Commander, you'll see three options, since ther
 
 | Option | When to use it |
 |---|---|
-| **New Device** | You have a board plugged in via USB and want to set it up from scratch. Walks you through the [New Device Wizard](device-wizard.md). |
+| **New Device** | You have a board plugged in via USB and want to set it up from scratch. Walks you through the [New Device Wizard](device-wizard.md) — officially, this supports **EX-CommandStation on an EX-CSB1** board. |
 | **Load from Folder** | You already have a folder of `.h` config files — either from a previous DCC Rail Commander session, or a hand-edited DCC-EX project that already has `config.h`. |
 | **Import Existing Project** | You have an EX-RAIL project scattered across files that were never created by this app (turnouts/sensors/routes mixed together by hand). This reads everything, reconciles duplicate aliases, and writes a clean, organized copy into a new folder you choose — your original files are never touched. |
 
