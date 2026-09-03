@@ -134,10 +134,12 @@ test.describe('Turnout Editor', () => {
     test('adding entry via visual appears in raw tab', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        // Click + to add a new turnout — a small pin-select popup opens first,
-        // then (since new entries are always SERVO) the calibration modal;
-        // accept the default pin and dismiss calibration to get to the form.
+        // Click + to add a new turnout — a kind picker opens first (defaulting to
+        // Servo), then a small pin-select popup, then the calibration modal; accept
+        // the defaults and dismiss calibration to get to the form.
         await page.getByTitle('Add new turnout').click()
+        await expect(page.getByRole('dialog').getByRole('heading', { name: 'New Turnout' })).toBeVisible()
+        await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click()
         await expect(page.getByRole('dialog').getByText('Select Pin', { exact: true })).toBeVisible()
         await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click()
         await expect(page.getByRole('dialog').getByText('Calibrate Servo', { exact: true })).toBeVisible()
@@ -182,7 +184,9 @@ test.describe('Turnout Editor', () => {
         await openStartupRawEditor(page)
 
         await expect(page.locator('startup-editor div.monaco-editor')).toContainText('AUTOSTART')
-        await expect(page.locator('startup-editor div.monaco-editor')).toContainText('THROW(200)')
+        // The turnout was given an alias above — AUTOSTART THROW() prefers the alias name over
+        // the raw pin number when one exists (see turnout-editor.ts's THROW() default-state hint).
+        await expect(page.locator('startup-editor div.monaco-editor')).toContainText('THROW(MAIN_JUNCTION)')
     })
 
     test('setting default state back to CLOSED removes THROW from myStartup.h', async ({ workspacePage: page }) => {
