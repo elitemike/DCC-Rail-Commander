@@ -265,6 +265,14 @@ export class Workspace {
     // ── Bottom panel / splitter ──────────────────────────────────────────────
     private splitterObj: Splitter | null = null
     activeBottomTab: 'output' | 'monitor' = 'output'
+    /**
+     * Tracked here rather than read off the Splitter — `paneSettings[1].collapsed`
+     * only reflects the pane's state at initial render, not after `.expand()`/
+     * `.collapse()` calls (see the Syncfusion Splitter API docs), so it isn't a
+     * reliable live "is the panel currently open" check. Starts false to match
+     * `attached()`'s initial `paneSettings: [..., { collapsed: true }]`.
+     */
+    private outputPanelVisible = false
 
     toggleMonitor(): void {
         const next = !this.showMonitor
@@ -287,10 +295,12 @@ export class Workspace {
 
     private openBottomPanel(): void {
         this.splitterObj?.expand(1)
+        this.outputPanelVisible = true
     }
 
     closeBottomPanel(): void {
         this.splitterObj?.collapse(1)
+        this.outputPanelVisible = false
         // Keep showMonitor in sync with the panel's actual visibility — otherwise
         // it stays true after closing via this button, and the next click on the
         // Monitor toggle just flips it back to false (a no-op, since the panel is
@@ -861,19 +871,41 @@ export class Workspace {
         this.quickCompileRunning = true
         try {
             const result = await this.pio.quickCompile(this.state.scratchPath, device.fqbn)
-            if (result.error) return // couldn't run at all (e.g. no PlatformIO target) — nothing to show
+            const seconds = (result.durationMs / 1000).toFixed(1)
+            if (result.error) {
+                // Couldn't run at all (e.g. no PlatformIO target) — nothing to mark, but still worth a
+                // line in the Output panel if it's open, same as any other outcome below.
+                this.writeQuickCompileStatus(`[Quick Compile] Could not run: ${result.error} (${seconds}s)`)
+                return
+            }
             setQuickCompileMarkers(result.diagnostics)
             const errorCount = result.diagnostics.filter((d) => d.severity === 'error').length
+            const warningCount = result.diagnostics.length - errorCount
             if (errorCount > 0) {
                 this.toastService.show({
                     title: 'Quick Compile',
                     content: `${errorCount} error${errorCount === 1 ? '' : 's'} found — see the highlighted line${errorCount === 1 ? '' : 's'}.`,
                     cssClass: 'e-toast-warning',
                 })
+                this.writeQuickCompileStatus(`[Quick Compile] ✗ ${errorCount} error${errorCount === 1 ? '' : 's'}${warningCount > 0 ? `, ${warningCount} warning${warningCount === 1 ? '' : 's'}` : ''} (${seconds}s)`)
+            } else {
+                this.writeQuickCompileStatus(`[Quick Compile] ✓ OK${warningCount > 0 ? ` (${warningCount} warning${warningCount === 1 ? '' : 's'})` : ''} (${seconds}s)`)
             }
         } finally {
             this.quickCompileRunning = false
         }
+    }
+
+    /**
+     * Writes one line to the Output panel — only if it's actually visible (the
+     * bottom panel expanded AND showing the Output tab, not Monitor). Quick
+     * Compile runs silently in the background on every Save; it never opens the
+     * panel itself the way a real Compile does, so this is purely "if you're
+     * already looking at Output, show it there too" — never forces it open.
+     */
+    private writeQuickCompileStatus(line: string): void {
+        if (!this.outputPanelVisible || this.activeBottomTab !== 'output') return
+        this.compileTerminal?.write(`\n${line}\n`)
     }
 
     /**
