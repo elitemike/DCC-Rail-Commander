@@ -29,8 +29,6 @@ theme:
         icon: material/brightness-4
         name: Switch to system preference
   features:
-    - navigation.sections
-    - navigation.expand
     - navigation.top
     - navigation.indexes
     - navigation.instant
