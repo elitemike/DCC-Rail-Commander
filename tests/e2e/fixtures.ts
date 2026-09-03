@@ -133,6 +133,25 @@ export const MOCK_SKETCH_INO = [
     'void loop() {}',
 ].join('\n') + '\n'
 
+/**
+ * A real product's own .cpp file, standing in for the ~60 files CommandStation-EX
+ * actually ships (see quick-compile.test.ts's own doc comment on why the mock
+ * sketch needs at least one of these): PlatformIO's compiledb only *describes*
+ * the main .ino's preprocessed translation unit, it doesn't materialize it on
+ * disk until a real build has run once, so the .ino alone can't be
+ * syntax-checked — but every real product also has other .cpp files that
+ * #include the same headers (config.h, myAutomation.h, ...), and those work
+ * standalone. Without this, Quick Compile e2e tests would have nothing to
+ * check config.h against.
+ */
+export const MOCK_EXTRA_CPP = [
+    '// Extra.cpp — stand-in for a real product .cpp file, so config.h has a',
+    '// syntax-checkable translation unit that includes it (see MOCK_SKETCH_INO)',
+    '#include "config.h"',
+    '',
+    'void mockExtraFunction() {}',
+].join('\n') + '\n'
+
 // Resolve Electron main entry relative to repo root (tests/e2e/ → ../../out/main/index.js)
 const ELECTRON_MAIN = resolve(__dirname, '../../out/main/index.js')
 
@@ -163,6 +182,7 @@ async function launchApp(): Promise<{ app: ElectronApplication; testDataDir: str
     writeFileSync(join(scratchPath, 'myRoutes.h'), MOCK_ROUTES_H, 'utf-8')
     writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
     writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_SKETCH_INO, 'utf-8')
+    writeFileSync(join(scratchPath, 'Extra.cpp'), MOCK_EXTRA_CPP, 'utf-8')
 
     const prefsDir = join(testDataDir, 'app-preferences')
     mkdirSync(prefsDir, { recursive: true })

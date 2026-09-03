@@ -24,7 +24,7 @@ import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
-import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels } from '../config/dccex-validators'
+import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels, setQuickCompileMarkers } from '../config/dccex-validators'
 import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
@@ -187,6 +187,10 @@ export class Workspace {
     useLatestProdVersion = true
     /** Persisted app-wide preference — when on, canCompile also requires no Monaco error markers across any config file. Loaded in binding(), toggled from the Settings dialog. */
     strictCompile = false
+    /** Persisted app-wide preference (default ON) — when on, saveFiles() fires a background syntax-only check of the sketch's own source after every Save. Loaded in binding(), toggled from the Settings dialog. */
+    quickCompileEnabled = true
+    /** True while a quick-compile round trip triggered by the most recent Save is still in flight — runQuickCompile() uses this to drop overlapping triggers rather than queuing every Save. */
+    private quickCompileRunning = false
     /** Persisted app-wide preference (default on) — mirrored onto configEditorState.strictAliases, which the turnout/roster/sensor/route/sequence editors actually consult. Loaded in binding(), toggled from the Settings dialog. */
     strictAliases = true
     /** Live mirror of hasErrorMarkers(), kept current via onMarkersChanged() (see binding()/detaching()) — only consulted when strictCompile is on. */
@@ -319,6 +323,7 @@ export class Workspace {
         this.verboseCompile = (await this.preferences.get<boolean>('verboseCompile')) ?? false
         this.useLatestProdVersion = (await this.preferences.get<boolean>('useLatestProdVersion')) ?? true
         this.strictCompile = (await this.preferences.get<boolean>('strictCompile')) ?? false
+        this.quickCompileEnabled = (await this.preferences.get<boolean>('quickCompileEnabled')) ?? true
         // Strict aliases: this project's own override (SavedConfiguration.strictAliases — set by
         // the existing-project importer's summary dialog, or by a previous setStrictAliases() call
         // below while this project was open) wins if present; otherwise falls back to the app-wide
@@ -374,6 +379,12 @@ export class Workspace {
         void this.preferences.set('strictCompile', enabled)
     }
 
+    /** Persists the quick-compile-on-save preference — called from the Settings dialog. */
+    setQuickCompileEnabled(enabled: boolean): void {
+        this.quickCompileEnabled = enabled
+        void this.preferences.set('quickCompileEnabled', enabled)
+    }
+
     /**
      * Persists the strict-aliases setting and mirrors it onto configEditorState, which the
      * turnout/roster/sensor/route/sequence editors actually consult — called from the Settings
@@ -410,12 +421,14 @@ export class Workspace {
                 verboseCompile: this.verboseCompile,
                 useLatestProdVersion: this.useLatestProdVersion,
                 strictCompile: this.strictCompile,
+                quickCompileEnabled: this.quickCompileEnabled,
                 strictAliases: this.strictAliases,
                 onAutoConnectChange: (v: boolean) => this.setAutoConnectMonitor(v),
                 onShowMonitorOnConnectChange: (v: boolean) => this.setShowMonitorOnConnect(v),
                 onVerboseCompileChange: (v: boolean) => this.setVerboseCompile(v),
                 onUseLatestProdVersionChange: (v: boolean) => this.setUseLatestProdVersion(v),
                 onStrictCompileChange: (v: boolean) => this.setStrictCompile(v),
+                onQuickCompileEnabledChange: (v: boolean) => this.setQuickCompileEnabled(v),
                 onStrictAliasesChange: (v: boolean) => this.setStrictAliases(v),
             },
         })
@@ -831,6 +844,36 @@ export class Workspace {
         await Promise.all(writes)
         this.configEditorState.clearChanges()
         await this.updateSavedConfig()
+        if (this.quickCompileEnabled) void this.runQuickCompile()
+    }
+
+    /**
+     * Fires a background syntax-only check of the sketch's own source files —
+     * see quickCompile() in platformio.service.ts / src/main/platformio.ts.
+     * Deliberately not awaited by saveFiles() — Save itself must stay instant.
+     * Drops (rather than queues) an overlapping trigger from a rapid second
+     * Save, since the in-flight check is already about to check the latest
+     * on-disk content.
+     */
+    private async runQuickCompile(): Promise<void> {
+        const device = this.state.selectedDevice
+        if (this.quickCompileRunning || !device?.fqbn || !this.state.scratchPath) return
+        this.quickCompileRunning = true
+        try {
+            const result = await this.pio.quickCompile(this.state.scratchPath, device.fqbn)
+            if (result.error) return // couldn't run at all (e.g. no PlatformIO target) — nothing to show
+            setQuickCompileMarkers(result.diagnostics)
+            const errorCount = result.diagnostics.filter((d) => d.severity === 'error').length
+            if (errorCount > 0) {
+                this.toastService.show({
+                    title: 'Quick Compile',
+                    content: `${errorCount} error${errorCount === 1 ? '' : 's'} found — see the highlighted line${errorCount === 1 ? '' : 's'}.`,
+                    cssClass: 'e-toast-warning',
+                })
+            }
+        } finally {
+            this.quickCompileRunning = false
+        }
     }
 
     /**

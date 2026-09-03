@@ -59,6 +59,13 @@ export function registerPlatformIoIpcHandlers(platformIo: PlatformIoService): vo
         return result
     })
 
+    ipcMain.handle('pio:quick-compile', async (_event, sketchPath: string, fqbn: string) => {
+        console.debug('[ipc] quick-compile request', { sketchPath, fqbn })
+        const result = await platformIo.quickCompile(sketchPath, fqbn)
+        console.debug('[ipc] quick-compile result', { success: result.success, diagnostics: result.diagnostics.length, durationMs: result.durationMs })
+        return result
+    })
+
     ipcMain.handle('pio:upload', async (_event, sketchPath: string, fqbn: string, port: string, verbose?: boolean) => {
         console.debug('[ipc] upload request', { sketchPath, fqbn, port, verbose, IS_MOCK_UPLOAD })
         if (IS_MOCK_UPLOAD) {

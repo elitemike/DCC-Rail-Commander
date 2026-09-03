@@ -11,12 +11,14 @@ export interface SettingsDialogModel {
     verboseCompile: boolean
     useLatestProdVersion: boolean
     strictCompile: boolean
+    quickCompileEnabled: boolean
     strictAliases: boolean
     onAutoConnectChange: (enabled: boolean) => void
     onShowMonitorOnConnectChange: (enabled: boolean) => void
     onVerboseCompileChange: (enabled: boolean) => void
     onUseLatestProdVersionChange: (enabled: boolean) => void
     onStrictCompileChange: (enabled: boolean) => void
+    onQuickCompileEnabledChange: (enabled: boolean) => void
     onStrictAliasesChange: (enabled: boolean) => void
 }
 
@@ -39,6 +41,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     verboseCompile = false
     useLatestProdVersion = true
     strictCompile = false
+    quickCompileEnabled = true
     strictAliases = true
 
     autoConnectEl!: HTMLInputElement
@@ -46,6 +49,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     verboseCompileEl!: HTMLInputElement
     useLatestProdVersionEl!: HTMLInputElement
     strictCompileEl!: HTMLInputElement
+    quickCompileEnabledEl!: HTMLInputElement
     strictAliasesEl!: HTMLInputElement
     blocklySoundsEl!: HTMLInputElement
 
@@ -54,6 +58,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     private sfVerboseCompile?: CheckBox
     private sfUseLatestProdVersion?: CheckBox
     private sfStrictCompile?: CheckBox
+    private sfQuickCompileEnabled?: CheckBox
     private sfStrictAliases?: CheckBox
     private sfBlocklySounds?: CheckBox
 
@@ -64,6 +69,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.verboseCompile = model.verboseCompile
         this.useLatestProdVersion = model.useLatestProdVersion
         this.strictCompile = model.strictCompile
+        this.quickCompileEnabled = model.quickCompileEnabled
         this.strictAliases = model.strictAliases
     }
 
@@ -98,6 +104,12 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         })
         this.sfStrictCompile.appendTo(this.strictCompileEl)
 
+        this.sfQuickCompileEnabled = new CheckBox({
+            checked: this.quickCompileEnabled,
+            change: (args) => this.model.onQuickCompileEnabledChange(args.checked),
+        })
+        this.sfQuickCompileEnabled.appendTo(this.quickCompileEnabledEl)
+
         this.sfStrictAliases = new CheckBox({
             checked: this.strictAliases,
             change: (args) => this.model.onStrictAliasesChange(args.checked),
@@ -122,6 +134,8 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.sfUseLatestProdVersion = undefined
         this.sfStrictCompile?.destroy()
         this.sfStrictCompile = undefined
+        this.sfQuickCompileEnabled?.destroy()
+        this.sfQuickCompileEnabled = undefined
         this.sfStrictAliases?.destroy()
         this.sfStrictAliases = undefined
         this.sfBlocklySounds?.destroy()

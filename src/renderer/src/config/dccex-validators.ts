@@ -15,6 +15,7 @@ import { definedTracksFor } from '../components/visual-editors/exrail-block-comp
 import { collectObjectIdReferences, getPrimaryAliasForId, inferAliasTypes, parseAliasNumericValue, validateAliasName, validateAliasValue, validateSequenceIds, type AliasEntry, type AliasTargetType, type ObjectIdCollections, type SequenceIdEntry, type SequenceIdViolation, type SequenceObjectKind } from '../utils/myAutomationParser'
 import { getSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { getCompletions } from './file-configs'
+import type { QuickCompileDiagnostic } from '../../../types/ipc'
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
@@ -1035,6 +1036,8 @@ function validateAliasRequired(text: string, filename: string, out: monaco.edito
 // ── Registration ──────────────────────────────────────────────────────────────
 
 const OWNER = 'dccex-validator'
+/** Separate marker owner for Quick Compile results — see setQuickCompileMarkers() below. */
+const QUICK_COMPILE_OWNER = 'quick-compile'
 
 const FILE_VALIDATORS: Record<string, (text: string, out: monaco.editor.IMarkerData[]) => void> = {
     'myRoster.h': validateRoster,
@@ -1233,6 +1236,43 @@ export function hasErrorMarkers(): boolean {
 /** Fires whenever any model's markers change anywhere in the app — used to keep strict-compile's error gate live-updated without polling. */
 export function onMarkersChanged(callback: () => void): monaco.IDisposable {
     return monaco.editor.onDidChangeMarkers(() => callback())
+}
+
+/**
+ * Applies Quick Compile diagnostics (see workspace.ts's runQuickCompile()) as Monaco markers under their own
+ * `'quick-compile'` owner — separate from the local-validator `OWNER` above, so the two never clobber each
+ * other. Every open model is touched on every call, including with an empty marker list, so a diagnostic that
+ * no longer reproduces (the user fixed it and saved again) has its squiggle cleared rather than left stale.
+ * Owner-agnostic consumers (`hasErrorMarkers()`, `filesWithErrorMarkers()`, Strict Compile) pick these up
+ * automatically, same as the local validators' own markers.
+ */
+export function setQuickCompileMarkers(diagnostics: QuickCompileDiagnostic[]): void {
+    const byFile = new Map<string, QuickCompileDiagnostic[]>()
+    for (const d of diagnostics) {
+        const list = byFile.get(d.file)
+        if (list) list.push(d)
+        else byFile.set(d.file, [d])
+    }
+
+    for (const model of monaco.editor.getModels()) {
+        const filename = model.uri.path.replace(/^\//, '')
+        const fileDiagnostics = byFile.get(filename) ?? []
+        const markers: monaco.editor.IMarkerData[] = fileDiagnostics.map((d) => {
+            // Diagnostics come from the file as saved — clamp defensively in case the model's
+            // content has since changed (e.g. the user started typing again before this
+            // round's result came back) and no longer has that many lines.
+            const line = Math.min(Math.max(d.line, 1), model.getLineCount())
+            return {
+                severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+                message: d.message,
+                startLineNumber: line,
+                startColumn: 1,
+                endLineNumber: line,
+                endColumn: model.getLineMaxColumn(line),
+            }
+        })
+        monaco.editor.setModelMarkers(model, QUICK_COMPILE_OWNER, markers)
+    }
 }
 
 /** Filenames (matching state.configFiles' `name`, e.g. "myAutomation.h") of every open Monaco model that currently has an Error-severity marker. Drives the file-list error indicator in workspace.html. */
