@@ -11,7 +11,11 @@ with visual editors, while still letting you drop into raw text whenever you wan
 !!! note "Current support"
     Right now, **EX-CommandStation** is the only officially supported product, and only on the **EX-CSB1**
     board, set up through the [New Device Wizard](device-wizard.md)'s guided visual setup. Other boards and
-    products (EX-IOExpander, EX-Turntable) aren't officially supported yet.
+    products (EX-IOExpander, EX-Turntable, non-CSB1 EX-CommandStation boards) aren't officially supported
+    through the wizard yet — but their config files still open fine via **Load from Folder** or
+    **Import Existing Project** (see [Getting Started](getting-started.md)), and every editor's **Raw** tab
+    edits the exact same text a hand-written project would, so those projects work as well as they always
+    have, just without a guided setup or a visual form tailored to that product.
 
 ## What this guide covers
 
