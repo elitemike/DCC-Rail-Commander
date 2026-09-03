@@ -32,6 +32,8 @@ repository; the latest **Prod** tag is marked **(Recommended)** and preselected.
 clones (or reuses an already-cloned copy of) that repository at the chosen tag — this is the only step that
 needs network access, and only if that version hasn't been fetched before.
 
+![New Device Wizard, Select Version step, showing the firmware tag dropdown with the recommended Prod tag preselected](assets/screenshots/wizard-select-version.png)
+
 ## Steps 3–5 — WiFi, Hardware, Track Power *(EX-CSB1 boards only)*
 
 These three steps only appear for **EX-CSB1** boards, which have onboard WiFi, an OLED display, and (in some
@@ -50,6 +52,8 @@ controller) or **Station** (the board joins an existing network you specify).
   next to the password field to reveal what you've typed.
 - **Channel** — Access Point mode only, 1–11.
 
+![New Device Wizard, WiFi step, Access Point mode with hostname, SSID, password, and channel fields](assets/screenshots/wizard-wifi.png)
+
 ### Hardware
 
 Two independent settings share this step:
@@ -62,11 +66,15 @@ Two independent settings share this step:
   `EXCSB1_WITH_EX8874` motor driver instead of the standard `EXCSB1` driver, and adds Track C/D to the Track
   Power step below.
 
+![New Device Wizard, Hardware step, showing Display Type/Scroll Mode and the stacked motor shield checkbox](assets/screenshots/wizard-hardware.png)
+
 ### Track Power
 
 The same live form used later in [Startup](config/startup.md) — set DCC/DC/Mixed mode per track, and whether
 tracks power on, off, or individually at startup. Anything you don't touch here falls back to firmware
 defaults (**all tracks off at startup**, per-track mode `MAIN`/`PROG`) when you review it on the Confirm step.
+
+![New Device Wizard, Track Power step, showing the per-track mode and startup power controls](assets/screenshots/wizard-track-power.png)
 
 ## Final Step — Confirm
 
