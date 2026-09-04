@@ -16,9 +16,11 @@
         <!-- Quick commands — collapsible row -->
         <div class="flex flex-wrap items-center gap-1">
             <!-- Status group -->
-            <button repeat.for="qc of quickCommands" click.trigger="sendQuickCommand(qc.cmd)" title="Send: ${qc.cmd}"
+            <button repeat.for="qc of quickCommands" click.trigger="handleQuickCommand(qc)" title="Send: ${qc.cmd}"
                 class="px-2 py-0.5 rounded text-xs font-mono transition-colors" class.bind="qc.group === 'estop'
                         ? 'bg-red-700/70 hover:bg-red-600 text-red-100'
+                        : qc.group === 'danger'
+                        ? 'bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-700/60'
                         : qc.group === 'power'
                         ? 'bg-blue-700/50 hover:bg-blue-600/70 text-blue-200'
                         : qc.group === 'exrail'
