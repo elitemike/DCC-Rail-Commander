@@ -990,10 +990,13 @@ function validateTrailingLineGarbage(text: string, filename: string, out: monaco
  * (see SEQUENCE_ID_MACRO's own comment on that) isn't strict-alias-enforced the way one in
  * myAutomations.h is.
  */
-const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType }> = {
+const STRICT_ALIAS_TARGETS: Record<string, { source: string; type: AliasTargetType; scanComments?: boolean }> = {
     'myRoster.h': { source: '\\bROSTER\\s*\\(\\s*(\\d+)', type: 'Roster' },
     'myTurnouts.h': { source: '\\b(?:SERVO_TURNOUT|TURNOUTL|TURNOUT|PIN_TURNOUT|VIRTUAL_TURNOUT)\\s*\\(\\s*(\\d+)', type: 'Turnout' },
-    'mySensors.h': { source: '\\bSENSOR\\s*\\(\\s*(\\d+)', type: 'Sensor' },
+    // Unlike every other target here, mySensors.h's declarations ARE comments (see
+    // parseSensorsFromFile's doc comment in myAutomationParser.ts) — scanComments keeps
+    // validateAliasRequired() from blanking them out before matching.
+    'mySensors.h': { source: '\\/\\/\\s*Sensor\\s+(\\d+)', type: 'Sensor', scanComments: true },
     'myRoutes.h': { source: '\\bROUTE\\s*\\(\\s*(\\d+)', type: 'Route' },
     'mySequences.h': { source: '\\bSEQUENCE\\s*\\(\\s*(\\d+)', type: 'Sequence' },
     'myAutomations.h': { source: '\\bAUTOMATION\\s*\\(\\s*(\\d+)', type: 'Automation' },
@@ -1017,7 +1020,7 @@ function validateAliasRequired(text: string, filename: string, out: monaco.edito
     const target = STRICT_ALIAS_TARGETS[filename]
     if (!target) return
 
-    const scanText = blankLineComments(text)
+    const scanText = target.scanComments ? text : blankLineComments(text)
     const stringMask = buildStringMask(scanText)
     const re = new RegExp(target.source, 'g')
     let m: RegExpExecArray | null
@@ -1067,7 +1070,7 @@ function validateModel(model: monaco.editor.ITextModel): void {
     if (validate) validate(text, markers)
 
     // Case-sensitivity, unknown-command, and trailing-garbage checks apply to every
-    // macro-file "vocabulary" (ROSTER, SERVO_TURNOUT, SENSOR, SIGNAL, THROW, ...),
+    // macro-file "vocabulary" (ROSTER, SERVO_TURNOUT, JMRI_SENSOR, SIGNAL, THROW, ...),
     // including the EXRAIL script files — EXRAIL is a closed, one-statement-per-line
     // macro DSL, so neither an undefined call nor stray extra text after a valid one
     // can compile there.

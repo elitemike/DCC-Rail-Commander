@@ -81,7 +81,7 @@ describe('EventHandlersEditorCustomElement.addableGroups', () => {
     })
 
     it('includes a sensor-gated handler once a sensor is defined', () => {
-        const state = { eventHandlers: [], roster: [], turnouts: [], sensors: [{ id: 1, pin: 1, description: '' }], signals: [], routes: [], sequences: [], aliases: [], hasStackedMotorShield: false } as unknown as ConfigEditorState
+        const state = { eventHandlers: [], roster: [], turnouts: [], sensors: [{ id: 1, description: '' }], signals: [], routes: [], sequences: [], aliases: [], hasStackedMotorShield: false } as unknown as ConfigEditorState
         const editor = Object.create(EventHandlersEditorCustomElement.prototype) as EventHandlersEditorCustomElement
         Object.assign(editor, { state })
         const ids = editor.addableGroups.flatMap(g => g.defs.map(d => d.id))

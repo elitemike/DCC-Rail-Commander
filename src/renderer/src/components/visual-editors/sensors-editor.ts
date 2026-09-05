@@ -15,32 +15,35 @@ export class SensorsEditorCustomElement {
     rawEditor: any = null
 
     /**
-     * Sensor rows bind straight to `state.sensors[i]` and mutate it live as
-     * the user types (two-way `value.two-way`), so by the time `updateSensor`
-     * fires on blur, `s.id` already holds the new value. Capture the old id
-     * on focus so a rename can carry its alias (state.aliases) forward —
-     * mirrors what the turnout/roster editors get for free from their
-     * edit-buffer pattern.
+     * A sensor's `id` IS its VPin (real EXRAIL has no separate declaration id — see
+     * myAutomationParser.ts's SensorEntry doc), so it's edited via <vpin-picker>, whose
+     * `value.two-way` mutates `state.sensors[i].id` live as soon as a board/channel is
+     * picked — by the time `updateSensor` fires (on-commit), `s.id` already holds the new
+     * value. `captureRowBeforeEdit`'s `focusin` on the row captures the old id before that
+     * happens, so a rename can carry its alias (state.aliases) forward.
      */
     private readonly _idBeforeEdit = new Map<number, number>()
 
     /**
      * Snapshot of a row's full entry, captured on `focusin` of the row (before any
-     * field's `value.two-way` binding has a chance to mutate it live). Because id/pin/
-     * description bind two-way directly onto `state.sensors[idx]` (no edit-buffer, unlike
-     * turnout/roster editors), a blocked strict-aliases commit in updateSensor() must
-     * explicitly revert to this snapshot — otherwise the DOM edit the user just typed is
-     * already live in the model regardless of whether updateSensor() "applies" it.
+     * field's `value.two-way` binding has a chance to mutate it live). Because id/description
+     * bind two-way directly onto `state.sensors[idx]` (no edit-buffer, unlike turnout/roster
+     * editors), a blocked strict-aliases commit in updateSensor() must explicitly revert to
+     * this snapshot — otherwise the DOM edit the user just typed is already live in the model
+     * regardless of whether updateSensor() "applies" it.
      */
     private readonly _rowBeforeEdit = new Map<number, SensorEntry>()
 
-    /** `focusin.trigger` on the row container — see `_rowBeforeEdit`. Only the first focus
-     *  in an edit session captures a snapshot; later focuses within the same uncommitted
-     *  session must not overwrite it with an already-live-mutated value. */
+    /** `focusin.trigger` on the row container. Only the first focus in an edit session
+     *  captures a snapshot; later focuses within the same uncommitted session must not
+     *  overwrite it with an already-live-mutated value. Captures both `_rowBeforeEdit` and
+     *  `_idBeforeEdit` together since they're both "value before this edit session began". */
     captureRowBeforeEdit(idx: number): void {
         if (this._rowBeforeEdit.has(idx)) return
         const s = this.state.sensors[idx]
-        if (s) this._rowBeforeEdit.set(idx, { ...s })
+        if (!s) return
+        this._rowBeforeEdit.set(idx, { ...s })
+        this._idBeforeEdit.set(idx, s.id)
     }
 
     attached(): void {
@@ -81,8 +84,7 @@ export class SensorsEditorCustomElement {
     }
 
     addSensor() {
-        const nextId = (this.state.sensors[this.state.sensors.length - 1]?.id ?? 0) + 1
-        this.state.sensors = [...this.state.sensors, { id: nextId, pin: this.state.nextFreeVpin, description: 'New Sensor' }]
+        this.state.sensors = [...this.state.sensors, { id: this.state.nextFreeVpin, description: 'New Sensor' }]
         this.state.syncAll()
     }
 
@@ -92,11 +94,11 @@ export class SensorsEditorCustomElement {
     }
 
     updateSensor(idx: number, s: SensorEntry) {
-        // `value.two-way` on `<input type="number">` round-trips through the DOM's
-        // `.value`, which is always a string — coerce back so strict-equality
-        // lookups elsewhere (alias id matching, EXRAIL reference validation)
-        // don't silently fail to match a numeric target.
-        const entry: SensorEntry = { ...s, id: Number(s.id), pin: Number(s.pin) }
+        // `value.two-way` on <vpin-picker> and `<input type="number">` round-trips through the
+        // DOM's `.value`, which is always a string — coerce back so strict-equality lookups
+        // elsewhere (alias id matching, EXRAIL reference validation) don't silently fail to
+        // match a numeric target.
+        const entry: SensorEntry = { ...s, id: Number(s.id) }
         // Strict aliases: block *any* field save on a sensor that currently has no
         // alias, not just alias edits themselves — set one via the alias-picker
         // first, which goes through makeAliasChangeHandler()/syncAliasForId() below
@@ -129,12 +131,6 @@ export class SensorsEditorCustomElement {
     /** Passed to <vpin-picker on-commit.bind>, which needs a zero-arg callback rather than an event to trigger. */
     makeSensorCommitHandler(idx: number): () => void {
         return () => this.updateSensor(idx, this.state.sensors[idx])
-    }
-
-    /** `focus.trigger` on the ID input — see `_idBeforeEdit`. */
-    captureIdBeforeEdit(idx: number): void {
-        const s = this.state.sensors[idx]
-        if (s) this._idBeforeEdit.set(idx, s.id)
     }
 
     /** Passed to <alias-picker on-change.bind>. */

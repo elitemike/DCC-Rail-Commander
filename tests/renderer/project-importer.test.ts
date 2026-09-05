@@ -82,13 +82,13 @@ describe('importExistingProject — merging and conflict detection', () => {
 
     it('does not flag identical re-declarations as a conflict', () => {
         const files = [
-            fileOf('a.h', 'SENSOR(1, 30, "Occupancy")'),
-            fileOf('b.h', 'SENSOR(1, 30, "Occupancy")'),
+            fileOf('a.h', '// Sensor 30 - Occupancy'),
+            fileOf('b.h', '// Sensor 30 - Occupancy'),
         ]
         const result = importExistingProject(files)
         // Still flagged — mergeByKey keys purely on id, any second declaration under the same id
         // from a different file is reported so the user can confirm it really is a duplicate.
-        expect(result.conflicts).toEqual([{ kind: 'Sensor', id: 1, files: ['a.h', 'b.h'] }])
+        expect(result.conflicts).toEqual([{ kind: 'Sensor', id: 30, files: ['a.h', 'b.h'] }])
     })
 })
 
