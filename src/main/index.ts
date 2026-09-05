@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron'
 import { join } from 'path'
 import { config } from './config'
 import { registerAllIpcHandlers } from './ipc'
@@ -134,6 +134,14 @@ function createWindow(): BrowserWindow {
     win.on('enter-full-screen', () => win.webContents.send('window:fullscreen-changed', true))
     win.on('leave-full-screen', () => win.webContents.send('window:fullscreen-changed', false))
 
+    const reloadContent = (): void => {
+        if (process.env['ELECTRON_RENDERER_URL']) {
+            win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+        } else {
+            win.loadFile(join(__dirname, '../renderer/index.html'))
+        }
+    }
+
     // F5 or Ctrl+R / Cmd+R → reload the renderer
     // F12 or Ctrl+Shift+I / Cmd+Option+I → toggle DevTools
     win.webContents.on('before-input-event', (event, input) => {
@@ -143,11 +151,7 @@ function createWindow(): BrowserWindow {
             ((input.control || input.meta) && input.key === 'r')
         if (reload) {
             event.preventDefault()   // stop Chromium's built-in reload (would restore the hash URL)
-            if (process.env['ELECTRON_RENDERER_URL']) {
-                win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-            } else {
-                win.loadFile(join(__dirname, '../renderer/index.html'))
-            }
+            reloadContent()
             return
         }
 
@@ -157,19 +161,35 @@ function createWindow(): BrowserWindow {
         if (devtools) win.webContents.toggleDevTools()
     })
 
+    // ── Recovery from a blank/frozen window ───────────────────────────────────
+    // Reported symptom: the app sometimes goes blank after the machine is
+    // locked/unlocked and needs a full restart. Two known Chromium behaviors
+    // cause this, and neither self-heals without help:
+    //  1. A window fully occluded by the OS lock screen can come back without
+    //     Chromium scheduling a repaint — `invalidate()` is Electron's
+    //     documented fix, forcing a repaint on resume/unlock.
+    //  2. If the renderer process actually crashes/OOMs while occluded, the
+    //     window just sits blank forever with nothing to reload it — so do
+    //     that automatically instead of requiring the user to restart the app.
+    powerMonitor.on('resume', () => {
+        if (!win.isDestroyed()) win.webContents.invalidate()
+    })
+    powerMonitor.on('unlock-screen', () => {
+        if (!win.isDestroyed()) win.webContents.invalidate()
+    })
+    win.webContents.on('render-process-gone', (_event, details) => {
+        if (win.isDestroyed()) return
+        console.error(`Renderer process gone (${details.reason}), reloading window`)
+        reloadContent()
+    })
+
     // Open external links in the OS browser, not in Electron
     win.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url)
         return { action: 'deny' }
     })
 
-    if (process.env['ELECTRON_RENDERER_URL']) {
-        // Dev: Vite dev-server URL injected by electron-vite
-        win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    } else {
-        // Prod: load compiled HTML
-        win.loadFile(join(__dirname, '../renderer/index.html'))
-    }
+    reloadContent()
 
     return win
 }
