@@ -75,9 +75,9 @@ test.describe('Sensors VPin logic', () => {
         await expect(thirdRow.locator('[data-field="pin-value"]')).toHaveValue('100')
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(1, 150')
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(2, 101')
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(3, 100')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 150 - New Sensor')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 101 - New Sensor')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 100 - New Sensor')
     })
 })
 
@@ -122,6 +122,6 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
         await expect(row.getByText('VPin 102', { exact: true })).toBeVisible()
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(1, 102')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 102 - New Sensor')
     })
 })

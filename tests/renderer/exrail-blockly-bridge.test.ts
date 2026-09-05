@@ -23,7 +23,7 @@ const DEFINED: DefinedObjects = {
         { id: 200, description: 'A', comment: '', type: 'SERVO', pin: 1, activeAngle: 0, inactiveAngle: 0, profile: 'IMMEDIATE', defaultState: 'CLOSE' } as unknown as DefinedObjects['turnouts'][number],
         { id: 201, description: 'B', comment: '', type: 'SERVO', pin: 2, activeAngle: 0, inactiveAngle: 0, profile: 'IMMEDIATE', defaultState: 'CLOSE' } as unknown as DefinedObjects['turnouts'][number],
     ],
-    sensors: [{ id: 1, pin: 1, description: '' }, { id: 2, pin: 2, description: '' }],
+    sensors: [{ id: 1, description: '' }, { id: 2, description: '' }],
     routes: [{ id: 5, description: '', body: '' }],
     sequences: [],
     aliases: [{ name: 'mysidingpoint', value: '200', aliasType: 'Turnout' }],

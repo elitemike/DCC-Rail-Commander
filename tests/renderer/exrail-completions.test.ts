@@ -17,7 +17,7 @@ const COMPLETION_DATA = {
     ],
     roster: [{ dccAddress: 3, name: 'Thomas', functions: [], comment: '' }],
     turnouts: [{ id: 200, type: 'SERVO' as const, pin: 25, activeAngle: 410, inactiveAngle: 205, profile: 'Slow' as const, description: 'Main Line Junction', defaultState: 'CLOSED' as const }],
-    sensors: [{ id: 40, pin: 17, description: 'Yard Occupancy' }],
+    sensors: [{ id: 40, description: 'Yard Occupancy' }],
     routes: [{ id: 12, description: 'Coal Yard Exit', body: '  THROW(200)' }],
     sequences: [{ id: 66, body: '  FWD(30)' }],
     signals: [{ red: 8, amber: 9, green: 10, description: 'Home signal' }],

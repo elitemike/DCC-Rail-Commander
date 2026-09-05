@@ -642,17 +642,26 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         ],
     },
     'mySensors.h': {
+        // Pure bookkeeping for this app's own Visual editor, not compiled EXRAIL — a sensor's
+        // number is a direct VPin reference and needs no declaration at all to be usable
+        // (ONSENSOR/AT/IF), so there's no macro to offer completions for here. See
+        // parseSensorsFromFile's doc comment in myAutomationParser.ts. This one completion
+        // entry exists so dccex-validators.ts's hasCommandVocabulary() stays true (needed so
+        // validateModel() doesn't early-return before reaching the Strict-aliases check) —
+        // its lowercase label deliberately fails validateExrailCommandCasing/
+        // validateUnknownExrailCommand's ALL-CAPS canonicalNames filter, so those don't try to
+        // vocabulary-check a file that has no real EXRAIL vocabulary at all.
         friendlyName: 'Sensors',
         completions: [
             {
-                label: 'SENSOR',
-                detail: 'SENSOR(id, pin, "desc")',
-                documentation: 'Define a sensor connected to a GPIO pin.',
-                insertText: 'SENSOR(${1:id}, ${2:pin}, "${3:description}")',
+                label: 'Sensor',
+                detail: '// Sensor id - description',
+                documentation: "Map a VPin to a friendly name for this app's Visual editor. Not compiled — use the Sensors editor's Alias field for a name EX-RAIL scripts can actually reference.",
+                insertText: '// Sensor ${1:id} - ${2:description}',
                 hover: {
-                    title: 'SENSOR Macro',
-                    description: 'Define a sensor connected to a GPIO pin.',
-                    example: 'SENSOR(1, 17, "Yard Entrance")',
+                    title: 'Sensor bookkeeping comment',
+                    description: "A plain comment mapping a VPin to a friendly name, read by this app's Visual editor. EXRAIL has no sensor declaration macro at all — a VPin needs no declaration to be usable in ONSENSOR/AT/IF.",
+                    example: '// Sensor 17 - Yard Entrance',
                 },
             },
         ],

@@ -112,9 +112,9 @@ export interface AutomationData {
 
 // ─── Sensors, Signals, Routes, Sequences, Aliases parsing ───────────────
 
+/** `id` is the VPin itself — see parseSensorsFromFile below for why there's no separate pin field. */
 export interface SensorEntry {
     id: number;
-    pin: number;
     description: string;
 }
 
@@ -269,7 +269,7 @@ const EXRAIL_RESERVED_WORDS = new Set([
     'ONBUTTON', 'ONBITMAP', 'ONBLOCKENTER', 'ONBLOCKEXIT', 'ONACTIVATE', 'ONACTIVATEL', 'ONDEACTIVATE', 'ONDEACTIVATEL',
     'ONCLOSE', 'ONTHROW', 'ONRED', 'ONAMBER', 'ONGREEN', 'ONRAILSYNCON', 'ONRAILSYNCOFF', 'ONCLOCKTIME',
     'ONCLOCKMINS', 'ONTIME', 'ONOVERLOAD', 'ONROTATE', 'ONACON', 'ONACOF', 'ONLCC', 'ALIAS',
-    'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
+    'ROSTER', 'JMRI_SENSOR', 'JMRI_SENSOR_NOPULLUP', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
     'ENDIF', 'IFOCCUPIED',
 ]);
 
@@ -384,38 +384,59 @@ export function listObjectIdsForType(type: AliasTargetType, data: ObjectIdCollec
     }
 }
 
+// mySensors.h is pure bookkeeping for this app's own Visual editor — a comment mapping a
+// sensor's number (VPin) to a friendly name, nothing more. There is no standalone "SENSOR"
+// declaration macro in real EXRAIL at all (never was — it was this app's own fabrication, and
+// never shipped, so there's no real-world file to stay compatible with): a sensor's number
+// (used in ONSENSOR/AT/IF/ALIAS, everywhere) is a direct VPin reference and needs no
+// declaration to be usable. JMRI_SENSOR (which *is* a real macro) would make one JMRI/
+// WiThrottle-visible, but this app deliberately never writes it — that's compiled behavior
+// this editor doesn't try to manage, so it's left as something to hand-write elsewhere (e.g. a
+// custom EXRAIL file) if actually needed. A real hand-rolled project can still have genuine
+// JMRI_SENSOR declarations though, so parseSensorsFromFile still reads those on load, so the
+// sensor shows up in the Visual editor and its VPin is accounted for — but saving downgrades
+// it to a plain comment, same as every other entry; the real declaration is not preserved.
 export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
+    // Collected with each match's file position so entries come out in file order regardless
+    // of which recognized form produced them.
+    const found: { index: number; entries: SensorEntry[] }[] = [];
+    let m: RegExpExecArray | null;
+
+    // Canonical form: `// Sensor <id>[ - <description>]`.
+    const commentRe = /^[ \t]*\/\/[ \t]*Sensor[ \t]+(\d+)[ \t]*(?:-[ \t]*(.*?))?[ \t]*$/gim;
+    while ((m = commentRe.exec(fileContent)) !== null) {
+        found.push({ index: m.index, entries: [{ id: parseInt(m[1], 10), description: (m[2] ?? '').trim() }] });
+    }
+
+    // JMRI_SENSOR only ever appears as *live* (non-commented) code, so work from a copy with
+    // whole-line comments blanked out — otherwise a commented-out example elsewhere in the
+    // file (or the canonical form above) could be picked up as a real declaration.
     const uncommented = fileContent
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const sensorRe = /SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*"([^"]*)"\s*\)(?:\s*\/\/\s*(.*))?/g;
-    const out: SensorEntry[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = sensorRe.exec(uncommented)) !== null) {
-        out.push({ id: parseInt(m[1], 10), pin: parseInt(m[2], 10), description: m[3] });
-    }
 
-    // ── JMRI_SENSOR(vpin, count) — bulk-declares `count` sensors starting at `vpin`, each
-    // addressable by its own pin number, exactly as if declared individually via
-    // SENSOR(pin, pin, ""). Expanded here into individual entries rather than kept as one
-    // union variant — the resulting rows are structurally identical to SENSOR-declared ones
-    // (id === pin), so every existing consumer (editor, VPin allocation, validators) needs no
-    // changes to handle them.
-    const jmriRe = /JMRI_SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // JMRI_SENSOR(vpin[, count]) — a real EXRAIL macro this app never writes but still reads,
+    // per the note above. Count omitted or 1 declares a single sensor, whose friendly name (if
+    // any) is the trailing comment. A count > 1 bulk-declares a contiguous run starting at
+    // vpin; a single trailing comment can't be distributed across those, so each expands with
+    // an empty description. JMRI_SENSOR_NOPULLUP is accepted the same way.
+    const jmriRe = /(?<![A-Za-z_])JMRI_SENSOR(?:_NOPULLUP)?\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = jmriRe.exec(uncommented)) !== null) {
         const start = parseInt(m[1], 10);
-        const count = parseInt(m[2], 10);
-        for (let i = 0; i < count; i++) {
-            out.push({ id: start + i, pin: start + i, description: '' });
-        }
+        const count = m[2] !== undefined ? parseInt(m[2], 10) : 1;
+        const entries: SensorEntry[] = count === 1
+            ? [{ id: start, description: (m[3] ?? '').trim() }]
+            : Array.from({ length: count }, (_, i) => ({ id: start + i, description: '' }));
+        found.push({ index: m.index, entries });
     }
 
-    return out;
+    found.sort((a, b) => a.index - b.index);
+    return found.flatMap(f => f.entries);
 }
 
 export function serializeSensorsToFile(sensors: SensorEntry[]): string {
-    return sensors.map(s => `SENSOR(${s.id}, ${s.pin}, "${s.description}")`).join('\n');
+    return sensors.map(s => `// Sensor ${s.id}${s.description ? ` - ${s.description}` : ''}`).join('\n');
 }
 
 export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
