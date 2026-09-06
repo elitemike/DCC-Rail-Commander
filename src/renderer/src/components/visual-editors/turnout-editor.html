@@ -134,6 +134,16 @@
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                        <input type="checkbox" checked.bind="isHidden"
+                                            change.trigger="toggleHidden($event.target.checked)"
+                                            class="rounded border-gray-300 dark:border-white/20" />
+                                        Hidden from throttles
+                                    </label>
+                                    <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                </div>
+                                <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
@@ -195,6 +205,16 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1.5">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                        <input type="checkbox" checked.bind="isHidden"
+                                            change.trigger="toggleHidden($event.target.checked)"
+                                            class="rounded border-gray-300 dark:border-white/20" />
+                                        Hidden from throttles
+                                    </label>
+                                    <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                </div>
+                                <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
@@ -245,6 +265,16 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1.5">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                        <input type="checkbox" checked.bind="isHidden"
+                                            change.trigger="toggleHidden($event.target.checked)"
+                                            class="rounded border-gray-300 dark:border-white/20" />
+                                        Hidden from throttles
+                                    </label>
+                                    <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                </div>
+                                <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
@@ -298,6 +328,16 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1.5">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                        <input type="checkbox" checked.bind="isHidden"
+                                            change.trigger="toggleHidden($event.target.checked)"
+                                            class="rounded border-gray-300 dark:border-white/20" />
+                                        Hidden from throttles
+                                    </label>
+                                    <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                </div>
+                                <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"
@@ -343,6 +383,16 @@
                                 <p class="text-[11px] text-gray-500">No hardware — this turnout is driven entirely by
                                     ONCLOSE/ONTHROW event handlers elsewhere (myEvents.h).</p>
                                 <div class="flex flex-col gap-1.5">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                        <input type="checkbox" checked.bind="isHidden"
+                                            change.trigger="toggleHidden($event.target.checked)"
+                                            class="rounded border-gray-300 dark:border-white/20" />
+                                        Hidden from throttles
+                                    </label>
+                                    <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                </div>
+                                <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
                                         class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Description</label>
                                     <input type="text"

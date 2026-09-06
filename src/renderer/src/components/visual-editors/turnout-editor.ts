@@ -298,6 +298,21 @@ export class TurnoutEditorCustomElement {
         this.commitBuffer()
     }
 
+    /**
+     * DCC-EX hides a turnout from throttles when its description is the literal
+     * string "HIDDEN" (see TURNOUT()/SERVO_TURNOUT() docs) — there's no separate
+     * hidden flag in the underlying macros, so that literal IS the hidden state.
+     */
+    get isHidden(): boolean {
+        return this.editBuffer?.description === 'HIDDEN'
+    }
+
+    toggleHidden(hidden: boolean): void {
+        if (!this.editBuffer) return
+        this.editBuffer.description = hidden ? 'HIDDEN' : ''
+        this.commitBuffer()
+    }
+
     /** Next VPin not already claimed by a servo turnout, sensor, signal, or HAL accessory board. */
     private _nextFreeVpin(): number {
         const servoEntries = this.state.turnouts.filter((t): t is ServoTurnout => t.type === 'SERVO')
@@ -422,6 +437,7 @@ export class TurnoutEditorCustomElement {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     getDisplayName(t: Turnout): string {
+        if (t.description === 'HIDDEN') return `Turnout ${t.id} (hidden)`
         return t.description ? `${t.description} (${t.id})` : `Turnout ${t.id}`
     }
 
