@@ -94,6 +94,14 @@ function createWindow(): BrowserWindow {
             // but fires alert overlays on file://.  Disabling web-security for
             // the test window makes file:// behave like a local trusted origin.
             webSecurity: !testDataDir,
+            // Chromium's default background throttling suspends/heavily throttles the
+            // renderer's timers and rendering once the window is occluded or minimized —
+            // after it's been in effect for a long stretch (monitor sleep from inactivity,
+            // window backgrounded for a while, not just an explicit OS lock), resuming has
+            // been known to leave the window permanently blank/frozen instead of catching
+            // back up. This is a desktop config tool, not a page that needs to save battery
+            // while backgrounded, so there's no upside to leaving it on.
+            backgroundThrottling: false,
         },
     })
 
@@ -162,21 +170,27 @@ function createWindow(): BrowserWindow {
     })
 
     // ── Recovery from a blank/frozen window ───────────────────────────────────
-    // Reported symptom: the app sometimes goes blank after the machine is
-    // locked/unlocked and needs a full restart. Two known Chromium behaviors
-    // cause this, and neither self-heals without help:
-    //  1. A window fully occluded by the OS lock screen can come back without
-    //     Chromium scheduling a repaint — `invalidate()` is Electron's
-    //     documented fix, forcing a repaint on resume/unlock.
+    // Reported symptom: the app sometimes goes blank after being left alone for a
+    // long time (locked, monitor slept from inactivity, just backgrounded a while)
+    // and needs a full restart. Known Chromium behaviors cause this, and none
+    // self-heal without help:
+    //  1. A window fully occluded for a long stretch can come back without
+    //     Chromium scheduling a repaint — `invalidate()` is Electron's documented
+    //     fix, forcing one. `resume`/`unlock-screen` cover the OS-lock and
+    //     system-sleep cases; `focus`/`show`/`restore` catch the same problem
+    //     however the window became occluded (e.g. the monitor merely slept from
+    //     inactivity without an explicit OS lock, which fires none of those).
     //  2. If the renderer process actually crashes/OOMs while occluded, the
     //     window just sits blank forever with nothing to reload it — so do
     //     that automatically instead of requiring the user to restart the app.
-    powerMonitor.on('resume', () => {
+    const forceRepaint = (): void => {
         if (!win.isDestroyed()) win.webContents.invalidate()
-    })
-    powerMonitor.on('unlock-screen', () => {
-        if (!win.isDestroyed()) win.webContents.invalidate()
-    })
+    }
+    powerMonitor.on('resume', forceRepaint)
+    powerMonitor.on('unlock-screen', forceRepaint)
+    win.on('focus', forceRepaint)
+    win.on('show', forceRepaint)
+    win.on('restore', forceRepaint)
     win.webContents.on('render-process-gone', (_event, details) => {
         if (win.isDestroyed()) return
         console.error(`Renderer process gone (${details.reason}), reloading window`)
