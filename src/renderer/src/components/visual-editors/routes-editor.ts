@@ -60,19 +60,20 @@ export class RoutesEditorCustomElement {
         return parseBody(r.body, 'ROUTE', BLOCK_REGISTRY).ok
     }
 
-    private static readonly ROUTE_HEADER_RE = /^ROUTE\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*$/
+    private static readonly ROUTE_HEADER_RE = /^ROUTE\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/
 
     /**
      * The Text tab's textarea binds to this (not `selectedRoute.body` directly) so the
      * ROUTE(id, "desc") header line is part of the actual editable/selectable text, matching the
      * Blocks tab's hat node — not a separate read-only caption sitting outside the text control.
-     * The id itself stays whatever `selectedRoute.id` already is; only the quoted description on
-     * that first line is round-tripped.
+     * The id itself stays whatever `selectedRoute.id` already is; only the quoted description and
+     * trailing `// comment` on that first line are round-tripped.
      */
     get selectedRouteText(): string {
         const r = this.selectedRoute
         if (!r) return ''
-        return `ROUTE(${r.id}, "${r.description ?? ''}")\n${r.body ?? ''}`
+        const comment = r.comment && r.comment.trim() ? ` // ${r.comment.trim()}` : ''
+        return `ROUTE(${r.id}, "${r.description ?? ''}")${comment}\n${r.body ?? ''}`
     }
 
     set selectedRouteText(text: string) {
@@ -82,6 +83,7 @@ export class RoutesEditorCustomElement {
         const m = lines[0]?.match(RoutesEditorCustomElement.ROUTE_HEADER_RE)
         if (m) {
             r.description = m[1]
+            r.comment = m[2] ? m[2].trim() : undefined
             r.body = lines.slice(1).join('\n')
         } else {
             // Header line got mangled/removed — don't discard what the user typed; keep the

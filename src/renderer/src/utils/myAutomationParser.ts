@@ -140,7 +140,10 @@ export type SignalEntry = PinSignal | DccSignal;
 
 export interface RouteEntry {
     id: number;
+    /** Friendly short name — EXRAIL's own description argument, shown on throttles. */
     description: string;
+    /** Optional longer free-form note, stored as a trailing `// comment` on the ROUTE(...) line — mirrors Roster.comment. */
+    comment?: string;
     /**
      * Raw text between ROUTE(...) and the next ROUTE(...)/EOF. Includes the terminating DONE
      * line when the file has one — DONE is real, user-editable body content (rendered as an
@@ -152,8 +155,10 @@ export interface RouteEntry {
 
 export interface SequenceEntry {
     id: number;
-    /** Friendly name/description, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
+    /** Friendly short name, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
     description?: string;
+    /** Optional longer free-form note, stored as a `//`-comment block on the line(s) immediately above the header — mirrors Roster.comment. */
+    comment?: string;
     /** Raw text between SEQUENCE(...) and the next SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
 }
@@ -169,7 +174,10 @@ export interface SequenceEntry {
  */
 export interface AutomationEntry {
     id: number;
+    /** Friendly short name — EXRAIL's own description argument, shown on throttles. */
     description: string;
+    /** Optional longer free-form note, stored as a trailing `// comment` on the AUTOMATION(...) line — mirrors Roster.comment. */
+    comment?: string;
     /** Raw text between AUTOMATION(...) and the next ROUTE/AUTOMATION/SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
 }
@@ -189,6 +197,10 @@ export interface AutomationEntry {
 export interface EventHandlerEntry {
     command: string;
     text: string;
+    /** Friendly short name, stored as a trailing `// comment` on the first header line — event handlers have no description argument of their own, same convention as SequenceEntry.description. */
+    name?: string;
+    /** Optional longer free-form note, stored as a `//`-comment block on the line(s) immediately above the header(s) — mirrors Roster.comment. */
+    comment?: string;
 }
 
 export interface AliasEntry {
@@ -571,19 +583,39 @@ function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { bo
     return { body: bodyLines.join('\n').trim(), next: i };
 }
 
+/**
+ * Pulls a trailing `//`-comment block off `pendingLines` — the lines a caller has been
+ * accumulating between the previous entry's body and the header it just found (blank lines,
+ * stray text, or nothing at all). Used by SEQUENCE and event-handler parsing, which have no
+ * on-disk description argument to hang a longer note on, so the note instead lives as one or
+ * more `//` lines directly above the header — see SequenceEntry.comment / EventHandlerEntry.comment.
+ * Trailing blank lines are ignored first; only a contiguous, uninterrupted run of `//` lines
+ * immediately above the header counts, so unrelated stray content further back is left alone
+ * (and silently dropped, same as it already was before this comment convention existed).
+ */
+function extractLeadingComment(pendingLines: string[]): string | undefined {
+    let end = pendingLines.length;
+    while (end > 0 && pendingLines[end - 1].trim() === '') end--;
+    let start = end;
+    while (start > 0 && /^\s*\/\//.test(pendingLines[start - 1])) start--;
+    if (start === end) return undefined;
+    return pendingLines.slice(start, end).map(l => l.replace(/^\s*\/\/\s?/, '')).join('\n');
+}
+
 export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
     const lines = fileContent.split('\n');
     const out: RouteEntry[] = [];
-    const routeStart = /^\s*ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const routeStart = /^\s*ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(routeStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const { body, next } = scanBlockBody(lines, i + 1, routeStart);
             i = next;
-            out.push({ id, description: desc, body });
+            out.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -599,16 +631,17 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
 export function parseAutomationsFromFile(fileContent: string): AutomationEntry[] {
     const lines = fileContent.split('\n');
     const out: AutomationEntry[] = [];
-    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(automationStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const { body, next } = scanBlockBody(lines, i + 1, automationStart);
             i = next;
-            out.push({ id, description: desc, body });
+            out.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -625,7 +658,7 @@ export function parseAutomationsFromFile(fileContent: string): AutomationEntry[]
 export function extractAutomations(fileContent: string): { automations: AutomationEntry[]; remainder: string } {
     const lines = fileContent.split('\n');
     const automations: AutomationEntry[] = [];
-    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     const consumed = new Array<boolean>(lines.length).fill(false);
     let i = 0;
     while (i < lines.length) {
@@ -633,11 +666,12 @@ export function extractAutomations(fileContent: string): { automations: Automati
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const startIdx = i;
             const { body, next } = scanBlockBody(lines, i + 1, automationStart);
             for (let k = startIdx; k < next; k++) consumed[k] = true;
             i = next;
-            automations.push({ id, description: desc, body });
+            automations.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -649,7 +683,8 @@ export function extractAutomations(fileContent: string): { automations: Automati
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {
-        lines.push(`ROUTE(${r.id}, "${r.description}")`);
+        const comment = r.comment && r.comment.trim() ? ` // ${r.comment.trim()}` : '';
+        lines.push(`ROUTE(${r.id}, "${r.description}")${comment}`);
         const trimmedBody = (r.body ?? '').trim();
         // A brand-new route's body starts empty — DONE is still the sensible on-disk default
         // for that case. Once the body has any real content, write it verbatim: whether it
@@ -662,11 +697,12 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
 }
 
 /** Mirrors serializeRoutesToFile exactly — AUTOMATION shares ROUTE's exact shape (id, quoted
- *  description, DONE-or-user's-own-terminator body). */
+ *  description, optional trailing comment, DONE-or-user's-own-terminator body). */
 export function serializeAutomationsToFile(automations: AutomationEntry[]): string {
     const lines: string[] = [];
     for (const a of automations) {
-        lines.push(`AUTOMATION(${a.id}, "${a.description}")`);
+        const comment = a.comment && a.comment.trim() ? ` // ${a.comment.trim()}` : '';
+        lines.push(`AUTOMATION(${a.id}, "${a.description}")${comment}`);
         const trimmedBody = (a.body ?? '').trim();
         lines.push(trimmedBody || 'DONE');
         lines.push('');
@@ -675,20 +711,27 @@ export function serializeAutomationsToFile(automations: AutomationEntry[]): stri
 }
 
 export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
-    const lines = fileContent.split('\n');
+    // Strip the "managed file" boilerplate header (see buildGeneratorHeader()) before scanning —
+    // it's pure `//` lines sitting above the first SEQUENCE, and without this it would otherwise
+    // get misread as *that* sequence's leading comment block on every load of a saved file.
+    const lines = stripGeneratorHeader(fileContent).split('\n');
     const out: SequenceEntry[] = [];
     const seqStart = /^\s*SEQUENCE\s*\(\s*(\d+)\s*\)\s*(?:\/\/\s*(.*))?$/;
+    let pendingLines: string[] = [];
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(seqStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const description = m[2] ? m[2].trim() : '';
+            const comment = extractLeadingComment(pendingLines);
+            pendingLines = [];
             const { body, next } = scanBlockBody(lines, i + 1, seqStart);
             i = next;
-            out.push({ id, description, body });
+            out.push({ id, description, comment, body });
             continue;
         }
+        pendingLines.push(lines[i]);
         i++;
     }
     return out;
@@ -697,6 +740,9 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
 export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
     const lines: string[] = [];
     for (const s of seqs) {
+        if (s.comment && s.comment.trim()) {
+            for (const commentLine of s.comment.trim().split('\n')) lines.push(`// ${commentLine}`);
+        }
         const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : '';
         lines.push(`SEQUENCE(${s.id})${desc}`);
         const trimmedBody = (s.body ?? '').trim();
@@ -725,35 +771,58 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
  * parseEventHandlerBlock() already expects and re-parses exactly this shape (all stacked headers
  * followed by the shared body in one `text`), via its own "Also on ..." trigger-marker nodes — this
  * loop just has to stop splitting it apart first.
+ *
+ * `text` itself stays pure EXRAIL code (header line(s) + body, no comments) so it round-trips
+ * through exrail-block-compiler.ts's parseEventHandlerBlock()/compileEventHandlerBlock() (and its
+ * LINE_RE header parsing) completely unchanged — a trailing `// name` comment on the first header
+ * line is peeled off into `name` before `text` is built, and a leading `//`-comment block
+ * immediately above the header(s) is peeled off into `comment` via the same pendingLines
+ * convention parseSequencesFromFile() uses (see extractLeadingComment()). Any trailing comment on
+ * a *stacked* header line 2..n is discarded — only the first line's comment becomes `name`.
  */
 export function parseEventHandlersFromFile(fileContent: string): EventHandlerEntry[] {
-    const lines = fileContent.split('\n');
+    // Strip the "managed file" boilerplate header (see buildGeneratorHeader()) before scanning —
+    // same reasoning as parseSequencesFromFile(): left in, it would get misread as the first
+    // handler's leading comment block on every load of a saved file.
+    const lines = stripGeneratorHeader(fileContent).split('\n');
     const out: EventHandlerEntry[] = [];
-    const handlerStart = /^\s*(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*$/;
+    const handlerStart = /^\s*(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*(?:\/\/\s*(.*))?\s*$/;
+    let pendingLines: string[] = [];
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(handlerStart);
         if (m) {
             const command = m[1];
-            const headerLines = [lines[i]];
+            const name = m[2] ? m[2].trim() : undefined;
+            const comment = extractLeadingComment(pendingLines);
+            pendingLines = [];
+            const headerLines = [lines[i].replace(/\s*\/\/.*$/, '')];
             let j = i + 1;
             while (j < lines.length && handlerStart.test(lines[j])) {
-                headerLines.push(lines[j]);
+                headerLines.push(lines[j].replace(/\s*\/\/.*$/, ''));
                 j++;
             }
             const { body, next } = scanBlockBody(lines, j, handlerStart);
             i = next;
             const text = body ? `${headerLines.join('\n')}\n${body}` : headerLines.join('\n');
-            out.push({ command, text });
+            out.push({ command, text, name, comment });
             continue;
         }
+        pendingLines.push(lines[i]);
         i++;
     }
     return out;
 }
 
 export function serializeEventHandlersToFile(handlers: EventHandlerEntry[]): string {
-    return handlers.map(h => h.text.trim()).join('\n\n');
+    return handlers.map(h => {
+        const commentBlock = h.comment && h.comment.trim()
+            ? h.comment.trim().split('\n').map(l => `// ${l}`).join('\n') + '\n'
+            : '';
+        const lines = h.text.trim().split('\n');
+        if (h.name && h.name.trim() && lines.length > 0) lines[0] = `${lines[0]} // ${h.name.trim()}`;
+        return `${commentBlock}${lines.join('\n')}`;
+    }).join('\n\n');
 }
 
 // ─── ROUTE/AUTOMATION/SEQUENCE ID rules ──────────────────────────────────────
