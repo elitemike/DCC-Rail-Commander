@@ -145,4 +145,35 @@ describe('parseEventHandlersFromFile / serializeEventHandlersToFile', () => {
         const file = serializeEventHandlersToFile(handlers)
         expect(parseEventHandlersFromFile(file)).toEqual(handlers)
     })
+
+    it('keeps stacked ON* headers sharing one body as a single entry (EXRAIL fallthrough idiom), instead of handing the whole body to only the last trigger', () => {
+        const file = [
+            'ONSENSOR(ReverseLoop1)',
+            'ONSENSOR(ReverseLoop2)',
+            'IF(ReverseLoop1)',
+            '  THROW(Reverse_Loop_Instant)',
+            'ENDIF',
+            'IF(ReverseLoop2)',
+            '  CLOSE(Reverse_Loop_Instant)',
+            'ENDIF',
+            'DONE',
+        ].join('\n')
+        const handlers = parseEventHandlersFromFile(file)
+        expect(handlers).toEqual([{ command: 'ONSENSOR', text: file }])
+    })
+
+    it('keeps stacked headers of different hat types sharing one body as a single entry', () => {
+        const file = ['ONSENSOR(200)', 'ONACTIVATE(100, 4)', 'THROW(201)', 'DONE'].join('\n')
+        const handlers = parseEventHandlersFromFile(file)
+        expect(handlers).toEqual([{ command: 'ONSENSOR', text: file }])
+    })
+
+    it('round-trips a file mixing a stacked fallthrough group with an independent handler', () => {
+        const handlers = [
+            { command: 'ONSENSOR', text: 'ONSENSOR(1)\nONSENSOR(2)\nTHROW(201)\nDONE' },
+            { command: 'ONRAILSYNCON', text: 'ONRAILSYNCON\nPOWERON' },
+        ]
+        const file = serializeEventHandlersToFile(handlers)
+        expect(parseEventHandlersFromFile(file)).toEqual(handlers)
+    })
 })
