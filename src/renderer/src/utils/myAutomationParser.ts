@@ -715,6 +715,16 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
  * and everything through the next block/EOF, via the same scanBlockBody() helper routes/sequences
  * use — see EventHandlerEntry's own doc comment for why the header line is part of `text` here,
  * unlike RouteEntry.body/SequenceEntry.body.
+ *
+ * Before scanning the body, a header line first absorbs any immediately-following header lines of
+ * its own shape (no blank line or body statement between them) — EXRAIL's own fallthrough idiom for
+ * running one shared body off several triggers (`ONSENSOR(1)` / `ONSENSOR(2)` / `IF(...)`... /
+ * `DONE`, or mixing hat types the same way). Left unhandled, each stacked header would look like the
+ * start of the *next* top-level block to the header below it, splitting one shared-body group into
+ * several entries and handing the entire body to only the last trigger. exrail-block-compiler.ts's
+ * parseEventHandlerBlock() already expects and re-parses exactly this shape (all stacked headers
+ * followed by the shared body in one `text`), via its own "Also on ..." trigger-marker nodes — this
+ * loop just has to stop splitting it apart first.
  */
 export function parseEventHandlersFromFile(fileContent: string): EventHandlerEntry[] {
     const lines = fileContent.split('\n');
@@ -725,10 +735,15 @@ export function parseEventHandlersFromFile(fileContent: string): EventHandlerEnt
         const m = lines[i].match(handlerStart);
         if (m) {
             const command = m[1];
-            const headerLine = lines[i];
-            const { body, next } = scanBlockBody(lines, i + 1, handlerStart);
+            const headerLines = [lines[i]];
+            let j = i + 1;
+            while (j < lines.length && handlerStart.test(lines[j])) {
+                headerLines.push(lines[j]);
+                j++;
+            }
+            const { body, next } = scanBlockBody(lines, j, handlerStart);
             i = next;
-            const text = body ? `${headerLine}\n${body}` : headerLine;
+            const text = body ? `${headerLines.join('\n')}\n${body}` : headerLines.join('\n');
             out.push({ command, text });
             continue;
         }
