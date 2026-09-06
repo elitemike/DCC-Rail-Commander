@@ -84,6 +84,12 @@
                                 placeholder="Description" aria-label="Route description"
                                 class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                         </div>
+                        <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
+                            <input type="text" value.two-way="selectedRoute.comment"
+                                blur.trigger="updateRoute(state.routes.indexOf(selectedRoute), selectedRoute)"
+                                placeholder="Optional comment (appears after // in file)" aria-label="Route comment"
+                                class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
                         <div class="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10 shrink-0">
                             <button click.trigger="setRowTab(selectedRoute, 'blocks')" disabled.bind="!canUseBlocks(selectedRoute)"
                                 title.bind="canUseBlocks(selectedRoute) ? '' : 'This body can\'t be edited visually yet — switch to Raw.'"

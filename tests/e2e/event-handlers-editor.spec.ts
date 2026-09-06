@@ -87,6 +87,24 @@ test.describe('Event Handlers editor', () => {
         expect(text).toContain('ONRAILSYNCOFF')
     })
 
+    test('typing a friendly name and blurring updates both the sidebar row and the header label', async ({ workspacePage: page }) => {
+        await openEventHandlersEditor(page)
+        await addHandler(page, 'ONRAILSYNCON')
+        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
+
+        const nameInput = page.getByPlaceholder('Friendly name')
+        await nameInput.fill('Auto Reverse turnout')
+        await nameInput.press('Tab')
+
+        // Regression: updateHandler() used to reuse the same (already-mutated) EventHandlerEntry
+        // reference when reconstructing state.eventHandlers, so Aurelia's repeat.for saw a
+        // reference-identical item at that index and skipped re-rendering it — the name landed in
+        // the saved file correctly, but the sidebar and header label silently kept showing the old
+        // derived label until something else forced a re-render.
+        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a').first()).toContainText('Auto Reverse turnout')
+        await expect(page.getByTestId('selected-handler-name')).toHaveText('Auto Reverse turnout')
+    })
+
     test('removing the only entry returns to the empty state', async ({ workspacePage: page }) => {
         await openEventHandlersEditor(page)
         await addHandler(page, 'ONRAILSYNCON')

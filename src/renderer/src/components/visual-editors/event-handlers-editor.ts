@@ -18,10 +18,12 @@ export interface AddGroup {
 /**
  * List+canvas editor for myEvents.h — the same shape as routes-editor.ts/sequences-editor.ts, but
  * for EXRAIL event-handler blocks (ONSENSOR, ONACTIVATE, ...). Deliberately simpler in one
- * respect: an entry has no id/alias/description, so there's no rename flow, no shared-id-pool
- * warning, and no separate header-line getter/setter — the whole on-disk block (header line
- * included) is EventHandlerEntry.text, edited as one unit by both the Blocks and Raw tabs. See
- * that field's own doc comment in myAutomationParser.ts.
+ * respect: an entry has no id/alias, so there's no rename flow and no shared-id-pool warning.
+ * `name`/`comment` (an optional friendly short name and a longer note, mirroring
+ * RouteEntry.description/.comment — see EventHandlerEntry's own doc comment) live outside
+ * EventHandlerEntry.text, which stays pure on-disk EXRAIL code (header line(s) + body) edited as
+ * one unit by both the Blocks and Raw tabs — there's still no separate header-line getter/setter
+ * the way routes-editor.ts/sequences-editor.ts split description out of body.
  *
  * Entries have no unique id, so `selectedIndex` (a plain array index) is this editor's identity —
  * unlike routes-editor.ts's `selectedId`, which survives array-order changes because it's looked
@@ -96,8 +98,10 @@ export class EventHandlersEditorCustomElement {
         return parseEventHandlerBlock(h.text, BLOCK_REGISTRY).ok
     }
 
-    /** Friendly list-row label, e.g. "On sensor changed (200)" — derived live from the registry's `label` plus the header line's own args, rather than a separate stored description field (there isn't one — see EventHandlerEntry). */
+    /** Friendly list-row label — the user's own `name` (see EventHandlerEntry.name) when set, otherwise
+     *  derived live from the registry's `label` plus the header line's own args, e.g. "On sensor changed (200)". */
     getDisplayName(h: EventHandlerEntry): string {
+        if (h.name && h.name.trim()) return h.name.trim()
         const def = BLOCK_REGISTRY.find((b) => b.id === h.command)
         const headerLine = h.text.split('\n')[0] ?? h.command
         const argsMatch = headerLine.match(/\(([^)]*)\)/)
@@ -149,6 +153,26 @@ export class EventHandlersEditorCustomElement {
     updateHandlerText(idx: number, text: string): void {
         if (!this.state.eventHandlers[idx]) return
         this.state.eventHandlers = this.state.eventHandlers.map((h, i) => (i === idx ? { ...h, text } : h))
+        this.state.syncAll()
+    }
+
+    /** Commits `name`/`comment` edits (both `value.two-way`-bound directly onto the live entry —
+     *  see the Name/Comment inputs) into `state.eventHandlers`, mirroring routes-editor.ts's
+     *  updateRoute(): the input mutates the live object immediately for local UI feedback, and this
+     *  reconstructs the array on blur so the sidebar's getDisplayName() (and everything else
+     *  observing `state.eventHandlers`) actually sees the change.
+     *
+     *  Spreads `h` into a genuinely new object (`{ ...h }`) rather than reusing the reference —
+     *  passing the same, already-mutated reference through .map() left the array item at `idx`
+     *  reference-identical to what was there before the reassignment, and Aurelia's repeat.for
+     *  skipped re-evaluating that row's `${getDisplayName(h)}` interpolation as a result: the name
+     *  landed correctly in state (and the saved file) but the sidebar/header label silently kept
+     *  showing the old derived label. routes-editor.ts's updateRoute() avoids this the same way,
+     *  via its own `{ ...r, id: Number(r.id) }` spread. */
+    updateHandler(idx: number, h: EventHandlerEntry): void {
+        if (!this.state.eventHandlers[idx]) return
+        const entry: EventHandlerEntry = { ...h }
+        this.state.eventHandlers = this.state.eventHandlers.map((v, i) => (i === idx ? entry : v))
         this.state.syncAll()
     }
 
