@@ -2,6 +2,13 @@
  * E2E tests: Sensors editor — bidirectional visual ↔ raw editing, plus
  * myAliases.h alias support (each row's alias-picker custom element).
  *
+ * mySensors.h is pure bookkeeping for this app's own Visual editor, not compiled EXRAIL — a
+ * sensor's "ID" IS its VPin, and EXRAIL has no sensor-declaration macro at all (a VPin needs no
+ * declaration to be used in ONSENSOR/AT/IF). The editor has a single Pin field (a
+ * <vpin-picker>, `[data-field="pin-value"]` in Direct MCU pin mode) rather than a separate ID
+ * number input, and the Raw tab is plain `// Sensor <pin> - <description>` comments. See
+ * src/renderer/src/utils/myAutomationParser.ts's parseSensorsFromFile doc comment.
+ *
  * Prerequisites: build the app with `pnpm build` before running.
  * Run: pnpm test:e2e --grep "Sensors Editor"
  */
@@ -88,11 +95,12 @@ test.describe('Sensors Editor', () => {
         await expect(page.getByText('1 entries')).toBeVisible()
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(')
-        await expect(page.locator('div.monaco-editor')).toContainText('Block Detector 1')
+        // mySensors.h is pure bookkeeping, not compiled EXRAIL — a plain comment mapping the
+        // VPin to its friendly name.
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 100 - Block Detector 1')
     })
 
-    test('editing a sensor ID/pin/description updates raw', async ({ workspacePage: page }) => {
+    test('editing a sensor pin/description updates raw', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await addSensor(page)
 
@@ -104,17 +112,16 @@ test.describe('Sensors Editor', () => {
         await aliasInput.fill('PLATFORM_OCCUPANCY')
         await aliasInput.blur()
 
-        const idInput = row.locator('input[type="number"]').first()
-        await idInput.fill('7')
-        await idInput.blur()
+        const pinInput = row.locator('[data-field="pin-value"]')
+        await pinInput.fill('7')
+        await pinInput.blur()
 
         const descInput = row.locator('input[placeholder="Description"]')
         await descInput.fill('Platform Occupancy')
         await descInput.blur()
 
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('SENSOR(7')
-        await expect(page.locator('div.monaco-editor')).toContainText('Platform Occupancy')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 7 - Platform Occupancy')
     })
 
     test('removing a sensor removes it from raw', async ({ workspacePage: page }) => {
@@ -140,8 +147,8 @@ test.describe('Sensors Editor', () => {
         await switchToRaw(page)
 
         await setMonacoContent(page, [
-            'SENSOR(1, 30, "Occupancy A")',
-            'SENSOR(2, 31, "Occupancy B")',
+            '// Sensor 30 - Occupancy A',
+            '// Sensor 31 - Occupancy B',
         ].join('\n'))
 
         await switchToVisual(page)
@@ -152,12 +159,33 @@ test.describe('Sensors Editor', () => {
         await expectRowDescription(rows.nth(1), 'Occupancy B')
     })
 
+    // ── Backward compatibility: a real hand-rolled project's JMRI_SENSOR declarations ──
+
+    test('a real JMRI_SENSOR(...) declaration still loads, but is downgraded to a comment on save (this app never writes JMRI_SENSOR)', async ({ workspacePage: page }) => {
+        await openSensorsEditor(page)
+        await switchToRaw(page)
+
+        await setMonacoContent(page, 'JMRI_SENSOR(30) // Occupancy A')
+
+        await switchToVisual(page)
+
+        await expect(page.getByText('1 entries')).toBeVisible()
+        await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
+
+        // The real, compiled JMRI_SENSOR declaration is gone — replaced with the same plain
+        // bookkeeping comment every other sensor gets. If the project needed that sensor to
+        // stay JMRI-visible, this is a real behavior change the user needs to know about.
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 30 - Occupancy A')
+        await expect(page.locator('div.monaco-editor')).not.toContainText('JMRI_SENSOR')
+    })
+
     // ── Alias support ────────────────────────────────────────────────────────
 
     test('Strict aliases (on by default): an un-aliased sensor shows a warning dot next to its Alias field, which clears once aliased', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await setMonacoContent(page, '// Sensor 30 - Occupancy A')
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 
@@ -174,7 +202,7 @@ test.describe('Sensors Editor', () => {
     test('setting an alias on a sensor writes ALIAS(...) with type: Sensor to myAliases.h', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await setMonacoContent(page, '// Sensor 30 - Occupancy A')
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 
@@ -185,26 +213,26 @@ test.describe('Sensors Editor', () => {
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(BLOCK_1, 1) // type: Sensor')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(BLOCK_1, 30) // type: Sensor')
     })
 
     test('an alias already defined in myAliases.h populates in the sensor visual editor', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await setMonacoContent(page, '// Sensor 30 - Occupancy A')
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'ALIAS(BLOCK_A, 1) // type: Sensor')
+        await setMonacoContent(page, 'ALIAS(BLOCK_A, 30) // type: Sensor')
 
         await openSensorsEditor(page)
         const row = sensorRows(page).first()
         await expect(row.locator('alias-picker input')).toHaveValue('BLOCK_A')
     })
 
-    test('renaming a sensor ID carries its alias to the new ID', async ({ workspacePage: page }) => {
+    test('renaming a sensor pin carries its alias to the new pin', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await addSensor(page)
 
@@ -214,29 +242,29 @@ test.describe('Sensors Editor', () => {
         await aliasInput.blur()
         await expect(aliasInput).toHaveValue('BLOCK_1')
 
-        const idInput = row.locator('input[type="number"]').first()
-        await idInput.focus()
-        await idInput.fill('42')
-        await idInput.blur()
+        const pinInput = row.locator('[data-field="pin-value"]')
+        await pinInput.focus()
+        await pinInput.fill('42')
+        await pinInput.blur()
 
         await expect(row.locator('alias-picker input')).toHaveValue('BLOCK_1')
 
         await openAliasesEditor(page)
         await switchToRaw(page)
         await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(BLOCK_1, 42) // type: Sensor')
-        await expect(page.locator('div.monaco-editor')).not.toContainText('ALIAS(BLOCK_1, 1)')
+        await expect(page.locator('div.monaco-editor')).not.toContainText('ALIAS(BLOCK_1, 100)')
     })
 
     test('deleting a sensor alias in the aliases editor clears the alias field in the sensors editor', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await setMonacoContent(page, '// Sensor 30 - Occupancy A')
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'ALIAS(BLOCK_A, 1) // type: Sensor')
+        await setMonacoContent(page, 'ALIAS(BLOCK_A, 30) // type: Sensor')
 
         await openSensorsEditor(page)
         const row = sensorRows(page).first()
@@ -256,16 +284,16 @@ test.describe('Sensors Editor', () => {
         await openSensorsEditor(page)
         await switchToRaw(page)
         await setMonacoContent(page, [
-            'SENSOR(1, 30, "Occupancy A")',
-            'SENSOR(2, 31, "Occupancy B")',
+            '// Sensor 30 - Occupancy A',
+            '// Sensor 31 - Occupancy B',
         ].join('\n'))
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 
-        // Give sensor 2 an alias.
+        // Give sensor 31 an alias.
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'ALIAS(OCC_B, 2) // type: Sensor')
+        await setMonacoContent(page, 'ALIAS(OCC_B, 31) // type: Sensor')
 
         await openSensorsEditor(page)
         const firstRow = sensorRows(page).first()
@@ -276,10 +304,10 @@ test.describe('Sensors Editor', () => {
 
         await expect(aliasInput).toHaveValue('OCC_B')
 
-        // Alias names are unique, so typing an existing name here reassigns it from sensor 2 to sensor 1.
+        // Alias names are unique, so typing an existing name here reassigns it from sensor 31 to sensor 30.
         await openAliasesEditor(page)
         await switchToRaw(page)
-        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(OCC_B, 1) // type: Sensor')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(OCC_B, 30) // type: Sensor')
     })
 
     test('assigning an alias name already used by a different-typed object shows an error toast', async ({ workspacePage: page }) => {
@@ -295,7 +323,7 @@ test.describe('Sensors Editor', () => {
 
         await openSensorsEditor(page)
         await switchToRaw(page)
-        await setMonacoContent(page, 'SENSOR(1, 30, "Occupancy A")')
+        await setMonacoContent(page, '// Sensor 30 - Occupancy A')
         await switchToVisual(page)
         await expectRowDescription(sensorRows(page).first(), 'Occupancy A')
 

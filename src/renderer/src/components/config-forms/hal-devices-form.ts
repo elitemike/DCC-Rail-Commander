@@ -161,10 +161,8 @@ export class HalDevicesFormCustomElement {
     addSensorsFromDevice(device: HalDeviceInstance): void {
         const board = this.board(device)
         if (!board || board.pinRole !== 'sensor' || device.vpinStart == null) return
-        const startId = (this.editorState.sensors[this.editorState.sensors.length - 1]?.id ?? 0) + 1
         const newSensors = Array.from({ length: board.pinCount }, (_, i) => ({
-            id: startId + i,
-            pin: device.vpinStart! + i,
+            id: device.vpinStart! + i,
             description: `${device.label} ch ${i + 1}`,
         }))
         this.editorState.sensors = [...this.editorState.sensors, ...newSensors]

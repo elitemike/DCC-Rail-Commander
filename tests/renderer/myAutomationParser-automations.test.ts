@@ -29,6 +29,20 @@ describe('serializeAutomationsToFile / parseAutomationsFromFile — round trip',
     })
 })
 
+describe('serializeAutomationsToFile / parseAutomationsFromFile — comment field', () => {
+    it('round-trips a trailing // comment on the header line, mirroring ROUTE', () => {
+        const automations = [{ id: 1, description: 'Coal trucks - Collect', comment: 'Runs on demand', body: 'CALL(2)\nDONE' }]
+        const file = serializeAutomationsToFile(automations)
+        expect(file).toBe('AUTOMATION(1, "Coal trucks - Collect") // Runs on demand\nCALL(2)\nDONE')
+        expect(parseAutomationsFromFile(file)).toEqual(automations)
+    })
+
+    it('omits the trailing comment entirely when unset', () => {
+        const file = serializeAutomationsToFile([{ id: 1, description: 'New', body: 'DONE' }])
+        expect(file).toBe('AUTOMATION(1, "New")\nDONE')
+    })
+})
+
 describe('extractAutomations — migration helper', () => {
     it('pulls AUTOMATION blocks out of arbitrary content, leaving the rest as remainder', () => {
         const content = [

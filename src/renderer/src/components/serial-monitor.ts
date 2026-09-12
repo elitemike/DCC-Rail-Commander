@@ -1,9 +1,11 @@
 import { bindable, resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { UsbService } from '../services/usb.service'
 import { InstallerState } from '../models/installer-state'
 import { ThemeService } from '../services/theme.service'
+import { createLineSplitter } from '../utils/serial-line-buffer'
 
 const DARK_THEME: ITheme = {
     background: '#0d1117',
@@ -392,7 +394,7 @@ const NATIVE_COMMAND_DOCS: Array<{ cmd: string; desc: string }> = [
 ]
 
 // ── DCC-EX / EXRAIL quick-send commands ──────────────────────────────────────
-const QUICK_COMMANDS: Array<{ label: string; cmd: string; group: string }> = [
+const QUICK_COMMANDS: Array<{ label: string; cmd: string; group: string; confirm?: boolean }> = [
     // Status / Diagnostics
     { label: 'Status', cmd: '<s>', group: 'status' },
     { label: 'Diagnostics', cmd: '<D>', group: 'status' },
@@ -412,6 +414,8 @@ const QUICK_COMMANDS: Array<{ label: string; cmd: string; group: string }> = [
     { label: 'EXRAIL List', cmd: '</ LIST>', group: 'exrail' },
     { label: 'EXRAIL Pause', cmd: '</ PAUSE>', group: 'exrail' },
     { label: 'EXRAIL Resume', cmd: '</ RESUME>', group: 'exrail' },
+    // Danger — reboots the command station, so it's gated behind a confirmation
+    { label: 'Reset', cmd: '<D RESET>', group: 'danger', confirm: true },
 ]
 
 // ── ANSI color helpers ────────────────────────────────────────────────────────
@@ -473,6 +477,19 @@ export class SerialMonitorCustomElement {
     private commandHistory: string[] = []
     private historyIndex = -1
 
+    // Incoming data arrives in arbitrary USB/serial read-sized chunks, not
+    // pre-split on line boundaries — a chunk boundary can (and does) fall
+    // mid-word (see createLineSplitter). Reset on every subscribeToPort()/
+    // connectedChanged() so a fragment left over from a previous session is
+    // never glued onto the next one's first line.
+    private lineSplitter = this._newLineSplitter()
+
+    private _newLineSplitter(): ReturnType<typeof createLineSplitter> {
+        return createLineSplitter((line) => {
+            if (line.trim()) this.term.writeln(colorizeResponse(line))
+        })
+    }
+
     // IPC subscriptions
     private unsubData?: () => void
     private unsubError?: () => void
@@ -482,6 +499,7 @@ export class SerialMonitorCustomElement {
     private readonly usb = resolve(UsbService)
     private readonly state = resolve(InstallerState)
     private readonly themeService = resolve(ThemeService)
+    private readonly dialogService = resolve(IDialogService)
 
     /**
      * Guards the deferred init below. document.fonts.load() can resolve after
@@ -537,6 +555,9 @@ export class SerialMonitorCustomElement {
      */
     connectedChanged(): void {
         if (!this.term) return
+        // A fresh connection starts a fresh byte stream — don't glue a leftover
+        // unterminated fragment from a previous session onto its first line.
+        this.lineSplitter = this._newLineSplitter()
         this._syncConnectionStatus()
         if (this.connected) {
             this.term.writeln(`${A.green}${A.bold}Connected · ${this.portLabel}${A.reset}`)
@@ -635,15 +656,10 @@ export class SerialMonitorCustomElement {
     private subscribeToPort(): void {
         if (!window.usb) return
 
+        this.lineSplitter = this._newLineSplitter()
         this.unsubData = window.usb.onData(({ path, data }) => {
             if (path !== this.state.selectedDevice?.port) return
-            // arduino sends mixed \r\n — split and write each non-empty line
-            const lines = data.split(/\r\n|\r|\n/)
-            for (const line of lines) {
-                if (line.trim()) {
-                    this.term.writeln(colorizeResponse(line))
-                }
-            }
+            this.lineSplitter.feed(data)
         })
 
         this.unsubError = window.usb.onError(({ path, message }) => {
@@ -879,6 +895,34 @@ export class SerialMonitorCustomElement {
         this.term.writeln(`${A.bold}${A.white}> ${cmd}${A.reset}`)
         this.writePrompt()
         await this.sendToPort(cmd)
+    }
+
+    /** Routes a quick-command click through a confirmation dialog first when the command requests one. */
+    async handleQuickCommand(qc: { label: string; cmd: string; confirm?: boolean }): Promise<void> {
+        if (!qc.confirm) {
+            await this.sendQuickCommand(qc.cmd)
+            return
+        }
+        const confirmed = await this._confirm(
+            `${qc.label}?`,
+            `Send ${qc.cmd} to the command station?`,
+            `This reboots the command station. Any locomotives currently running will stop.`,
+        )
+        if (confirmed) await this.sendQuickCommand(qc.cmd)
+    }
+
+    private async _confirm(title: string, message: string, detail?: string): Promise<boolean> {
+        try {
+            const { dialog } = await this.dialogService.open({
+                component: () =>
+                    import('./dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                model: { title, message, detail, confirmLabel: 'Send', confirmClass: 'bg-red-600 hover:bg-red-500' },
+            })
+            const result = await dialog.closed
+            return result.status === 'ok'
+        } catch {
+            return window.confirm(`${title}\n\n${message}${detail ? `\n\n${detail}` : ''}`)
+        }
     }
 
     get statusColor(): string {

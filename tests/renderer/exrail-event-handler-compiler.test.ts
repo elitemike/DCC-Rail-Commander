@@ -23,7 +23,7 @@ registerExrailBlocks()
 const DEFINED: DefinedObjects = {
     roster: [],
     turnouts: [{ id: 201, description: 'Yard switch', comment: '', type: 'SERVO', pin: 1, activeAngle: 0, inactiveAngle: 0, profile: 'Slow', defaultState: 'CLOSED' }],
-    sensors: [{ id: 200, pin: 2, description: 'Entry sensor' }],
+    sensors: [{ id: 200, description: 'Entry sensor' }],
     routes: [],
     sequences: [],
     aliases: [],

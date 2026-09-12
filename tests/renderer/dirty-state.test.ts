@@ -49,7 +49,7 @@ describe('ConfigEditorState.syncAll — dirty tracking', () => {
 
 describe('ConfigEditorState.loadFromInstallerState — does not falsely mark dirty', () => {
     it('leaves hasChanges false after loading an existing configuration', () => {
-        const state = makeConfigEditorState([{ name: 'mySensors.h', content: 'SENSOR(1, 30, "Occupancy")\n' }])
+        const state = makeConfigEditorState([{ name: 'mySensors.h', content: '// Sensor 30 - Occupancy\n' }])
 
         state.loadFromInstallerState()
 
@@ -66,7 +66,7 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
             rawEditor: null,
             rawSnapshot: '',
             _idBeforeEdit: new Map<number, number>(),
-            _rowBeforeEdit: new Map<number, { id: number; pin: number; description: string }>(),
+            _rowBeforeEdit: new Map<number, { id: number; description: string }>(),
         })
         return editor
     }
@@ -83,10 +83,10 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
 
     it('updateSensor (field-level edit) marks the state dirty', () => {
         const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
-        state.sensors = [{ id: 1, pin: 30, description: 'Occupancy' }]
+        state.sensors = [{ id: 30, description: 'Occupancy' }]
 
         const editor = makeEditor(state)
-        editor.updateSensor(0, { id: 1, pin: 30, description: 'Renamed' })
+        editor.updateSensor(0, { id: 30, description: 'Renamed' })
 
         expect(state.hasChanges).toBe(true)
         expect(state.sensors[0].description).toBe('Renamed')
@@ -94,7 +94,7 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
 
     it('removeSensor marks the state dirty', () => {
         const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
-        state.sensors = [{ id: 1, pin: 30, description: 'Occupancy' }]
+        state.sensors = [{ id: 30, description: 'Occupancy' }]
 
         const editor = makeEditor(state)
         editor.removeSensor(0)

@@ -76,14 +76,20 @@ describe('Real project — every AUTOMATION body renders in the Blocks canvas', 
     it('AUTOMATION blocks land in myAutomations.h, not myRoutes.h/mySequences.h/a leftover file', () => {
         // myAutomation_shunting.h declares 5 real AUTOMATION(...) blocks (ATM_COAL_TRUCKS_COLLECT,
         // _DELIVER, _LOAD, ATM_ES_LEFT_BAY, ATM_ES_RIGHT_BAY) — now merged into myAutomations.h
-        // like ROUTE/SEQUENCE, not left behind in their originating file.
+        // like ROUTE/SEQUENCE, not left behind in their originating file. A *real* declaration only
+        // — myAutomation_upper_double_routes.h has a `//AUTOMATION(...)` line commented out directly
+        // above a SEQUENCE(...) header, which the SEQUENCE parser now preserves as that sequence's
+        // own comment (see SequenceEntry.comment) rather than silently dropping it, so it's expected
+        // to still read "AUTOMATION(" inside mySequences.h's own `//` comment — just never as code.
+        const hasRealAutomationDeclaration = (content: string) =>
+            content.split('\n').some(line => /^\s*AUTOMATION\s*\(/.test(line))
         const routesFile = result.configFiles.find(f => f.name === 'myRoutes.h')?.content ?? ''
         const sequencesFile = result.configFiles.find(f => f.name === 'mySequences.h')?.content ?? ''
-        expect(routesFile).not.toContain('AUTOMATION(')
-        expect(sequencesFile).not.toContain('AUTOMATION(')
+        expect(hasRealAutomationDeclaration(routesFile)).toBe(false)
+        expect(hasRealAutomationDeclaration(sequencesFile)).toBe(false)
 
         const shuntingLeftover = result.configFiles.find(f => f.name === 'myAutomation_shunting.h')?.content
-        expect(shuntingLeftover === undefined || !shuntingLeftover.includes('AUTOMATION(')).toBe(true)
+        expect(shuntingLeftover === undefined || !hasRealAutomationDeclaration(shuntingLeftover)).toBe(true)
 
         expect(automations.length).toBeGreaterThan(0)
     })

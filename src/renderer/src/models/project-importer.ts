@@ -9,7 +9,7 @@
  * Three problems a real hand-written project creates that this app's structured parsers don't
  * handle on their own:
  *
- * 1. Every structured declaration (ROSTER/TURNOUT-family/SENSOR/SIGNAL/ROUTE/SEQUENCE/AUTOMATION) is
+ * 1. Every structured declaration (ROSTER/TURNOUT-family/JMRI_SENSOR/SIGNAL/ROUTE/SEQUENCE/AUTOMATION) is
  *    commonly written with an ALIAS *name* in its id position (`SEQUENCE(SEQ_FOO)`), not the
  *    numeric literal every parser's regex requires. `substituteAliasNames()` resolves these
  *    first, mirroring what the C preprocessor does with ALIAS at compile time.

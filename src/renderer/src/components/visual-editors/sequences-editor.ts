@@ -66,27 +66,37 @@ export class SequencesEditorCustomElement {
      * The Text tab's textarea binds to this (not `selectedSequence.body` directly) so the
      * SEQUENCE(id) header line is part of the actual editable/selectable text, matching the
      * Blocks tab's hat node — not a separate read-only caption sitting outside the text control.
-     * The id itself stays whatever `selectedSequence.id` already is; only the trailing
-     * `// description` comment on that first line is round-tripped.
+     * The id itself stays whatever `selectedSequence.id` already is; the trailing `// description`
+     * comment on the header line and any leading `//` comment block directly above it are both
+     * round-tripped (see SequenceEntry.description/.comment).
      */
     get selectedSequenceText(): string {
         const s = this.selectedSequence
         if (!s) return ''
+        const commentBlock = s.comment && s.comment.trim()
+            ? s.comment.trim().split('\n').map((l) => `// ${l}`).join('\n') + '\n'
+            : ''
         const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : ''
-        return `SEQUENCE(${s.id})${desc}\n${s.body ?? ''}`
+        return `${commentBlock}SEQUENCE(${s.id})${desc}\n${s.body ?? ''}`
     }
 
     set selectedSequenceText(text: string) {
         const s = this.selectedSequence
         if (!s) return
         const lines = text.split('\n')
-        const m = lines[0]?.match(SequencesEditorCustomElement.SEQ_HEADER_RE)
+        // A leading run of `//` lines right at the top is the comment block — this per-row text
+        // has no earlier entry's body to disambiguate against (unlike parseSequencesFromFile's
+        // whole-file pendingLines convention), so no blank-line gap is required here.
+        let headerIdx = 0
+        while (headerIdx < lines.length && /^\s*\/\//.test(lines[headerIdx])) headerIdx++
+        const m = lines[headerIdx]?.match(SequencesEditorCustomElement.SEQ_HEADER_RE)
         if (m) {
+            s.comment = headerIdx > 0 ? lines.slice(0, headerIdx).map((l) => l.replace(/^\s*\/\/\s?/, '')).join('\n') : undefined
             s.description = m[1] ? m[1].trim() : ''
-            s.body = lines.slice(1).join('\n')
+            s.body = lines.slice(headerIdx + 1).join('\n')
         } else {
             // Header line got mangled/removed — don't discard what the user typed; keep the
-            // last-known description and fall back to treating everything as body.
+            // last-known description/comment and fall back to treating everything as body.
             s.body = text
         }
     }

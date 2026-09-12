@@ -235,6 +235,67 @@ describe('TurnoutEditorCustomElement default state', () => {
     })
 })
 
+describe('TurnoutEditorCustomElement hidden-from-throttles', () => {
+    const TURNOUT = {
+        type: 'SERVO' as const,
+        id: 200,
+        pin: 25,
+        activeAngle: 410,
+        inactiveAngle: 205,
+        profile: 'Slow' as const,
+        description: 'Main Line Junction',
+        comment: '',
+        defaultState: 'CLOSED' as const,
+    }
+
+    it('isHidden reflects the DCC-EX HIDDEN description literal', () => {
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, { editBuffer: { ...TURNOUT, description: 'HIDDEN' } })
+        expect(editor.isHidden).toBe(true)
+
+        Object.assign(editor, { editBuffer: { ...TURNOUT, description: 'Main Line Junction' } })
+        expect(editor.isHidden).toBe(false)
+    })
+
+    it('toggleHidden(true) sets description to the literal HIDDEN and commits', () => {
+        const updateTurnoutEntry = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [TURNOUT], updateTurnoutEntry, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...TURNOUT },
+            aliasInput: '',
+        })
+
+        editor.toggleHidden(true)
+
+        expect(editor.editBuffer?.description).toBe('HIDDEN')
+        expect(updateTurnoutEntry).toHaveBeenCalledWith(0, expect.objectContaining({ description: 'HIDDEN' }))
+    })
+
+    it('toggleHidden(false) clears the description back out', () => {
+        const updateTurnoutEntry = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [{ ...TURNOUT, description: 'HIDDEN' }], updateTurnoutEntry, getPrimaryAliasNameForId: vi.fn().mockReturnValue('') },
+            editBufferIndex: 0,
+            editBuffer: { ...TURNOUT, description: 'HIDDEN' },
+            aliasInput: '',
+        })
+
+        editor.toggleHidden(false)
+
+        expect(editor.editBuffer?.description).toBe('')
+        expect(updateTurnoutEntry).toHaveBeenCalledWith(0, expect.objectContaining({ description: '' }))
+    })
+
+    it('getDisplayName shows a "(hidden)" marker instead of the raw HIDDEN literal', () => {
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        expect(editor.getDisplayName({ ...TURNOUT, description: 'HIDDEN' })).toBe('Turnout 200 (hidden)')
+        expect(editor.getDisplayName({ ...TURNOUT, description: 'Main Line Junction' })).toBe('Main Line Junction (200)')
+    })
+})
+
 describe('TurnoutEditorCustomElement alias integration', () => {
     it('populates aliasInput from myAliases.h when selecting a turnout entry', () => {
         const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement

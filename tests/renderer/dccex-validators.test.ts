@@ -549,7 +549,7 @@ describe('validateAliasRequired (via _runValidatorsForTest\'s strictAliasesData)
     })
 
     it('flags an unaliased sensor', () => {
-        const markers = _runValidatorsForTest('mySensors.h', 'SENSOR(1, 17, "Yard Entrance")', undefined, undefined, [])
+        const markers = _runValidatorsForTest('mySensors.h', '// Sensor 17 - Yard Entrance', undefined, undefined, [])
         expect(markers.some(m => m.message === 'This sensor has no alias — required while Strict aliases is enabled.')).toBe(true)
     })
 

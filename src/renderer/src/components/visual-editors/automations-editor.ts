@@ -67,19 +67,20 @@ export class AutomationsEditorCustomElement {
         return parseBody(a.body, 'AUTOMATION', BLOCK_REGISTRY).ok
     }
 
-    private static readonly AUTOMATION_HEADER_RE = /^AUTOMATION\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*$/
+    private static readonly AUTOMATION_HEADER_RE = /^AUTOMATION\s*\(\s*\d+\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/
 
     /**
      * The Text tab's textarea binds to this (not `selectedAutomation.body` directly) so the
      * AUTOMATION(id, "desc") header line is part of the actual editable/selectable text, matching
      * the Blocks tab's hat node — not a separate read-only caption sitting outside the text
      * control. The id itself stays whatever `selectedAutomation.id` already is; only the quoted
-     * description on that first line is round-tripped.
+     * description and trailing `// comment` on that first line are round-tripped.
      */
     get selectedAutomationText(): string {
         const a = this.selectedAutomation
         if (!a) return ''
-        return `AUTOMATION(${a.id}, "${a.description ?? ''}")\n${a.body ?? ''}`
+        const comment = a.comment && a.comment.trim() ? ` // ${a.comment.trim()}` : ''
+        return `AUTOMATION(${a.id}, "${a.description ?? ''}")${comment}\n${a.body ?? ''}`
     }
 
     set selectedAutomationText(text: string) {
@@ -89,6 +90,7 @@ export class AutomationsEditorCustomElement {
         const m = lines[0]?.match(AutomationsEditorCustomElement.AUTOMATION_HEADER_RE)
         if (m) {
             a.description = m[1]
+            a.comment = m[2] ? m[2].trim() : undefined
             a.body = lines.slice(1).join('\n')
         } else {
             // Header line got mangled/removed — don't discard what the user typed; keep the

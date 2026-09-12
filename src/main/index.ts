@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron'
 import { join } from 'path'
 import { config } from './config'
 import { registerAllIpcHandlers } from './ipc'
@@ -94,6 +94,14 @@ function createWindow(): BrowserWindow {
             // but fires alert overlays on file://.  Disabling web-security for
             // the test window makes file:// behave like a local trusted origin.
             webSecurity: !testDataDir,
+            // Chromium's default background throttling suspends/heavily throttles the
+            // renderer's timers and rendering once the window is occluded or minimized —
+            // after it's been in effect for a long stretch (monitor sleep from inactivity,
+            // window backgrounded for a while, not just an explicit OS lock), resuming has
+            // been known to leave the window permanently blank/frozen instead of catching
+            // back up. This is a desktop config tool, not a page that needs to save battery
+            // while backgrounded, so there's no upside to leaving it on.
+            backgroundThrottling: false,
         },
     })
 
@@ -134,6 +142,14 @@ function createWindow(): BrowserWindow {
     win.on('enter-full-screen', () => win.webContents.send('window:fullscreen-changed', true))
     win.on('leave-full-screen', () => win.webContents.send('window:fullscreen-changed', false))
 
+    const reloadContent = (): void => {
+        if (process.env['ELECTRON_RENDERER_URL']) {
+            win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+        } else {
+            win.loadFile(join(__dirname, '../renderer/index.html'))
+        }
+    }
+
     // F5 or Ctrl+R / Cmd+R → reload the renderer
     // F12 or Ctrl+Shift+I / Cmd+Option+I → toggle DevTools
     win.webContents.on('before-input-event', (event, input) => {
@@ -143,11 +159,7 @@ function createWindow(): BrowserWindow {
             ((input.control || input.meta) && input.key === 'r')
         if (reload) {
             event.preventDefault()   // stop Chromium's built-in reload (would restore the hash URL)
-            if (process.env['ELECTRON_RENDERER_URL']) {
-                win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-            } else {
-                win.loadFile(join(__dirname, '../renderer/index.html'))
-            }
+            reloadContent()
             return
         }
 
@@ -157,19 +169,41 @@ function createWindow(): BrowserWindow {
         if (devtools) win.webContents.toggleDevTools()
     })
 
+    // ── Recovery from a blank/frozen window ───────────────────────────────────
+    // Reported symptom: the app sometimes goes blank after being left alone for a
+    // long time (locked, monitor slept from inactivity, just backgrounded a while)
+    // and needs a full restart. Known Chromium behaviors cause this, and none
+    // self-heal without help:
+    //  1. A window fully occluded for a long stretch can come back without
+    //     Chromium scheduling a repaint — `invalidate()` is Electron's documented
+    //     fix, forcing one. `resume`/`unlock-screen` cover the OS-lock and
+    //     system-sleep cases; `focus`/`show`/`restore` catch the same problem
+    //     however the window became occluded (e.g. the monitor merely slept from
+    //     inactivity without an explicit OS lock, which fires none of those).
+    //  2. If the renderer process actually crashes/OOMs while occluded, the
+    //     window just sits blank forever with nothing to reload it — so do
+    //     that automatically instead of requiring the user to restart the app.
+    const forceRepaint = (): void => {
+        if (!win.isDestroyed()) win.webContents.invalidate()
+    }
+    powerMonitor.on('resume', forceRepaint)
+    powerMonitor.on('unlock-screen', forceRepaint)
+    win.on('focus', forceRepaint)
+    win.on('show', forceRepaint)
+    win.on('restore', forceRepaint)
+    win.webContents.on('render-process-gone', (_event, details) => {
+        if (win.isDestroyed()) return
+        console.error(`Renderer process gone (${details.reason}), reloading window`)
+        reloadContent()
+    })
+
     // Open external links in the OS browser, not in Electron
     win.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url)
         return { action: 'deny' }
     })
 
-    if (process.env['ELECTRON_RENDERER_URL']) {
-        // Dev: Vite dev-server URL injected by electron-vite
-        win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    } else {
-        // Prod: load compiled HTML
-        win.loadFile(join(__dirname, '../renderer/index.html'))
-    }
+    reloadContent()
 
     return win
 }

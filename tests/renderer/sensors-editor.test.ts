@@ -4,7 +4,7 @@ import type { ConfigEditorState } from '../../src/renderer/src/models/config-edi
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-function makeEditor(sensors: { id: number; pin: number; description: string }[], aliases: { name: string; value: string; aliasType?: string }[] = []) {
+function makeEditor(sensors: { id: number; description: string }[], aliases: { name: string; value: string; aliasType?: string }[] = []) {
     const editor = Object.create(SensorsEditorCustomElement.prototype) as SensorsEditorCustomElement
 
     const state = {
@@ -37,7 +37,7 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
         rawEditor: null,
         rawSnapshot: '',
         _idBeforeEdit: new Map<number, number>(),
-        _rowBeforeEdit: new Map<number, { id: number; pin: number; description: string }>(),
+        _rowBeforeEdit: new Map<number, { id: number; description: string }>(),
     })
 
     return { editor, state, toastShow }
@@ -52,13 +52,13 @@ function makeEditor(sensors: { id: number; pin: number; description: string }[],
 
 describe('SensorsEditorCustomElement.setTab', () => {
     it('seeds rawSnapshot from state.sensorsRaw when switching to raw', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
         editor.activeTab = 'visual'
-        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = 'SENSOR(10, 5)'
+        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = '// Sensor 10'
 
         editor.setTab('raw')
 
-        expect(editor.rawSnapshot).toBe('SENSOR(10, 5)')
+        expect(editor.rawSnapshot).toBe('// Sensor 10')
         expect(editor.activeTab).toBe('raw')
     })
 
@@ -78,15 +78,15 @@ describe('SensorsEditorCustomElement.setTab', () => {
 
 describe('SensorsEditorCustomElement._applyDefaultViewIfUnset', () => {
     it('applies the current default-editor-view preference when the user has not chosen a tab', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
         editor.activeTab = 'visual'
         ;(editor as unknown as { editorDefaultView: { value: string } }).editorDefaultView = { value: 'raw' }
-        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = 'SENSOR(10, 5)'
+        ;(state as unknown as { sensorsRaw: string }).sensorsRaw = '// Sensor 10'
 
         ;(editor as unknown as { _applyDefaultViewIfUnset(): void })._applyDefaultViewIfUnset()
 
         expect(editor.activeTab).toBe('raw')
-        expect(editor.rawSnapshot).toBe('SENSOR(10, 5)')
+        expect(editor.rawSnapshot).toBe('// Sensor 10')
     })
 
     it('does not override a tab the user already picked for this file', () => {
@@ -101,15 +101,20 @@ describe('SensorsEditorCustomElement._applyDefaultViewIfUnset', () => {
 })
 
 // ── updateSensor: alias follows an ID rename ─────────────────────────────────
+// A sensor's `id` IS its VPin (see myAutomationParser.ts's SensorEntry doc) — editing it via
+// <vpin-picker> mutates state.sensors[idx].id live, exactly like the old dedicated ID field
+// did, so the alias-carry-forward behavior below is unchanged. captureRowBeforeEdit() (fired
+// by the row's `focusin`, which the vpin-picker's inner controls bubble up to) is what now
+// captures the pre-edit id instead of a dedicated captureIdBeforeEdit() on a removed ID input.
 
 describe('SensorsEditorCustomElement.updateSensor', () => {
-    it('carries an existing alias forward when the sensor ID is renamed', () => {
+    it('carries an existing alias forward when the sensor ID (pin) is renamed', () => {
         const { editor, state } = makeEditor(
-            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ id: 10, description: 'Block Detector' }],
             [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
         )
 
-        editor.captureIdBeforeEdit(0)
+        editor.captureRowBeforeEdit(0)
         state.sensors[0].id = 20
         editor.updateSensor(0, state.sensors[0])
 
@@ -118,20 +123,20 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
 
     it('does not touch aliases when the ID is unchanged', () => {
         const { editor, state } = makeEditor(
-            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ id: 10, description: 'Block Detector' }],
             [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
         )
 
-        editor.captureIdBeforeEdit(0)
+        editor.captureRowBeforeEdit(0)
         editor.updateSensor(0, state.sensors[0])
 
         expect(state.syncAliasForId).not.toHaveBeenCalled()
     })
 
     it('does not call syncAliasForId on rename when there was no alias to carry', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
 
-        editor.captureIdBeforeEdit(0)
+        editor.captureRowBeforeEdit(0)
         state.sensors[0].id = 20
         editor.updateSensor(0, state.sensors[0])
 
@@ -143,7 +148,7 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
 
 describe('SensorsEditorCustomElement.makeAliasChangeHandler', () => {
     it('persists a new alias name for the sensor at the given index', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
 
         editor.makeAliasChangeHandler(0)('BLOCK_1')
 
@@ -151,7 +156,7 @@ describe('SensorsEditorCustomElement.makeAliasChangeHandler', () => {
     })
 
     it('shows a warning toast when the alias name conflicts', () => {
-        const { editor, state, toastShow } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state, toastShow } = makeEditor([{ id: 10, description: 'Block Detector' }])
         ;(state.syncAliasForId as ReturnType<typeof vi.fn>).mockReturnValueOnce({ ok: false, reason: 'Alias name "BLOCK_1" is already used for a different ID. Choose a unique name.' })
 
         editor.makeAliasChangeHandler(0)('BLOCK_1')
@@ -165,20 +170,20 @@ describe('SensorsEditorCustomElement.makeAliasChangeHandler', () => {
 
 describe('SensorsEditorCustomElement strict aliases', () => {
     it('blocks updateSensor — even for an unrelated field, not just the alias — when strictAliases is on and no alias is set', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
         state.strictAliases = true
 
-        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+        editor.updateSensor(0, { id: 10, description: 'Renamed' })
 
         // The mutation never landed — state.sensors is untouched.
-        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Block Detector' }])
+        expect(state.sensors).toEqual([{ id: 10, description: 'Block Detector' }])
     })
 
     it('shows a warning toast when updateSensor is blocked', () => {
-        const { editor, state, toastShow } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state, toastShow } = makeEditor([{ id: 10, description: 'Block Detector' }])
         state.strictAliases = true
 
-        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+        editor.updateSensor(0, { id: 10, description: 'Renamed' })
 
         expect(toastShow).toHaveBeenCalledOnce()
         const [payload] = toastShow.mock.calls[0]
@@ -187,36 +192,36 @@ describe('SensorsEditorCustomElement strict aliases', () => {
 
     it('allows updateSensor when strictAliases is on and an alias is present', () => {
         const { editor, state } = makeEditor(
-            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ id: 10, description: 'Block Detector' }],
             [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
         )
         state.strictAliases = true
 
-        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+        editor.updateSensor(0, { id: 10, description: 'Renamed' })
 
-        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Renamed' }])
+        expect(state.sensors).toEqual([{ id: 10, description: 'Renamed' }])
     })
 
     it('allows an aliasless updateSensor when strictAliases is off', () => {
-        const { editor, state } = makeEditor([{ id: 10, pin: 5, description: 'Block Detector' }])
+        const { editor, state } = makeEditor([{ id: 10, description: 'Block Detector' }])
         state.strictAliases = false
 
-        editor.updateSensor(0, { id: 10, pin: 5, description: 'Renamed' })
+        editor.updateSensor(0, { id: 10, description: 'Renamed' })
 
-        expect(state.sensors).toEqual([{ id: 10, pin: 5, description: 'Renamed' }])
+        expect(state.sensors).toEqual([{ id: 10, description: 'Renamed' }])
     })
 
     it('uses the pre-edit id to look up the alias when a rename is in flight, so an aliased sensor can still be renamed', () => {
         const { editor, state } = makeEditor(
-            [{ id: 10, pin: 5, description: 'Block Detector' }],
+            [{ id: 10, description: 'Block Detector' }],
             [{ name: 'BLOCK_1', value: '10', aliasType: 'Sensor' }],
         )
         state.strictAliases = true
 
-        editor.captureIdBeforeEdit(0)
-        editor.updateSensor(0, { id: 20, pin: 5, description: 'Block Detector' })
+        editor.captureRowBeforeEdit(0)
+        editor.updateSensor(0, { id: 20, description: 'Block Detector' })
 
-        expect(state.sensors).toEqual([{ id: 20, pin: 5, description: 'Block Detector' }])
+        expect(state.sensors).toEqual([{ id: 20, description: 'Block Detector' }])
         expect(state.syncAliasForId).toHaveBeenCalledWith(10, 20, 'BLOCK_1', 'Sensor', 'BLOCK_1')
     })
 })
