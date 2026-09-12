@@ -273,7 +273,7 @@ export function computeVpinAllocations(
     }
 
     for (const s of sensors) {
-        allocations.push({ start: s.pin, count: 1, source: `Sensor: ${s.description}`, kind: 'consumer' })
+        allocations.push({ start: s.id, count: 1, source: `Sensor: ${s.description}`, kind: 'consumer' })
     }
 
     for (const sig of signals) {

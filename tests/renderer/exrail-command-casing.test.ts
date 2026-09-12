@@ -102,9 +102,13 @@ describe('validateExrailCommandCasing — ROSTER / TURNOUT / SENSOR / SIGNAL fil
         expect(markers.filter(m => m.message.includes('case-sensitive'))).toHaveLength(0)
     })
 
-    it('flags a lowercase SENSOR call in mySensors.h', () => {
-        const markers = _runValidatorsForTest('mySensors.h', 'sensor(1, 17, "Yard Entrance")')
-        expect(markers.some(m => m.message.includes("'sensor' should be 'SENSOR'"))).toBe(true)
+    // mySensors.h is pure bookkeeping comments, not compiled EXRAIL (see
+    // parseSensorsFromFile's doc comment in myAutomationParser.ts) — it has no real macro
+    // vocabulary of its own, so casing/unknown-command checks don't apply to it at all, even
+    // for a backward-compat form like JMRI_SENSOR that the parser still reads.
+    it('does not case-check mySensors.h content, since it has no real EXRAIL vocabulary', () => {
+        const markers = _runValidatorsForTest('mySensors.h', 'jmri_sensor(17) // Yard Entrance')
+        expect(markers.filter(m => m.message.includes('case-sensitive'))).toHaveLength(0)
     })
 
     it('flags a lowercase SIGNAL call in mySignals.h', () => {
@@ -145,12 +149,18 @@ describe('validateUnknownExrailCommand', () => {
     it('flags an unrecognised macro across every closed-vocabulary file', () => {
         expect(_runValidatorsForTest('myTurnouts.h', 'MADE_UP_TURNOUT(1, 25, "x")')
             .some(m => m.message.includes('not a recognised'))).toBe(true)
-        expect(_runValidatorsForTest('mySensors.h', 'SENSER(1, 17, "x")')
-            .some(m => m.message.includes('not a recognised'))).toBe(true)
         expect(_runValidatorsForTest('mySignals.h', 'SIGNALS(5, 6, 13)')
             .some(m => m.message.includes('not a recognised'))).toBe(true)
         expect(_runValidatorsForTest('myAliases.h', 'ALIASS(FOO, 1)')
             .some(m => m.message.includes('not a recognised'))).toBe(true)
+    })
+
+    // mySensors.h is pure bookkeeping comments, not compiled EXRAIL (see
+    // parseSensorsFromFile's doc comment in myAutomationParser.ts) — it has no closed
+    // vocabulary of its own, so an unrecognised-looking word there is never flagged.
+    it('does not flag an unrecognised-looking word in mySensors.h, since it has no real EXRAIL vocabulary', () => {
+        expect(_runValidatorsForTest('mySensors.h', 'SENSER(1, 17, "x")')
+            .some(m => m.message.includes('not a recognised'))).toBe(false)
     })
 
     it('also runs on EXRAIL script files — EXRAIL is a closed macro DSL, a stray function call cannot compile there either', () => {

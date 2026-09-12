@@ -190,7 +190,7 @@ describe('VPin registry', () => {
     const turnouts: Turnout[] = [
         { type: 'SERVO', id: 1, pin: 25, activeAngle: 400, inactiveAngle: 100, profile: 'Slow', description: 'Points', comment: '', defaultState: 'CLOSED' },
     ]
-    const sensors: SensorEntry[] = [{ id: 1, pin: 30, description: 'Occupancy' }]
+    const sensors: SensorEntry[] = [{ id: 30, description: 'Occupancy' }]
     const signals: SignalEntry[] = [{ type: 'PIN', red: 40, amber: 41, green: 42, description: 'Home' }]
     const halDevices: HalDeviceInstance[] = [device({ vpinStart: 164 })] // rt_dcd_16 -> 16 pins: 164-179
 

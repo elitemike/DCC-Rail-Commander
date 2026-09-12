@@ -15,7 +15,7 @@ import type { HalDeviceInstance } from '../config/hal-devices'
  * signal editors' pin fields.
  *
  * A DCC-EX VPin is ultimately still just a plain number in every generated
- * macro (SERVO_TURNOUT/PIN_TURNOUT/SENSOR/SIGNAL) — there's no way to persist
+ * macro (SERVO_TURNOUT/PIN_TURNOUT/JMRI_SENSOR/SIGNAL) — there's no way to persist
  * "this pin came from board X, channel 3" in those files. So this component
  * doesn't change what gets stored; it's a friendlier way to *set* that number:
  * pick "Direct MCU pin" and type a raw number (today's behaviour, unchanged),

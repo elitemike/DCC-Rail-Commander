@@ -18,7 +18,7 @@ const EMPTY: DefinedObjects = { roster: [], turnouts: [], sensors: [], signals: 
 const POPULATED: DefinedObjects = {
     roster: [{ dccAddress: 3, name: 'Loco', functions: [], comment: '' }],
     turnouts: [{ type: 'DCC', id: 200, addr: 1, subAddr: 0, description: '', defaultState: 'CLOSED' }],
-    sensors: [{ id: 100, pin: 2, description: '' }],
+    sensors: [{ id: 100, description: '' }],
     signals: [{ red: 1, amber: 2, green: 3 }],
     routes: [{ id: 1, description: '', body: '' }],
     sequences: [{ id: 1, body: '' }],

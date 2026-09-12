@@ -42,7 +42,7 @@ test('rapid Monitor toggling never leaves duplicate or stray DOM behind', async 
     // Whatever state it settles in (open or closed), there must be exactly
     // one clean render, never a partial or duplicated stack.
     expect(await page.locator('serial-monitor').count()).toBeLessThanOrEqual(1)
-    expect(await page.locator('serial-monitor button[title^="Send:"]').count()).toBeLessThanOrEqual(14)
+    expect(await page.locator('serial-monitor button[title^="Send:"]').count()).toBeLessThanOrEqual(15)
     expect(await page.locator('serial-monitor button[title="Send: <s>"]').count()).toBeLessThanOrEqual(1)
 })
 
@@ -98,6 +98,31 @@ test('closing the Monitor panel does not disconnect the port', async ({ workspac
     await expect(page.locator('serial-monitor')).toHaveCount(0)
 
     await expect(connectToggle).toHaveText('Disconnect')
+})
+
+/**
+ * The Reset quick-send command reboots the command station, so unlike the
+ * other quick-send buttons it must be gated behind a confirmation dialog —
+ * cancelling must not send anything, and confirming must send the real
+ * `<D RESET>` command.
+ */
+test('Reset quick-send button asks for confirmation before sending', async ({ workspacePage: page }) => {
+    await expect(page.locator('serial-monitor')).toHaveCount(1)
+
+    await page.getByRole('button', { name: 'Reset', exact: true }).click()
+    const dialog = page.locator('confirm-dialog, [class*="fixed inset-0"]').filter({ hasText: 'Reset?' })
+    await dialog.waitFor({ state: 'visible' })
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await expect(page.locator('serial-monitor .xterm-rows')).not.toContainText('<D RESET>')
+
+    await page.getByRole('button', { name: 'Reset', exact: true }).click()
+    const dialog2 = page.locator('confirm-dialog, [class*="fixed inset-0"]').filter({ hasText: 'Reset?' })
+    await dialog2.waitFor({ state: 'visible' })
+    await dialog2.getByRole('button', { name: 'Send' }).click()
+
+    await expect(page.locator('serial-monitor .xterm-rows')).toContainText('> <D RESET>')
 })
 
 test('Disconnect/Connect toggles the connection while the Monitor stays open as a view', async ({ workspacePage: page }) => {

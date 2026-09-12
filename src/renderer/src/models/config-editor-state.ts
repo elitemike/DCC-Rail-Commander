@@ -56,6 +56,7 @@ import {
     type HalDeviceInstance,
     type VpinAllocation,
 } from '../config/hal-devices'
+import { isExampleConfigFile } from '../utils/product-source-files'
 
 /**
  * Open/close tag that delimits the auto-managed #include block at the top of
@@ -893,9 +894,14 @@ export class ConfigEditorState {
         'myStartup.h',
     ])
 
-    /** Returns true if this filename was created by the user (not a built-in) */
+    /**
+     * Returns true if this filename was created by the user (not a built-in
+     * managed file, and not one of the repo's shipped `.example.h`/`.example`
+     * reference files — those are tracked only so they can be shown in the
+     * editor, and must never be auto-#included or scanned for user content).
+     */
     isCustomFile(name: string): boolean {
-        return !ConfigEditorState.BUILTIN.has(name)
+        return !ConfigEditorState.BUILTIN.has(name) && !isExampleConfigFile(name)
     }
 
     /** All custom file names currently in the file list */

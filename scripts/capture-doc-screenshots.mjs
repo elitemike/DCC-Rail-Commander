@@ -73,8 +73,8 @@ const MOCK_TURNOUTS_H = [
 ].join('\n')
 
 const MOCK_SENSORS_H = [
-    'SENSOR(1, 30, "Platform 1 Occupied")',
-    'SENSOR(2, 31, "Platform 2 Occupied")',
+    '// Sensor 30 - Platform 1 Occupied',
+    '// Sensor 31 - Platform 2 Occupied',
 ].join('\n')
 
 const MOCK_SIGNALS_H = [

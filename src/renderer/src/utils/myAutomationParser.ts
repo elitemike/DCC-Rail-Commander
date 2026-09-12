@@ -112,9 +112,9 @@ export interface AutomationData {
 
 // ─── Sensors, Signals, Routes, Sequences, Aliases parsing ───────────────
 
+/** `id` is the VPin itself — see parseSensorsFromFile below for why there's no separate pin field. */
 export interface SensorEntry {
     id: number;
-    pin: number;
     description: string;
 }
 
@@ -140,7 +140,10 @@ export type SignalEntry = PinSignal | DccSignal;
 
 export interface RouteEntry {
     id: number;
+    /** Friendly short name — EXRAIL's own description argument, shown on throttles. */
     description: string;
+    /** Optional longer free-form note, stored as a trailing `// comment` on the ROUTE(...) line — mirrors Roster.comment. */
+    comment?: string;
     /**
      * Raw text between ROUTE(...) and the next ROUTE(...)/EOF. Includes the terminating DONE
      * line when the file has one — DONE is real, user-editable body content (rendered as an
@@ -152,8 +155,10 @@ export interface RouteEntry {
 
 export interface SequenceEntry {
     id: number;
-    /** Friendly name/description, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
+    /** Friendly short name, stored as a trailing `// comment` on the SEQUENCE(id) line — SEQUENCE() itself has no description argument. */
     description?: string;
+    /** Optional longer free-form note, stored as a `//`-comment block on the line(s) immediately above the header — mirrors Roster.comment. */
+    comment?: string;
     /** Raw text between SEQUENCE(...) and the next SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
 }
@@ -169,7 +174,10 @@ export interface SequenceEntry {
  */
 export interface AutomationEntry {
     id: number;
+    /** Friendly short name — EXRAIL's own description argument, shown on throttles. */
     description: string;
+    /** Optional longer free-form note, stored as a trailing `// comment` on the AUTOMATION(...) line — mirrors Roster.comment. */
+    comment?: string;
     /** Raw text between AUTOMATION(...) and the next ROUTE/AUTOMATION/SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
 }
@@ -189,6 +197,10 @@ export interface AutomationEntry {
 export interface EventHandlerEntry {
     command: string;
     text: string;
+    /** Friendly short name, stored as a trailing `// comment` on the first header line — event handlers have no description argument of their own, same convention as SequenceEntry.description. */
+    name?: string;
+    /** Optional longer free-form note, stored as a `//`-comment block on the line(s) immediately above the header(s) — mirrors Roster.comment. */
+    comment?: string;
 }
 
 export interface AliasEntry {
@@ -269,7 +281,7 @@ const EXRAIL_RESERVED_WORDS = new Set([
     'ONBUTTON', 'ONBITMAP', 'ONBLOCKENTER', 'ONBLOCKEXIT', 'ONACTIVATE', 'ONACTIVATEL', 'ONDEACTIVATE', 'ONDEACTIVATEL',
     'ONCLOSE', 'ONTHROW', 'ONRED', 'ONAMBER', 'ONGREEN', 'ONRAILSYNCON', 'ONRAILSYNCOFF', 'ONCLOCKTIME',
     'ONCLOCKMINS', 'ONTIME', 'ONOVERLOAD', 'ONROTATE', 'ONACON', 'ONACOF', 'ONLCC', 'ALIAS',
-    'ROSTER', 'SENSOR', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
+    'ROSTER', 'JMRI_SENSOR', 'JMRI_SENSOR_NOPULLUP', 'SIGNAL', 'SERVO_TURNOUT', 'TURNOUT', 'PIN_TURNOUT', 'AUTOMATION', 'ELSE',
     'ENDIF', 'IFOCCUPIED',
 ]);
 
@@ -384,38 +396,59 @@ export function listObjectIdsForType(type: AliasTargetType, data: ObjectIdCollec
     }
 }
 
+// mySensors.h is pure bookkeeping for this app's own Visual editor — a comment mapping a
+// sensor's number (VPin) to a friendly name, nothing more. There is no standalone "SENSOR"
+// declaration macro in real EXRAIL at all (never was — it was this app's own fabrication, and
+// never shipped, so there's no real-world file to stay compatible with): a sensor's number
+// (used in ONSENSOR/AT/IF/ALIAS, everywhere) is a direct VPin reference and needs no
+// declaration to be usable. JMRI_SENSOR (which *is* a real macro) would make one JMRI/
+// WiThrottle-visible, but this app deliberately never writes it — that's compiled behavior
+// this editor doesn't try to manage, so it's left as something to hand-write elsewhere (e.g. a
+// custom EXRAIL file) if actually needed. A real hand-rolled project can still have genuine
+// JMRI_SENSOR declarations though, so parseSensorsFromFile still reads those on load, so the
+// sensor shows up in the Visual editor and its VPin is accounted for — but saving downgrades
+// it to a plain comment, same as every other entry; the real declaration is not preserved.
 export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
+    // Collected with each match's file position so entries come out in file order regardless
+    // of which recognized form produced them.
+    const found: { index: number; entries: SensorEntry[] }[] = [];
+    let m: RegExpExecArray | null;
+
+    // Canonical form: `// Sensor <id>[ - <description>]`.
+    const commentRe = /^[ \t]*\/\/[ \t]*Sensor[ \t]+(\d+)[ \t]*(?:-[ \t]*(.*?))?[ \t]*$/gim;
+    while ((m = commentRe.exec(fileContent)) !== null) {
+        found.push({ index: m.index, entries: [{ id: parseInt(m[1], 10), description: (m[2] ?? '').trim() }] });
+    }
+
+    // JMRI_SENSOR only ever appears as *live* (non-commented) code, so work from a copy with
+    // whole-line comments blanked out — otherwise a commented-out example elsewhere in the
+    // file (or the canonical form above) could be picked up as a real declaration.
     const uncommented = fileContent
         .split('\n')
         .map(l => (l.trimStart().startsWith('//') ? '' : l))
         .join('\n');
-    const sensorRe = /SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*"([^"]*)"\s*\)(?:\s*\/\/\s*(.*))?/g;
-    const out: SensorEntry[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = sensorRe.exec(uncommented)) !== null) {
-        out.push({ id: parseInt(m[1], 10), pin: parseInt(m[2], 10), description: m[3] });
-    }
 
-    // ── JMRI_SENSOR(vpin, count) — bulk-declares `count` sensors starting at `vpin`, each
-    // addressable by its own pin number, exactly as if declared individually via
-    // SENSOR(pin, pin, ""). Expanded here into individual entries rather than kept as one
-    // union variant — the resulting rows are structurally identical to SENSOR-declared ones
-    // (id === pin), so every existing consumer (editor, VPin allocation, validators) needs no
-    // changes to handle them.
-    const jmriRe = /JMRI_SENSOR\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // JMRI_SENSOR(vpin[, count]) — a real EXRAIL macro this app never writes but still reads,
+    // per the note above. Count omitted or 1 declares a single sensor, whose friendly name (if
+    // any) is the trailing comment. A count > 1 bulk-declares a contiguous run starting at
+    // vpin; a single trailing comment can't be distributed across those, so each expands with
+    // an empty description. JMRI_SENSOR_NOPULLUP is accepted the same way.
+    const jmriRe = /(?<![A-Za-z_])JMRI_SENSOR(?:_NOPULLUP)?\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = jmriRe.exec(uncommented)) !== null) {
         const start = parseInt(m[1], 10);
-        const count = parseInt(m[2], 10);
-        for (let i = 0; i < count; i++) {
-            out.push({ id: start + i, pin: start + i, description: '' });
-        }
+        const count = m[2] !== undefined ? parseInt(m[2], 10) : 1;
+        const entries: SensorEntry[] = count === 1
+            ? [{ id: start, description: (m[3] ?? '').trim() }]
+            : Array.from({ length: count }, (_, i) => ({ id: start + i, description: '' }));
+        found.push({ index: m.index, entries });
     }
 
-    return out;
+    found.sort((a, b) => a.index - b.index);
+    return found.flatMap(f => f.entries);
 }
 
 export function serializeSensorsToFile(sensors: SensorEntry[]): string {
-    return sensors.map(s => `SENSOR(${s.id}, ${s.pin}, "${s.description}")`).join('\n');
+    return sensors.map(s => `// Sensor ${s.id}${s.description ? ` - ${s.description}` : ''}`).join('\n');
 }
 
 export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
@@ -550,19 +583,39 @@ function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { bo
     return { body: bodyLines.join('\n').trim(), next: i };
 }
 
+/**
+ * Pulls a trailing `//`-comment block off `pendingLines` — the lines a caller has been
+ * accumulating between the previous entry's body and the header it just found (blank lines,
+ * stray text, or nothing at all). Used by SEQUENCE and event-handler parsing, which have no
+ * on-disk description argument to hang a longer note on, so the note instead lives as one or
+ * more `//` lines directly above the header — see SequenceEntry.comment / EventHandlerEntry.comment.
+ * Trailing blank lines are ignored first; only a contiguous, uninterrupted run of `//` lines
+ * immediately above the header counts, so unrelated stray content further back is left alone
+ * (and silently dropped, same as it already was before this comment convention existed).
+ */
+function extractLeadingComment(pendingLines: string[]): string | undefined {
+    let end = pendingLines.length;
+    while (end > 0 && pendingLines[end - 1].trim() === '') end--;
+    let start = end;
+    while (start > 0 && /^\s*\/\//.test(pendingLines[start - 1])) start--;
+    if (start === end) return undefined;
+    return pendingLines.slice(start, end).map(l => l.replace(/^\s*\/\/\s?/, '')).join('\n');
+}
+
 export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
     const lines = fileContent.split('\n');
     const out: RouteEntry[] = [];
-    const routeStart = /^\s*ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const routeStart = /^\s*ROUTE\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(routeStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const { body, next } = scanBlockBody(lines, i + 1, routeStart);
             i = next;
-            out.push({ id, description: desc, body });
+            out.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -578,16 +631,17 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
 export function parseAutomationsFromFile(fileContent: string): AutomationEntry[] {
     const lines = fileContent.split('\n');
     const out: AutomationEntry[] = [];
-    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(automationStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const { body, next } = scanBlockBody(lines, i + 1, automationStart);
             i = next;
-            out.push({ id, description: desc, body });
+            out.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -604,7 +658,7 @@ export function parseAutomationsFromFile(fileContent: string): AutomationEntry[]
 export function extractAutomations(fileContent: string): { automations: AutomationEntry[]; remainder: string } {
     const lines = fileContent.split('\n');
     const automations: AutomationEntry[] = [];
-    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*$/;
+    const automationStart = /^\s*AUTOMATION\s*\(\s*(\d+)\s*,\s*"([^"]*)"\s*\)\s*(?:\/\/\s*(.*))?\s*$/;
     const consumed = new Array<boolean>(lines.length).fill(false);
     let i = 0;
     while (i < lines.length) {
@@ -612,11 +666,12 @@ export function extractAutomations(fileContent: string): { automations: Automati
         if (m) {
             const id = parseInt(m[1], 10);
             const desc = m[2];
+            const comment = m[3] ? m[3].trim() : undefined;
             const startIdx = i;
             const { body, next } = scanBlockBody(lines, i + 1, automationStart);
             for (let k = startIdx; k < next; k++) consumed[k] = true;
             i = next;
-            automations.push({ id, description: desc, body });
+            automations.push({ id, description: desc, comment, body });
             continue;
         }
         i++;
@@ -628,7 +683,8 @@ export function extractAutomations(fileContent: string): { automations: Automati
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {
-        lines.push(`ROUTE(${r.id}, "${r.description}")`);
+        const comment = r.comment && r.comment.trim() ? ` // ${r.comment.trim()}` : '';
+        lines.push(`ROUTE(${r.id}, "${r.description}")${comment}`);
         const trimmedBody = (r.body ?? '').trim();
         // A brand-new route's body starts empty — DONE is still the sensible on-disk default
         // for that case. Once the body has any real content, write it verbatim: whether it
@@ -641,11 +697,12 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
 }
 
 /** Mirrors serializeRoutesToFile exactly — AUTOMATION shares ROUTE's exact shape (id, quoted
- *  description, DONE-or-user's-own-terminator body). */
+ *  description, optional trailing comment, DONE-or-user's-own-terminator body). */
 export function serializeAutomationsToFile(automations: AutomationEntry[]): string {
     const lines: string[] = [];
     for (const a of automations) {
-        lines.push(`AUTOMATION(${a.id}, "${a.description}")`);
+        const comment = a.comment && a.comment.trim() ? ` // ${a.comment.trim()}` : '';
+        lines.push(`AUTOMATION(${a.id}, "${a.description}")${comment}`);
         const trimmedBody = (a.body ?? '').trim();
         lines.push(trimmedBody || 'DONE');
         lines.push('');
@@ -654,20 +711,27 @@ export function serializeAutomationsToFile(automations: AutomationEntry[]): stri
 }
 
 export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
-    const lines = fileContent.split('\n');
+    // Strip the "managed file" boilerplate header (see buildGeneratorHeader()) before scanning —
+    // it's pure `//` lines sitting above the first SEQUENCE, and without this it would otherwise
+    // get misread as *that* sequence's leading comment block on every load of a saved file.
+    const lines = stripGeneratorHeader(fileContent).split('\n');
     const out: SequenceEntry[] = [];
     const seqStart = /^\s*SEQUENCE\s*\(\s*(\d+)\s*\)\s*(?:\/\/\s*(.*))?$/;
+    let pendingLines: string[] = [];
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(seqStart);
         if (m) {
             const id = parseInt(m[1], 10);
             const description = m[2] ? m[2].trim() : '';
+            const comment = extractLeadingComment(pendingLines);
+            pendingLines = [];
             const { body, next } = scanBlockBody(lines, i + 1, seqStart);
             i = next;
-            out.push({ id, description, body });
+            out.push({ id, description, comment, body });
             continue;
         }
+        pendingLines.push(lines[i]);
         i++;
     }
     return out;
@@ -676,6 +740,9 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
 export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
     const lines: string[] = [];
     for (const s of seqs) {
+        if (s.comment && s.comment.trim()) {
+            for (const commentLine of s.comment.trim().split('\n')) lines.push(`// ${commentLine}`);
+        }
         const desc = s.description && s.description.trim() ? ` // ${s.description.trim()}` : '';
         lines.push(`SEQUENCE(${s.id})${desc}`);
         const trimmedBody = (s.body ?? '').trim();
@@ -694,30 +761,68 @@ export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
  * and everything through the next block/EOF, via the same scanBlockBody() helper routes/sequences
  * use — see EventHandlerEntry's own doc comment for why the header line is part of `text` here,
  * unlike RouteEntry.body/SequenceEntry.body.
+ *
+ * Before scanning the body, a header line first absorbs any immediately-following header lines of
+ * its own shape (no blank line or body statement between them) — EXRAIL's own fallthrough idiom for
+ * running one shared body off several triggers (`ONSENSOR(1)` / `ONSENSOR(2)` / `IF(...)`... /
+ * `DONE`, or mixing hat types the same way). Left unhandled, each stacked header would look like the
+ * start of the *next* top-level block to the header below it, splitting one shared-body group into
+ * several entries and handing the entire body to only the last trigger. exrail-block-compiler.ts's
+ * parseEventHandlerBlock() already expects and re-parses exactly this shape (all stacked headers
+ * followed by the shared body in one `text`), via its own "Also on ..." trigger-marker nodes — this
+ * loop just has to stop splitting it apart first.
+ *
+ * `text` itself stays pure EXRAIL code (header line(s) + body, no comments) so it round-trips
+ * through exrail-block-compiler.ts's parseEventHandlerBlock()/compileEventHandlerBlock() (and its
+ * LINE_RE header parsing) completely unchanged — a trailing `// name` comment on the first header
+ * line is peeled off into `name` before `text` is built, and a leading `//`-comment block
+ * immediately above the header(s) is peeled off into `comment` via the same pendingLines
+ * convention parseSequencesFromFile() uses (see extractLeadingComment()). Any trailing comment on
+ * a *stacked* header line 2..n is discarded — only the first line's comment becomes `name`.
  */
 export function parseEventHandlersFromFile(fileContent: string): EventHandlerEntry[] {
-    const lines = fileContent.split('\n');
+    // Strip the "managed file" boilerplate header (see buildGeneratorHeader()) before scanning —
+    // same reasoning as parseSequencesFromFile(): left in, it would get misread as the first
+    // handler's leading comment block on every load of a saved file.
+    const lines = stripGeneratorHeader(fileContent).split('\n');
     const out: EventHandlerEntry[] = [];
-    const handlerStart = /^\s*(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*$/;
+    const handlerStart = /^\s*(ON[A-Z0-9_]*)\s*(?:\([^)]*\))?\s*(?:\/\/\s*(.*))?\s*$/;
+    let pendingLines: string[] = [];
     let i = 0;
     while (i < lines.length) {
         const m = lines[i].match(handlerStart);
         if (m) {
             const command = m[1];
-            const headerLine = lines[i];
-            const { body, next } = scanBlockBody(lines, i + 1, handlerStart);
+            const name = m[2] ? m[2].trim() : undefined;
+            const comment = extractLeadingComment(pendingLines);
+            pendingLines = [];
+            const headerLines = [lines[i].replace(/\s*\/\/.*$/, '')];
+            let j = i + 1;
+            while (j < lines.length && handlerStart.test(lines[j])) {
+                headerLines.push(lines[j].replace(/\s*\/\/.*$/, ''));
+                j++;
+            }
+            const { body, next } = scanBlockBody(lines, j, handlerStart);
             i = next;
-            const text = body ? `${headerLine}\n${body}` : headerLine;
-            out.push({ command, text });
+            const text = body ? `${headerLines.join('\n')}\n${body}` : headerLines.join('\n');
+            out.push({ command, text, name, comment });
             continue;
         }
+        pendingLines.push(lines[i]);
         i++;
     }
     return out;
 }
 
 export function serializeEventHandlersToFile(handlers: EventHandlerEntry[]): string {
-    return handlers.map(h => h.text.trim()).join('\n\n');
+    return handlers.map(h => {
+        const commentBlock = h.comment && h.comment.trim()
+            ? h.comment.trim().split('\n').map(l => `// ${l}`).join('\n') + '\n'
+            : '';
+        const lines = h.text.trim().split('\n');
+        if (h.name && h.name.trim() && lines.length > 0) lines[0] = `${lines[0]} // ${h.name.trim()}`;
+        return `${commentBlock}${lines.join('\n')}`;
+    }).join('\n\n');
 }
 
 // ─── ROUTE/AUTOMATION/SEQUENCE ID rules ──────────────────────────────────────
