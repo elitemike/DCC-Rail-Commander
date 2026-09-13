@@ -30,6 +30,7 @@ examples:
 | `ONSENSOR` | On sensor changed | Sensor |
 | `ONCHANGE` | On rotary encoder changed | Sensor |
 | `ONBUTTON` | On button pressed | Sensor |
+| `ONBUTTON` (as "On sensor active") | On sensor active | Sensor |
 | `ONBITMAP` | On bitmap sensor changed | Sensor |
 | `ONBLOCKENTER` / `ONBLOCKEXIT` | On loco enters/exits block | Block ID |
 | `ONACTIVATE` / `ONDEACTIVATE` | On DCC accessory activate/deactivate | Address, Sub-address |
@@ -43,6 +44,12 @@ examples:
 
 A handler that needs a turnout, sensor, signal, or similar reference is only offered once at least one of that
 kind exists in your project.
+
+"On sensor active" is only a logical helper: it exists in the dropdown to make the "active" concept easier to
+find and understand, but it compiles to the exact same `ONBUTTON` command as "On button pressed" — there is no
+separate `ONSENSORACTIVE` EXRAIL command. Because the Blocks canvas always re-derives a block's face from the
+literal command word in its text, a handler added this way renders as, and is fully indistinguishable from, "On
+button pressed" as soon as its Blocks canvas is shown — immediately after adding it, not just after a save/reload.
 
 ## Blocks and Raw, per handler
 

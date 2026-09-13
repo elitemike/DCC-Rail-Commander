@@ -2214,7 +2214,7 @@ const BASE_BLOCK_REGISTRY: BlockTypeDef[] = [
     // parseEventHandlerBlock()/compileEventHandlerBlock() and exrail-blockly-blocks.ts's jsonFor()
     // for the mechanism. `category` here is never read by the toolbox (hats are always excluded —
     // see exrail-blockly-toolbox.ts) but IS used by the Event Handlers editor's "Add" menu to
-    // group these 25 choices.
+    // group these choices.
     {
         id: 'ONSENSOR',
         shape: 'hat',
@@ -2247,6 +2247,27 @@ const BASE_BLOCK_REGISTRY: BlockTypeDef[] = [
         paramFlavoredHat: true,
         label: 'On button pressed',
         description: 'Starts a task here when a sensor changes HIGH to LOW.',
+        color: '#8e44ad',
+        category: 'Sensors',
+        params: [{ name: 'sensorId', label: 'Sensor', kind: 'sensorRef' }],
+        isAvailable: hasSensors,
+        emit: (p) => `ONBUTTON(${p.sensorId})`,
+        helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#onbuttonvpin',
+    },
+    // A pure Add-menu convenience, not a distinct EXRAIL command: emit() below produces literal
+    // `ONBUTTON(...)` text, and parseEventHandlerBlock() (exrail-block-compiler.ts) resolves a
+    // block's face purely from that literal command word, so the Blocks canvas re-renders this
+    // as the real 'ONBUTTON' entry ("On button pressed") the moment it's shown — immediately after
+    // adding, not just after a save/reload. Only the sidebar row label and this session's in-memory
+    // EventHandlerEntry.command briefly say 'ONSENSORACTIVE', until the next parse from raw text.
+    {
+        id: 'ONSENSORACTIVE',
+        shape: 'hat',
+        paramFlavoredHat: true,
+        label: 'On sensor active',
+        description: 'Starts a task here when a sensor becomes active (goes LOW). This is only a logical '
+            + 'helper to make the "active" concept easier to understand — it compiles to the exact same '
+            + 'ONBUTTON command as "On button pressed", just offered here under a more sensor-oriented name.',
         color: '#8e44ad',
         category: 'Sensors',
         params: [{ name: 'sensorId', label: 'Sensor', kind: 'sensorRef' }],

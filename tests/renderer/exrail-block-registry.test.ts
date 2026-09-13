@@ -80,6 +80,22 @@ describe('BLOCK_REGISTRY isAvailable gating', () => {
     })
 })
 
+describe('ONSENSORACTIVE is a logical helper alias for ONBUTTON', () => {
+    const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
+
+    it('emits the same ONBUTTON(...) text as the real ONBUTTON block', () => {
+        const onButton = byId.get('ONBUTTON')!
+        const onSensorActive = byId.get('ONSENSORACTIVE')!
+        expect(onSensorActive.emit({ sensorId: 100 })).toBe(onButton.emit({ sensorId: 100 }))
+        expect(onSensorActive.emit({ sensorId: 100 })).toBe('ONBUTTON(100)')
+    })
+
+    it('is gated on sensors existing, same as ONBUTTON', () => {
+        expect(byId.get('ONSENSORACTIVE')!.isAvailable(EMPTY)).toBe(false)
+        expect(byId.get('ONSENSORACTIVE')!.isAvailable(POPULATED)).toBe(true)
+    })
+})
+
 describe('BLOCK_REGISTRY helpUrl', () => {
     const byId = new Map(BLOCK_REGISTRY.map((b) => [b.id, b]))
 
