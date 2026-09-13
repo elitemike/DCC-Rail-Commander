@@ -1,4 +1,15 @@
 {
+    "files.watcherExclude": {
+        "**/release/**": true,
+        "**/out/**": true
+    },
+    "files.exclude": {
+        "**/release": true
+    },
+    "search.exclude": {
+        "**/release": true,
+        "**/out": true
+    },
     "python-envs.pythonProjects": [],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": false,
