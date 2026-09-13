@@ -114,6 +114,22 @@ describe('EventHandlersEditorCustomElement.addEventHandler', () => {
 
         expect(state.eventHandlers).toEqual([{ command: 'ONBLOCKENTER', text: 'ONBLOCKENTER(0)\nDONE' }])
     })
+
+    it('attaches ONSENSORACTIVE.seedComment as a trailing comment on the seed DONE line, sensors gated on', () => {
+        const state = { eventHandlers: [], roster: [], turnouts: [], sensors: [{ id: 100, description: '' }], signals: [], routes: [], sequences: [], aliases: [], hasStackedMotorShield: false, syncAll: vi.fn() } as unknown as ConfigEditorState
+        const editor = Object.create(EventHandlersEditorCustomElement.prototype) as EventHandlersEditorCustomElement
+        Object.assign(editor, { state, addSelection: 'ONSENSORACTIVE', blockCanvas: { reload: vi.fn(), refreshSize: vi.fn() }, rowRawEditor: { flush: vi.fn(), switchModel: vi.fn() } })
+
+        editor.addEventHandler()
+
+        const entry = (state.eventHandlers as EventHandlerEntry[])[0]
+        expect(entry.command).toBe('ONSENSORACTIVE')
+        expect(entry.text).toBe('ONBUTTON(100)\nDONE // Added as "On sensor active" — a logical helper for ONBUTTON, which is what this actually compiles to.')
+        // The comment round-trips through the ordinary per-statement mechanism, so the seeded body
+        // still parses into blocks even though the hat itself renders as ONBUTTON — see
+        // exrail-block-registry.ts's seedComment doc comment.
+        expect(editor.canUseBlocks(entry)).toBe(true)
+    })
 })
 
 describe('EventHandlersEditorCustomElement.removeEventHandler', () => {

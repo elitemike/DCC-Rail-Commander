@@ -242,7 +242,16 @@ export class EventHandlersEditorCustomElement {
         this.state.setEventHandlersFromRaw(text)
     }
 
-    /** Adds a new entry for the currently-picked Add selection, seeded with default field values (mirrors how a freshly-dragged toolbox block gets its ref-kind params seeded — see defaultFieldsFor()) and a bare `DONE` body. */
+    /**
+     * Adds a new entry for the currently-picked Add selection, seeded with default field values
+     * (mirrors how a freshly-dragged toolbox block gets its ref-kind params seeded — see
+     * defaultFieldsFor()) and a `DONE` body. When `def.seedComment` is set (see its own doc comment
+     * on BlockTypeDef), the DONE line carries it as a trailing `// comment` — the ordinary per-
+     * statement comment mechanism already renders that as a Blockly comment bubble and round-trips
+     * it through save/reload, which is how a helper hat like ONSENSORACTIVE keeps a visible trace
+     * of what was actually picked even though its own block face immediately reverts to whatever
+     * real command it emits.
+     */
     addEventHandler(): void {
         const def = BLOCK_REGISTRY.find((b) => b.id === this.addSelection)
         if (!def) return
@@ -254,7 +263,8 @@ export class EventHandlersEditorCustomElement {
         for (const p of def.params) {
             if (fullParamValues[p.name] === undefined) fullParamValues[p.name] = p.kind === 'number' ? 0 : ''
         }
-        const text = `${def.emit(fullParamValues)}\nDONE`
+        const doneLine = def.seedComment ? `DONE // ${def.seedComment}` : 'DONE'
+        const text = `${def.emit(fullParamValues)}\n${doneLine}`
         this.state.eventHandlers = [...this.state.eventHandlers, { command: def.id, text }]
         this.state.syncAll()
         const newIndex = this.state.eventHandlers.length - 1

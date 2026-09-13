@@ -2258,8 +2258,9 @@ const BASE_BLOCK_REGISTRY: BlockTypeDef[] = [
     // `ONBUTTON(...)` text, and parseEventHandlerBlock() (exrail-block-compiler.ts) resolves a
     // block's face purely from that literal command word, so the Blocks canvas re-renders this
     // as the real 'ONBUTTON' entry ("On button pressed") the moment it's shown — immediately after
-    // adding, not just after a save/reload. Only the sidebar row label and this session's in-memory
-    // EventHandlerEntry.command briefly say 'ONSENSORACTIVE', until the next parse from raw text.
+    // adding, not just after a save/reload. `seedComment` compensates: addEventHandler() attaches
+    // it as a Blockly comment bubble on the seed body's DONE block, so the "added as On sensor
+    // active" framing survives even though the hat block itself reverts — see BlockTypeDef.seedComment.
     {
         id: 'ONSENSORACTIVE',
         shape: 'hat',
@@ -2273,6 +2274,7 @@ const BASE_BLOCK_REGISTRY: BlockTypeDef[] = [
         params: [{ name: 'sensorId', label: 'Sensor', kind: 'sensorRef' }],
         isAvailable: hasSensors,
         emit: (p) => `ONBUTTON(${p.sensorId})`,
+        seedComment: 'Added as "On sensor active" — a logical helper for ONBUTTON, which is what this actually compiles to.',
         helpUrl: 'https://dcc-ex.com/mkdocs-test/products/ex-commandstation/exrail/command-list/#onbuttonvpin',
     },
     {

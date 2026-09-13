@@ -119,6 +119,18 @@ export interface BlockTypeDef {
      * sitting in that leading run, never mid-body or inside a branch.
      */
     triggerMarkerFor?: string
+    /**
+     * Only meaningful to the Event Handlers editor's "Add" menu (event-handlers-editor.ts's
+     * addEventHandler()) — never read by parseEventHandlerBlock()/compileEventHandlerBlock() or the
+     * toolbox. Set on a helper hat whose `emit()` produces another real command's literal text (e.g.
+     * ONSENSORACTIVE emitting `ONBUTTON(...)`), so the Blocks canvas would otherwise silently render
+     * it as that other command's block with no trace of which Add-menu choice was actually picked —
+     * see parseEventHandlerBlock()'s command-word lookup, which can't tell them apart. addEventHandler()
+     * attaches this text as a trailing `// comment` on the seed body's DONE line, which the ordinary
+     * per-statement comment mechanism (splitTrailingComment()/commentLines() below) already carries
+     * through parse/compile/Blockly's comment-bubble round-trip with no other code changes needed.
+     */
+    seedComment?: string
 }
 
 // ── Ref-kind param options ────────────────────────────────────────────────

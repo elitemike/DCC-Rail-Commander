@@ -48,8 +48,10 @@ kind exists in your project.
 "On sensor active" is only a logical helper: it exists in the dropdown to make the "active" concept easier to
 find and understand, but it compiles to the exact same `ONBUTTON` command as "On button pressed" — there is no
 separate `ONSENSORACTIVE` EXRAIL command. Because the Blocks canvas always re-derives a block's face from the
-literal command word in its text, a handler added this way renders as, and is fully indistinguishable from, "On
-button pressed" as soon as its Blocks canvas is shown — immediately after adding it, not just after a save/reload.
+literal command word in its text, a handler added this way renders as "On button pressed" as soon as its Blocks
+canvas is shown — immediately after adding it, not just after a save/reload. To keep a visible trace of what was
+actually picked, the new entry's `DONE` block carries a comment bubble noting it was added as "On sensor active";
+that comment round-trips through save/reload like any other block comment, even though the hat block above it does not.
 
 ## Blocks and Raw, per handler
 
