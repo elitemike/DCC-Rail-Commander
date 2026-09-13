@@ -1,6 +1,6 @@
 {
     "name": "dcc-rail-commander-electron",
-    "version": "0.1.0",
+    "version": "0.1.0-alpha.1",
     "description": "DCC-Rail-Commander - Electron/Aurelia 2 frontend",
     "author": {
         "name": "DCC-EX",
