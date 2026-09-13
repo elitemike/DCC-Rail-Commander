@@ -10,7 +10,7 @@ export const IInstallerState = DI.createInterface<InstallerState>('IInstallerSta
  */
 export class InstallerState {
     /** App version */
-    readonly appVersion = '0.1.0'
+    readonly appVersion = '0.1.0-alpha.1'
 
     /** Bundled PlatformIO build toolchain unpacked and ready */
     toolchainReady = false
