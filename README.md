@@ -129,7 +129,8 @@ DCC-Rail-Commander configures and installs the following Arduino based DCC-EX pr
 The application version is tracked in `package.json`, using the standard `<Major>.<Minor>.<Patch>` semantic
 versioning scheme.
 
-Once a release is built and published, a GitHub tag must be created against that commit also.
+Once a release is built and published, a GitHub tag must be created against that commit also. See
+`RELEASE.md` for the full manual release process.
 
 ## Building binaries
 
