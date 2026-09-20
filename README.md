@@ -2,6 +2,8 @@
 
 DCC-Rail-Commander is an Electron + Aurelia 2 cross-platform installer for the various Arduino based DCC-EX products.
 
+**[User guide / docs](https://elitemike.github.io/DCC-Rail-Commander/)**
+
 > **Compatibility:** DCC-Rail-Commander works exclusively with [DCC-EX](https://dcc-ex.com) products
 > (EX-CommandStation, EX-IOExpander, EX-Turntable). It is **not an official DCC-EX project** and is not
 > supported by the DCC-EX team — it is developed and maintained independently. For official DCC-EX support
