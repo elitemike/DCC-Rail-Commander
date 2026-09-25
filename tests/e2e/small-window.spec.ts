@@ -56,13 +56,22 @@ test.describe(`at the app's minimum window size (${SMALL_WIDTH}x${SMALL_HEIGHT})
             await expect(button).toBeInViewport()
         }
 
-        // Left nav, including the "Device Settings" tree.
-        await expect(page.getByTestId('throttle-nav-item')).toBeInViewport()
-        await expect(page.getByText('Roster', { exact: true }).first()).toBeInViewport()
-        await expect(page.getByTestId('nav-general-wifi')).toBeInViewport()
-        await expect(page.getByTestId('nav-accessories')).toBeInViewport()
-        await expect(page.getByTestId('nav-startup')).toBeInViewport()
-        await expect(page.getByTestId('nav-advanced')).toBeInViewport()
+        // Left nav, including the "Device Settings" tree. Like the toolbar above, this column
+        // has its own overflow-y-auto (workspace.html) rather than clipping — with "Device
+        // Settings" expanded by default, its 4 children push later entries (e.g. "Roster") below
+        // the fold at this height, so reachability here means "scrollable to", not "on-screen
+        // already", same as the toolbar's horizontal scroll.
+        for (const navLocator of [
+            page.getByTestId('throttle-nav-item'),
+            page.getByText('Roster', { exact: true }).first(),
+            page.getByTestId('nav-general-wifi'),
+            page.getByTestId('nav-accessories'),
+            page.getByTestId('nav-startup'),
+            page.getByTestId('nav-advanced'),
+        ]) {
+            await navLocator.scrollIntoViewIfNeeded()
+            await expect(navLocator).toBeInViewport()
+        }
 
         // A visual editor actually gets real height, not the silent
         // zero-height collapse styles.css's "Custom element host sizing"
