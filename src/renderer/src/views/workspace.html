@@ -1,7 +1,11 @@
 <div class="h-screen w-screen flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-white overflow-hidden">
 
     <!-- ── Title bar / menu bar ─────────────────────────────────────── -->
-    <div class="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-white/10 select-none">
+    <!-- overflow-x-auto: below the app's own minimum window width, this row's
+         buttons can't all fit — scrolling keeps every button reachable instead
+         of silently clipping the trailing ones (Save/Connect/Settings) against
+         the app root's overflow-hidden, with no way to get to them at all. -->
+    <div class="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-white/10 select-none overflow-x-auto">
 
         <!-- Logo + home button -->
         <button click.trigger="goHome()"
