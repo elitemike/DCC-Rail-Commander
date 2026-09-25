@@ -142,6 +142,22 @@ build compiles `esp32dev` — if a board needing one of those variants is ever a
 that pruning step needs to drop it from `UNUSED_ESP32_SDK_VARIANTS` too, or its build will fail with a
 missing-SDK error that looks like a corrupted seed.
 
+## Windows ARM64
+
+The packaged app itself (Electron shell, main/renderer process) is fully native on Windows ARM64 — see
+`package.json`'s `build.win` target, which builds separate `x64` and `arm64` NSIS installers. The bundled
+Python/PlatformIO/AVR-GCC/ESP32 toolchain in `resources/` does **not** go native, though: PlatformIO has no
+`windows_arm64` build of `toolchain-atmelavr` (or the other platform toolchains) upstream — see
+[platformio/platform-atmelavr#298](https://github.com/platformio/platform-atmelavr/issues/298) — so
+`fetch-toolchain.mjs` always fetches the x64 Python interpreter and x64 platform packages on `win32`,
+regardless of the arch of the machine running it (`pythonAsset()`'s `win32` special case).
+
+On an arm64 install, that x64 `python.exe`/PlatformIO/toolchain tree runs as a child process under
+Windows' built-in x64 emulation, which works transparently regardless of the parent (arm64) process's
+architecture — but it's emulated, not native, so compiles on Windows ARM64 are slower than the UI itself
+would suggest. This is a real, upstream limitation, not a bug in this app; revisit it if PlatformIO ever
+ships `windows_arm64` toolchain packages.
+
 ## Debugging checklist
 
 - **"The bundled build runtime is missing…"** — `hasBundledRuntime()` is false: `resources/python` or

@@ -47,7 +47,7 @@
         "electron-store": "^11.0.2",
         "monaco-editor": "^0.55.1",
         "python-shell": "^5.0.0",
-        "serialport": "^12.0.0",
+        "serialport": "^13.0.0",
         "simple-git": "^3.32.1",
         "tar": "^7.5.9",
         "usb": "^2.13.0"
@@ -81,6 +81,7 @@
             "output": "release"
         },
         "publish": null,
+        "npmRebuild": false,
         "compression": "maximum",
         "electronLanguages": [
             "en-US"
@@ -143,7 +144,8 @@
             "target": [
                 "nsis"
             ],
-            "icon": "build/icon.ico"
+            "icon": "build/icon.ico",
+            "artifactName": "${productName} Setup ${version} (${arch}).${ext}"
         },
         "mac": {
             "target": [

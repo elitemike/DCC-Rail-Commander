@@ -4,7 +4,8 @@
  * fetches the bundled toolchain via postinstall if it isn't already present
  * for this OS/arch), builds the renderer/main bundles, packages a native
  * installer with electron-builder for whatever OS this is run on, and prints
- * the path to the resulting executable.
+ * the path to the resulting executable. Each run's output goes into its own
+ * timestamped subfolder under release/ — old subfolders aren't cleaned up here.
  *
  *   pnpm release
  */
@@ -33,6 +34,13 @@ function run(command, args, options = {}) {
     })
 }
 
+/** `YYYY-MM-DD_HH-mm-ss` in local time — filesystem-safe on Windows (no colons). */
+function timestamp() {
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+}
+
 function checkNodeVersion(requiredRange) {
     // engines.node is a simple ">=X.Y.Z" in this repo — parse the minimum major version out of it.
     const match = requiredRange.match(/(\d+)\.(\d+)\.(\d+)/)
@@ -49,11 +57,10 @@ function checkNodeVersion(requiredRange) {
 }
 
 /** Finds the artifact(s) electron-builder just produced, so the final message is unambiguous. */
-async function findReleaseArtifacts() {
-    const releaseDir = join(ROOT, 'release')
+async function findReleaseArtifacts(outDir) {
     let entries
     try {
-        entries = await readdir(releaseDir)
+        entries = await readdir(outDir)
     } catch {
         return []
     }
@@ -67,16 +74,34 @@ async function main() {
 
     await run('pnpm', ['install'])
     await run('pnpm', ['build'])
-    await run('pnpm', ['exec', 'electron-builder'])
 
-    const artifacts = await findReleaseArtifacts()
+    // Each run gets its own timestamped subfolder under release/ rather than overwriting the
+    // previous run's output in place — packaging never has to delete/unlink a prior build's files,
+    // which on Windows can be transiently locked (antivirus scanning freshly-written .exe/.asar
+    // files, an editor's file watcher, etc.). Old subfolders are not pruned automatically.
+    const subdir = timestamp()
+    const outDir = join(ROOT, 'release', subdir)
+    const outputArg = `-c.directories.output=release/${subdir}`
+
+    if (process.platform === 'win32') {
+        // electron-builder's NSIS target builds an extra "combined" installer (both archs bundled
+        // into one exe, picked at install time) whenever more than one arch is requested in a single
+        // invocation — see win.target's arch list in package.json. Running one invocation per arch
+        // keeps each build to just its own installer, avoiding that extra ~600MB artifact.
+        await run('pnpm', ['exec', 'electron-builder', '--win', '--x64', outputArg])
+        await run('pnpm', ['exec', 'electron-builder', '--win', '--arm64', outputArg])
+    } else {
+        await run('pnpm', ['exec', 'electron-builder', outputArg])
+    }
+
+    const artifacts = await findReleaseArtifacts(outDir)
     if (artifacts.length === 0) {
-        log('electron-builder finished, but no installer file was found under release/ — check the log above.')
+        log(`electron-builder finished, but no installer file was found under release/${subdir}/ — check the log above.`)
         return
     }
     log('Executable ready:')
     for (const name of artifacts) {
-        log(`  ${join('release', name)}`)
+        log(`  ${join('release', subdir, name)}`)
     }
 }
 

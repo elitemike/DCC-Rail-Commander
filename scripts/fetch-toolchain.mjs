@@ -73,7 +73,13 @@ function pythonAsset() {
         'darwin-arm64': 'aarch64-apple-darwin-install_only',
         'win32-x64': 'x86_64-pc-windows-msvc-install_only',
     }
-    const triple = triples[`${platform}-${arch}`]
+    // PlatformIO's AVR/ESP32 toolchain packages have no windows_arm64 build upstream
+    // (https://github.com/platformio/platform-atmelavr/issues/298), so an arm64 Python would have nothing
+    // arm64-native to drive anyway. Always fetch the x64 interpreter on win32, regardless of host arch —
+    // it runs fine under Windows' built-in x64 emulation, including when this script itself is run from an
+    // ARM64 Windows dev machine.
+    const key = platform === 'win32' ? 'win32-x64' : `${platform}-${arch}`
+    const triple = triples[key]
     if (!triple) {
         throw new Error(`No bundled Python build for ${platform}-${arch}. Add one to fetch-toolchain.mjs.`)
     }
