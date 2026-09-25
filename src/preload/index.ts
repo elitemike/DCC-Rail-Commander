@@ -9,6 +9,7 @@ import type {
     CompileResult,
     UploadResult,
     QuickCompileResult,
+    UpdateState,
 } from '../types/ipc'
 
 // ── USB API ──────────────────────────────────────────────────────────────────
@@ -269,3 +270,26 @@ const windowApi = {
 }
 
 contextBridge.exposeInMainWorld('electronWindow', windowApi)
+
+// ── Updater API ──────────────────────────────────────────────────────────────
+const updaterApi = {
+    getState: (): Promise<UpdateState> =>
+        ipcRenderer.invoke('updater:get-state'),
+
+    check: (): Promise<UpdateState> =>
+        ipcRenderer.invoke('updater:check'),
+
+    download: (): Promise<void> =>
+        ipcRenderer.invoke('updater:download'),
+
+    install: (): Promise<void> =>
+        ipcRenderer.invoke('updater:install'),
+
+    onStateChanged: (cb: (state: UpdateState) => void) => {
+        const handler = (_: IpcRendererEvent, state: UpdateState) => cb(state)
+        ipcRenderer.on('updater:state-changed', handler)
+        return () => ipcRenderer.off('updater:state-changed', handler)
+    },
+}
+
+contextBridge.exposeInMainWorld('updater', updaterApi)

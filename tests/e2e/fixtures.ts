@@ -172,7 +172,14 @@ interface WorkspaceFixtures {
 
 // ── Shared: seed temp dir + launch Electron ───────────────────────────────────
 
-async function launchApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+interface LaunchOptions {
+    /** Appended to the standard launch flags, e.g. `--mock-update`. */
+    extraArgs?: string[]
+    /** Merged into the seeded preferences file alongside `savedConfigurations`. */
+    preferences?: Record<string, unknown>
+}
+
+async function launchApp(options: LaunchOptions = {}): Promise<{ app: ElectronApplication; testDataDir: string }> {
     const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-'))
 
     const scratchPath = join(testDataDir, 'scratch', 'CommandStation-EX')
@@ -207,7 +214,7 @@ async function launchApp(): Promise<{ app: ElectronApplication; testDataDir: str
     }
     writeFileSync(
         join(prefsDir, 'dcc-rail-commander-preferences.json'),
-        JSON.stringify({ savedConfigurations: [savedConfig] }, null, 2),
+        JSON.stringify({ savedConfigurations: [savedConfig], ...options.preferences }, null, 2),
         'utf-8',
     )
 
@@ -221,13 +228,21 @@ async function launchApp(): Promise<{ app: ElectronApplication; testDataDir: str
         '--no-sandbox',
         '--offscreen',
         '--js-flags=--no-expose-wasm',
+        ...(options.extraArgs ?? []),
     ]
 
     const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
     return { app, testDataDir }
 }
 
-async function navigateToWorkspace(app: ElectronApplication): Promise<Page> {
+/** Launches the standard workspace fixture app with the fake updater (`--mock-update`). */
+export async function launchMockUpdateApp(
+    preferences?: Record<string, unknown>,
+): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    return launchApp({ extraArgs: ['--mock-update'], preferences })
+}
+
+export async function navigateToWorkspace(app: ElectronApplication): Promise<Page> {
     const page = await app.firstWindow()
     page.on('dialog', (dialog) => dialog.accept().catch(() => undefined))
     await page.waitForLoadState('domcontentloaded')

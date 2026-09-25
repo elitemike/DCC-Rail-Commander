@@ -8,6 +8,7 @@ import { PlatformIoService } from './platformio'
 import { GitService } from './git-client'
 import { FileService } from './file-manager'
 import { PreferencesService } from './preferences'
+import { AppUpdaterService, ElectronUpdaterBackend, MockUpdateBackend } from './app-updater'
 
 // ── E2E Test isolation ───────────────────────────────────────────────────────
 // Allow tests to point userData at a temp directory so preferences don't bleed.
@@ -32,6 +33,14 @@ export const IS_MOCK_DEVICE =
 
 export const IS_MOCK_UPLOAD =
     app.commandLine.hasSwitch('mock-upload') || process.argv.includes('--mock-upload')
+
+/**
+ * IS_MOCK_UPDATE — the app updater always reports MOCK_UPDATE_INFO (dev-mock.ts) as available and
+ * fakes the download, so the update/release-notes UI can be exercised from an unpackaged build
+ * (which otherwise has nothing to update and leaves the updater inert). Enable with `--mock-update`.
+ */
+export const IS_MOCK_UPDATE =
+    app.commandLine.hasSwitch('mock-update') || process.argv.includes('--mock-update')
 
 // Expose CJS require as a global so Playwright's app.evaluate() can call it.
 // evaluate() runs in a V8 eval context where the CJS module-wrapper's `require`
@@ -63,6 +72,13 @@ export const platformIoService = new PlatformIoService(usbManager)
 export const gitService = new GitService()
 export const fileService = new FileService()
 export const preferencesService = new PreferencesService()
+// Only packaged builds have an installed copy (and an app-update.yml) to update; e2e runs never
+// hit the network unless they opt in to the fake with --mock-update.
+export const appUpdater = new AppUpdaterService(
+    IS_MOCK_UPDATE ? new MockUpdateBackend()
+        : app.isPackaged && !testDataDir ? new ElectronUpdaterBackend()
+            : null,
+)
 
 // ── Window factory ───────────────────────────────────────────────────────────
 // electron-builder's win/linux `icon` config only brands the packaged installer/exe —
@@ -121,6 +137,9 @@ function createWindow(): BrowserWindow {
             // E2E mode: always close without prompting.
             return
         }
+        // quitAndInstall() closes every window itself; the renderer already
+        // handled unsaved changes before asking for the install.
+        if (appUpdater.installing) return
         event.preventDefault()
         win.webContents.send('window:close-requested')
     })
@@ -217,6 +236,7 @@ app.whenReady().then(() => {
         gitService,
         fileService,
         preferencesService,
+        appUpdater,
     })
     createWindow()
 

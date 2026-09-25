@@ -39,13 +39,17 @@ A small amber **DEV MOCK** badge is shown in the wizard header and the workspace
 
 ## Controlling mock mode
 
-Two independent flags control mocking. They are separate so developers can use
+Three independent flags control mocking. They are separate so developers can use
 device mocking without bypassing the real compiler:
 
 | Flag | Controls |
 |---|---|
 | `--mock-device` | USB/device scanning (virtual boards, no real hardware needed) |
 | `--mock-upload` | PlatformIO upload response only (fast fake response). Compile is never gated by any flag — it's always real |
+| `--mock-update` | App self-update (`updater:*` handlers). Always reports `MOCK_UPDATE_INFO` from `dev-mock.ts` (version 99.0.0, with release notes) as available, and fakes the download. Install is a no-op. Without this flag an unpackaged build's updater is inert, since there's no installed copy to update |
+
+To see the update dialog while developing: `pnpm dev -- --mock-update`. The startup check fires a few
+seconds after launch.
 
 | Launch command | Device mock | Upload mock |
 |---|---|---|

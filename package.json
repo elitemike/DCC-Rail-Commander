@@ -45,6 +45,7 @@
         "aurelia": "^2.0.0-rc.0",
         "blockly": "^13.2.1",
         "electron-store": "^11.0.2",
+        "electron-updater": "^6.8.9",
         "monaco-editor": "^0.55.1",
         "python-shell": "^5.0.0",
         "serialport": "^13.0.0",
@@ -61,6 +62,8 @@
         "electron": "^40.6.0",
         "electron-builder": "^26.15.3",
         "electron-vite": "^5.0.0",
+        "js-yaml": "^4.3.1",
+        "jsdom": "^29.1.1",
         "postcss-import": "^16.1.1",
         "rimraf": "^5.0.1",
         "tailwindcss": "^4.2.0",
@@ -80,7 +83,11 @@
         "directories": {
             "output": "release"
         },
-        "publish": null,
+        "publish": {
+            "provider": "github",
+            "owner": "elitemike",
+            "repo": "DCC-Rail-Commander"
+        },
         "npmRebuild": false,
         "compression": "maximum",
         "electronLanguages": [
@@ -145,7 +152,7 @@
                 "nsis"
             ],
             "icon": "build/icon.ico",
-            "artifactName": "${productName} Setup ${version} (${arch}).${ext}"
+            "artifactName": "DCC-Rail-Commander-Setup-${version}-${arch}.${ext}"
         },
         "mac": {
             "target": [

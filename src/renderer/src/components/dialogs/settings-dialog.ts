@@ -4,6 +4,7 @@ import { CheckBox } from '@syncfusion/ej2-buttons'
 import { ThemeService, type ThemeMode } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
 import { EditorDefaultViewService, type EditorViewMode } from '../../services/editor-default-view.service'
+import { UpdaterService } from '../../services/updater.service'
 
 export interface SettingsDialogModel {
     autoConnect: boolean
@@ -33,6 +34,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly theme = resolve(ThemeService)
     readonly blocklySounds = resolve(BlocklySoundsService)
     readonly editorDefaultView = resolve(EditorDefaultViewService)
+    readonly updater = resolve(UpdaterService)
 
     private model!: SettingsDialogModel
 
@@ -52,6 +54,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     quickCompileEnabledEl!: HTMLInputElement
     strictAliasesEl!: HTMLInputElement
     blocklySoundsEl!: HTMLInputElement
+    autoCheckUpdatesEl!: HTMLInputElement
 
     private sfAutoConnect?: CheckBox
     private sfShowMonitorOnConnect?: CheckBox
@@ -61,6 +64,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     private sfQuickCompileEnabled?: CheckBox
     private sfStrictAliases?: CheckBox
     private sfBlocklySounds?: CheckBox
+    private sfAutoCheckUpdates?: CheckBox
 
     activate(model: SettingsDialogModel): void {
         this.model = model
@@ -121,6 +125,12 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
             change: (args) => void this.blocklySounds.setEnabled(args.checked),
         })
         this.sfBlocklySounds.appendTo(this.blocklySoundsEl)
+
+        this.sfAutoCheckUpdates = new CheckBox({
+            checked: this.updater.autoCheck,
+            change: (args) => void this.updater.setAutoCheck(args.checked),
+        })
+        this.sfAutoCheckUpdates.appendTo(this.autoCheckUpdatesEl)
     }
 
     detaching(): void {
@@ -140,6 +150,8 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
         this.sfStrictAliases = undefined
         this.sfBlocklySounds?.destroy()
         this.sfBlocklySounds = undefined
+        this.sfAutoCheckUpdates?.destroy()
+        this.sfAutoCheckUpdates = undefined
     }
 
     /** Applies (and persists) the theme immediately — ThemeService is the source of truth, so there's no local mirrored field to keep in sync. */
@@ -150,6 +162,42 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     /** Applies (and persists) the default editor view immediately — EditorDefaultViewService is the source of truth, same as theme above. */
     setDefaultEditorView(mode: EditorViewMode): void {
         void this.editorDefaultView.setValue(mode)
+    }
+
+    get hasUpdate(): boolean {
+        const status = this.updater.state.status
+        return status === 'available' || status === 'downloading' || status === 'downloaded'
+    }
+
+    get updateStatusText(): string {
+        const state = this.updater.state
+        switch (state.status) {
+            case 'unsupported':
+                return 'Updates are only available in the installed app.'
+            case 'checking':
+                return 'Checking for updates…'
+            case 'not-available':
+                return "You're on the latest version."
+            case 'available':
+                return `Version ${state.update.version} is available.`
+            case 'downloading':
+                return `Downloading version ${state.update.version} (${Math.round(state.percent)}%).`
+            case 'downloaded':
+                return `Version ${state.update.version} is ready to install.`
+            case 'error':
+                return `Couldn't update: ${state.message}`
+            default:
+                return ''
+        }
+    }
+
+    /** UpdaterService opens the update dialog on top of Settings if one turns up. */
+    checkForUpdates(): void {
+        void this.updater.checkNow()
+    }
+
+    viewUpdate(): void {
+        void this.updater.showUpdateDialog()
     }
 
     close(): void {

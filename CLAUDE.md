@@ -81,7 +81,7 @@ dialog is opened via a dynamic `import()`: the check ran before the dialog rende
 and the test then hung waiting on a state change that could never happen. Use `locator.waitFor({ state: 'visible',
 timeout })` (which does poll) before checking, or `expect(locator).toBeVisible()`.
 
-`electron`, `python-shell`, `simple-git`, `serialport`, `usb` and `tar` are aliased to stubs in
+`electron`, `electron-updater`, `python-shell`, `simple-git`, `serialport`, `usb` and `tar` are aliased to stubs in
 `tests/stubs/` (wired up in `vitest.config.ts`) — without that, a test file's `vi.mock('<pkg>', …)` does not
 reach the source modules that import them and every main-process test fails. See `tests/stubs/README.md`.
 
@@ -102,14 +102,16 @@ reach the source modules that import them and every main-process test fails. See
   should live in preload.
 - Mock mode: `--mock-device` (fake USB/serial devices, see `src/main/dev-mock.ts`) fakes hardware discovery, and
   `--mock-upload` fakes the upload (flash-to-device) response only — compile is never gated by a flag and always
-  runs for real against the bundled PlatformIO toolchain, since it never touches hardware. `--test-data-dir=<path>`
+  runs for real against the bundled PlatformIO toolchain, since it never touches hardware. `--mock-update` makes the
+  app updater report a fake newer release (with release notes) so the update UI works unpackaged. `--test-data-dir=<path>`
   redirects Electron's `userData` so preferences don't bleed between test runs. See `src/DEV-MOCK.md` for the
   full per-IPC-handler breakdown of what's faked vs. real.
 
 ### Build backend (PlatformIO, fully offline)
 
 Firmware is built by **PlatformIO Core running on a Python interpreter bundled with the app** — nothing is
-downloaded at runtime, so `git clone`/`git pull` of the DCC-EX product repos is the app's only network access.
+downloaded at runtime, so `git clone`/`git pull` of the DCC-EX product repos is the app's only network access
+besides the app's own update check (see "App self-update" below).
 See `TOOLCHAIN.md` for the full picture (build-time fetch vs. runtime seed, on-disk layout, offline fuse,
 debugging a corrupted seed); the summary below is just the pointers you need day to day.
 
@@ -133,6 +135,27 @@ debugging a corrupted seed); the summary below is just the pointers you need day
   "import toolchain pack" route (`pio:browse-toolchain-pack` / `pio:import-toolchain-pack`).
 - `scripts/fetch-toolchain.mjs` (`pnpm toolchain:fetch`) is the only code in the project that downloads
   anything, and it runs at build time. It must be run on each OS being packaged.
+
+### App self-update
+
+`electron-updater` against this repo's GitHub releases (`build.publish` in `package.json`).
+`src/main/app-updater.ts`'s `AppUpdaterService` owns the check → download → install state machine and pushes
+every `UpdateState` change to the renderer (`updater:state-changed`). The `electron-updater` calls sit behind an
+`UpdateBackend` interface. It gets `ElectronUpdaterBackend` only in packaged, non-e2e builds, `MockUpdateBackend`
+under `--mock-update`, and otherwise nothing, which leaves the service `unsupported` and inert. The renderer's
+`services/updater.service.ts` runs one background check shortly after startup (the `autoCheckForUpdates`
+preference; `skippedUpdateVersion` suppresses the prompt for one version) and opens
+`components/dialogs/update-dialog`. That dialog shows the release notes for every version since the running one
+(`fullChangelog`). Those notes are GitHub-rendered HTML, and the renderer's CSP allows inline script, so they
+only reach the DOM through `utils/release-notes-html.ts`'s allowlist sanitizer. Never `innerHTML` them directly.
+Install goes through the renderer's unsaved-changes prompt first. Then `AppUpdaterService.installing` lets the
+window's close handler skip its own prompt while `quitAndInstall()` closes the windows.
+
+Release packaging for this is in `scripts/build-release.mjs`. It merges the x64 and arm64 runs' channel files
+(`latest.yml`/`alpha.yml`) into one, and `electron-updater` picks the installer whose name contains
+`process.arch`. That's why the Windows `artifactName` has `${arch}` in it and no spaces: GitHub renames asset
+names that contain spaces, which would break the URLs in the channel file. See `RELEASE.md` for which files
+have to be uploaded.
 
 ### Multi-board isolation
 

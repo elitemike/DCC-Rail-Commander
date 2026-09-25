@@ -66,3 +66,27 @@ export const MOCK_SERIAL_PORTS: SerialDeviceInfo[] = [
         productId: '6001',
     },
 ]
+
+/**
+ * What `--mock-update` reports as available. The version is deliberately far ahead of any real
+ * release so it's always "newer"; notes are HTML in the same shape GitHub's release feed returns,
+ * newest first, one entry per version between the running app and this one.
+ */
+export const MOCK_UPDATE_INFO = {
+    version: '99.0.0',
+    releaseName: '99.0.0',
+    releaseDate: '2026-01-01T00:00:00.000Z',
+    releaseNotes: [
+        {
+            version: '99.0.0',
+            note:
+                '<h2>Highlights</h2>' +
+                '<ul><li>Mock release note for <strong>99.0.0</strong>.</li>' +
+                '<li>See the <a href="https://github.com/elitemike/DCC-Rail-Commander/releases">releases page</a>.</li></ul>',
+        },
+        {
+            version: '98.0.0',
+            note: '<p>Mock release note for 98.0.0.</p>',
+        },
+    ],
+}

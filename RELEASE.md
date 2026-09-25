@@ -53,8 +53,14 @@ Releases are cut from `main`. If the change set to release lives on a feature br
    (x64 or arm64) build machine — electron-builder downloads the matching Electron runtime for each target
    arch itself; see `TOOLCHAIN.md`'s "Windows ARM64" section for what does and doesn't go native.
 
+   Alongside the installers it writes the files the in-app updater needs, all of which must be uploaded in
+   step 7: a `.blockmap` per installer (lets the updater download only the changed parts) and one channel
+   file — `latest.yml`, or `alpha.yml`/`beta.yml` for a prerelease version. The script merges the x64 and
+   arm64 runs' channel files into one that lists both installers; the log line `Merged <file>: …` should
+   name both `.exe`s.
+
    Each run writes into its own timestamped subfolder under `release/` (e.g.
-   `release/2026-09-23_17-45-12/DCC Rail Commander Setup <version> (x64).exe` and `(arm64).exe`) instead of
+   `release/2026-09-23_17-45-12/DCC-Rail-Commander-Setup-<version>-x64.exe` and `-arm64.exe`) instead of
    overwriting the previous run's output in place — packaging never has to delete a prior build's files, so
    it isn't blocked by a file that's transiently locked (antivirus scanning a freshly-written `.exe`, an
    editor's file watcher, etc.). Old subfolders aren't cleaned up automatically; use the printed output
@@ -62,8 +68,9 @@ Releases are cut from `main`. If the change set to release lives on a feature br
    subfolders under `release/` yourself periodically.
 
    (Equivalent manual steps, if you need to run them individually: `pnpm install`, `pnpm build`,
-   `pnpm exec electron-builder --win --x64 -c.directories.output=release/<subfolder>`, then the same with
-   `--arm64`.)
+   `pnpm exec electron-builder --win --x64 -c.directories.output=release/<subfolder> --publish never`, then
+   the same with `--arm64` — but the second run overwrites the first's channel file, so doing it by hand
+   means merging the two `files:` lists yourself; prefer `pnpm release`.)
 
 5. **Smoke-test the installer(s)** on a clean-ish Windows machine/VM before publishing:
    - Run the installer, launch the app.
@@ -85,14 +92,22 @@ Releases are cut from `main`. If the change set to release lives on a feature br
    the tag and the release together:
    ```shell
    gh release create v<version> \
-     "release/<subfolder>/DCC Rail Commander Setup <version> (x64).exe" \
-     "release/<subfolder>/DCC Rail Commander Setup <version> (arm64).exe" \
+     release/<subfolder>/DCC-Rail-Commander-Setup-<version>-x64.exe \
+     release/<subfolder>/DCC-Rail-Commander-Setup-<version>-x64.exe.blockmap \
+     release/<subfolder>/DCC-Rail-Commander-Setup-<version>-arm64.exe \
+     release/<subfolder>/DCC-Rail-Commander-Setup-<version>-arm64.exe.blockmap \
+     release/<subfolder>/<channel>.yml \
      --title "<version>" \
-     --notes "<release notes>" \
+     --notes-file <release-notes.md> \
      --prerelease   # while the project is pre-1.0 / alpha / beta
    ```
-   (`<subfolder>` is the timestamped folder name `pnpm release` printed in step 4 — copy the exact paths
-   from that output rather than retyping them.)
+   (`<subfolder>` is the timestamped folder name `pnpm release` printed in step 4, and `<channel>.yml` is
+   the channel file it listed — copy the exact paths from that output rather than retyping them. Leaving
+   out the `.yml` means installed copies never see this release; leaving out a `.blockmap` only makes
+   that arch's update a full download.)
+
+   **The release notes are shown inside the app** — the update dialog displays them to every user being
+   offered this version (and the notes of any versions they skipped over), so write them for that reader.
    Write the release notes as user-facing highlights (see prior releases with
    `gh release view v0.1.0-alpha.1` for the tone/format to match), not a raw commit log. Include the
    "not an official DCC-EX project" disclaimer per `CLAUDE.md`'s guidance on user-facing copy, and note
@@ -105,6 +120,12 @@ Releases are cut from `main`. If the change set to release lives on a feature br
    ```
    Confirm the tag, asset, and notes look right, and that the tag (`git tag --list`, or
    `git log -1 v<version>`) points at the version-bump commit from step 3.
+
+   Then confirm the update path end to end: on a machine with the *previous* release installed, open
+   Settings → Updates → **Check for updates**. The update dialog should offer the new version with the
+   notes you just published, and Download → Restart & install should come back up on the new version.
+   (`v0.1.0-alpha.2` and earlier have no updater, so users on those must install the first release that
+   ships it by hand; this check works from the release after that one.)
 
 ## Notes
 

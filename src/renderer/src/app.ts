@@ -6,6 +6,7 @@ import { UsbService } from './services/usb.service'
 import { ThemeService } from './services/theme.service'
 import { BlocklySoundsService } from './services/blockly-sounds.service'
 import { EditorDefaultViewService } from './services/editor-default-view.service'
+import { UpdaterService } from './services/updater.service'
 
 @route({
     routes: [
@@ -22,6 +23,7 @@ export class App {
     readonly themeService = resolve(ThemeService)
     private readonly blocklySounds = resolve(BlocklySoundsService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
+    private readonly updater = resolve(UpdaterService)
     private _unsubCloseRequested: (() => void) | null = null
 
     bound(): void {
@@ -43,6 +45,8 @@ export class App {
         void this.themeService.init()
         void this.blocklySounds.init()
         void this.editorDefaultView.init()
+        // Schedules its own delayed background check — never blocks startup.
+        void this.updater.init()
     }
 
     unbinding(): void {

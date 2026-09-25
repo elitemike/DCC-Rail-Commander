@@ -401,3 +401,35 @@ body {
 .blocklyFlyout {
     filter: drop-shadow(3px 0 10px rgba(0, 0, 0, 0.35));
 }
+
+/* ── Release notes (update dialog) ──
+   Sanitized GitHub release HTML (see utils/release-notes-html.ts). Tailwind's
+   preflight strips heading sizes and list markers, so restore just enough
+   prose styling for Markdown-rendered notes to read properly. */
+.release-notes-version {
+    @apply text-sm font-semibold text-gray-900 dark:text-white mb-1;
+}
+.release-notes {
+    @apply text-sm text-gray-700 dark:text-gray-300 leading-relaxed;
+}
+.release-notes > * + * {
+    @apply mt-2;
+}
+.release-notes h1,
+.release-notes h2,
+.release-notes h3,
+.release-notes h4 {
+    @apply font-semibold text-gray-900 dark:text-white mt-3;
+}
+.release-notes h1 { @apply text-base; }
+.release-notes ul { @apply list-disc pl-5 space-y-1; }
+.release-notes ol { @apply list-decimal pl-5 space-y-1; }
+.release-notes a { @apply text-blue-600 dark:text-blue-400 hover:underline; }
+.release-notes code { @apply font-mono text-xs px-1 py-0.5 rounded bg-gray-100 dark:bg-white/10; }
+.release-notes pre { @apply p-3 rounded-lg bg-gray-100 dark:bg-white/5 overflow-x-auto; }
+.release-notes pre code { @apply p-0 bg-transparent; }
+.release-notes blockquote { @apply pl-3 border-l-2 border-gray-300 dark:border-white/20 text-gray-500 dark:text-gray-400; }
+.release-notes hr { @apply border-gray-200 dark:border-white/10; }
+.release-notes table { @apply text-xs border-collapse; }
+.release-notes th,
+.release-notes td { @apply border border-gray-200 dark:border-white/10 px-2 py-1 text-left; }

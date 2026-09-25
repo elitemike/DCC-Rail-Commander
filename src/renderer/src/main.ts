@@ -19,6 +19,7 @@ import { ThrottleService } from './services/throttle.service'
 import { ThemeService } from './services/theme.service'
 import { BlocklySoundsService } from './services/blockly-sounds.service'
 import { EditorDefaultViewService } from './services/editor-default-view.service'
+import { UpdaterService } from './services/updater.service'
 
 // State
 import { InstallerState } from './models/installer-state'
@@ -93,6 +94,7 @@ new Aurelia()
         Registration.singleton(ThemeService, ThemeService),
         Registration.singleton(BlocklySoundsService, BlocklySoundsService),
         Registration.singleton(EditorDefaultViewService, EditorDefaultViewService),
+        Registration.singleton(UpdaterService, UpdaterService),
         Registration.singleton(InstallerState, InstallerState),
         Registration.singleton(ConfigEditorState, ConfigEditorState),
         // Config editor custom elements

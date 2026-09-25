@@ -9,8 +9,8 @@ export const IInstallerState = DI.createInterface<InstallerState>('IInstallerSta
  * Registered as a singleton in the DI container so all views share it.
  */
 export class InstallerState {
-    /** App version */
-    readonly appVersion = '0.1.0-alpha.1'
+    /** App version — package.json's `version`, injected at build time. Bump it there, never here. */
+    readonly appVersion = __APP_VERSION__
 
     /** Bundled PlatformIO build toolchain unpacked and ready */
     toolchainReady = false

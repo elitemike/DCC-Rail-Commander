@@ -218,6 +218,43 @@ export interface ThemeElectronApi {
     onUpdated: (cb: (shouldUseDarkColors: boolean) => void) => () => void
 }
 
+// ── App updates ──────────────────────────────────────────────────────────────
+
+/** One version's release notes, as published on its GitHub release. `note` is HTML (unsanitized). */
+export interface ReleaseNoteEntry {
+    version: string
+    note: string | null
+}
+
+export interface AvailableUpdate {
+    version: string
+    releaseName: string | null
+    releaseDate: string | null
+    /** Notes for every version between the running one (exclusive) and `version` (inclusive), newest first. */
+    releaseNotes: ReleaseNoteEntry[]
+}
+
+export type UpdateState =
+    /** Not a packaged build (dev / e2e), so there is nothing to update — the updater is inert. */
+    | { status: 'unsupported' }
+    | { status: 'idle' }
+    | { status: 'checking' }
+    | { status: 'not-available' }
+    | { status: 'available'; update: AvailableUpdate }
+    | { status: 'downloading'; update: AvailableUpdate; percent: number }
+    | { status: 'downloaded'; update: AvailableUpdate }
+    | { status: 'error'; message: string; update?: AvailableUpdate }
+
+export interface UpdaterElectronApi {
+    getState: () => Promise<UpdateState>
+    /** Resolves with the state the check settled on (`available`, `not-available` or `error`). */
+    check: () => Promise<UpdateState>
+    download: () => Promise<void>
+    /** Quits the app and runs the downloaded installer. The caller is responsible for unsaved-changes prompts first. */
+    install: () => Promise<void>
+    onStateChanged: (cb: (state: UpdateState) => void) => () => void
+}
+
 declare global {
     interface Window {
         usb: UsbElectronApi
@@ -229,5 +266,6 @@ declare global {
         config: ConfigElectronApi
         electronWindow: WindowElectronApi
         theme: ThemeElectronApi
+        updater: UpdaterElectronApi
     }
 }

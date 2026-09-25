@@ -1,6 +1,6 @@
 # Test module stubs
 
-`electron`, `python-shell`, `simple-git`, `serialport` and `usb` are CommonJS
+`electron`, `electron-updater`, `python-shell`, `simple-git`, `serialport`, `usb` and `tar` are CommonJS
 packages that Vitest externalises. Since Vitest 4.1 a `vi.mock('<pkg>', …)`
 factory declared in a test file no longer reaches the *source* modules that
 import that package — they receive an empty namespace and blow up with "Cannot
