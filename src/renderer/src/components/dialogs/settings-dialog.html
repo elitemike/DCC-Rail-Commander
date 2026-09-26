@@ -1,9 +1,13 @@
 <template>
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-lg shadow-2xl">
+        <!-- max-height caps against the viewport (like device-wizard.html's small-window fix) so this
+             stays reachable at the app's minimum window size instead of overflowing with the Done
+             button pushed off-screen; only the body between header/footer scrolls. -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-lg shadow-2xl flex flex-col"
+            style="max-height: 90vh;">
 
             <!-- Header -->
-            <div class="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10">
+            <div class="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10 shrink-0">
                 <div>
                     <h2 class="text-gray-900 dark:text-white text-lg font-semibold">Settings</h2>
                     <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">App-wide preferences. Changes apply
@@ -18,7 +22,7 @@
             </div>
 
             <!-- Body -->
-            <div class="px-6 py-2 divide-y divide-gray-200 dark:divide-white/10">
+            <div class="px-6 py-2 divide-y divide-gray-200 dark:divide-white/10 overflow-y-auto flex-1 min-h-0">
 
                 <!-- Appearance section -->
                 <div class="py-4">
@@ -194,7 +198,7 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex items-center justify-between px-6 pb-6 pt-2">
+            <div class="flex items-center justify-between px-6 pb-6 pt-2 shrink-0">
                 <p class="text-xs text-gray-500" data-testid="app-version">DCC Rail Commander v${installerState.appVersion}</p>
                 <button click.trigger="close()"
                     class="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors">

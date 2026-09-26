@@ -140,4 +140,20 @@ test.describe(`at the app's minimum window size (${SMALL_WIDTH}x${SMALL_HEIGHT})
 
         await expect(page.getByTestId('nav-general-wifi')).toBeVisible({ timeout: 15_000 })
     })
+
+    test('Settings dialog keeps Done reachable', async ({ electronApp, workspacePage: page }) => {
+        await resizeWindow(electronApp, SMALL_WIDTH, SMALL_HEIGHT)
+        await page.waitForTimeout(300)
+
+        await page.getByTestId('settings-button').click()
+        await expect(page.getByText('App-wide preferences.')).toBeVisible({ timeout: 10_000 })
+
+        // The body (Appearance/Connection/Build/Config Editors/Block Editor sections) scrolls on
+        // its own overflow-y-auto — same reachability contract as the wizard/toolbar/left-nav
+        // above — while the version caption and Done button stay pinned in the shrink-0 footer.
+        const doneButton = page.getByRole('button', { name: 'Done' })
+        await doneButton.scrollIntoViewIfNeeded()
+        await expect(doneButton).toBeInViewport()
+        await expect(page.getByTestId('app-version')).toBeInViewport()
+    })
 })
