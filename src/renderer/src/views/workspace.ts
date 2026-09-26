@@ -20,6 +20,7 @@ import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDe
 import { copyProductSourceFiles, isExampleConfigFile, collectExampleConfigFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
+import { findDuplicateExrailBlocks, removeDuplicateExrailBlocks } from '../utils/myAutomationParser'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
@@ -357,6 +358,53 @@ export class Workspace {
         // and (on a fresh connect, if autoConnectMonitor is on) auto-opening
         // the Monitor.
         void this.checkDeviceConnection()
+        // Fire-and-forget: opens a modal dialog, so it must never be awaited here —
+        // binding() gates the whole view's first render, and an awaited dialog would
+        // leave the workspace shell blank behind it until the user answers.
+        void this.checkForDuplicateExrailBlocks()
+    }
+
+    /**
+     * CommandStation-EX's own compile-time check (EXRAILAsserts.h's
+     * `static_assert(seqCount(id)==1, ...)`) hard-fails the build the first time it sees the
+     * same ROUTE/AUTOMATION/SEQUENCE id declared twice, with no indication in the app of which
+     * two blocks collided or how to fix it. Detect the same condition here, on every load, and
+     * offer to remove the duplicates outright rather than let the user discover it only when a
+     * Compile fails with a wall of cascading C++ errors.
+     */
+    private async checkForDuplicateExrailBlocks(): Promise<void> {
+        const groups = findDuplicateExrailBlocks(this.state.configFiles)
+        if (groups.length === 0) return
+
+        const summary = groups.map(g => `${g.macro}(${g.id})`).join(', ')
+        const result = await this.dialogService
+            .open({
+                component: () =>
+                    import('../components/dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                model: {
+                    title: 'Duplicate Automation Blocks Found',
+                    message: `This project declares the same id more than once: ${summary}. CommandStation-EX ` +
+                        'requires every ROUTE/AUTOMATION/SEQUENCE id to be unique and will fail to compile ' +
+                        'otherwise.',
+                    detail: 'Remove the duplicates now? The first copy of each is kept; the rest are deleted.',
+                    confirmLabel: 'Remove Duplicates',
+                    cancelLabel: 'Keep As Is',
+                },
+            })
+            .whenClosed(r => r)
+        if ((result as any).status !== 'ok') return
+
+        this.state.configFiles = removeDuplicateExrailBlocks(this.state.configFiles, groups)
+        // Re-derive structured state from the now-deduplicated file content — otherwise
+        // e.g. ConfigEditorState.automations would still hold the stale duplicate entry
+        // parsed before this removal, and the next save would resurrect it.
+        this.configEditorState.loadFromInstallerState()
+        this.configEditorState.hasChanges = true
+        this.toastService.show({
+            title: 'Duplicates Removed',
+            content: `Removed ${groups.reduce((n, g) => n + g.occurrences.length - 1, 0)} duplicate block(s). Save to write the change to disk.`,
+            cssClass: 'e-toast-success',
+        })
     }
 
     /** Persists the auto-connect preference — called from the Settings dialog. */

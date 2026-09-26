@@ -152,6 +152,80 @@ export const MOCK_EXTRA_CPP = [
     'void mockExtraFunction() {}',
 ].join('\n') + '\n'
 
+/**
+ * Reproduces the real DCC-EX/CommandStation-EX.ino's own mySetup.h hook
+ * verbatim: `#if __has_include("mySetup.h") / #define SETUP(cmd) ... /
+ * #include "mySetup.h" / #undef SETUP / #endif` inside setup(). mySetup.h is
+ * included directly by the firmware itself here — never by myAutomation.h —
+ * see config-editor-state.ts's automationPreview and its BUILTIN exclusion
+ * for mySetup.h/myHal.cpp.
+ */
+export const MOCK_HAL_SKETCH_INO = [
+    '// CommandStation-EX.ino — minimal mock sketch with the same mySetup.h',
+    '// self-include hook as the real DCC-EX/CommandStation-EX.ino',
+    '#include "config.h"',
+    '',
+    'void mockSetupCommand(const char* cmd) {}',
+    '',
+    'void setup() {',
+    '#if __has_include("mySetup.h")',
+    '  #define SETUP(cmd) mockSetupCommand(cmd)',
+    '  #include "mySetup.h"',
+    '  #undef SETUP',
+    '#endif',
+    '}',
+    'void loop() {}',
+].join('\n') + '\n'
+
+export const MOCK_SETUP_H = [
+    '// mySetup.h — one-off startup commands, included directly by the',
+    '// firmware\'s own setup() (see MOCK_HAL_SKETCH_INO), not by myAutomation.h',
+    'SETUP("<D CMD>");',
+].join('\n') + '\n'
+
+/**
+ * Matches the real file's own doc comment: "if the file has a .cpp extension
+ * it WILL be compiled into the build and the halSetup() function WILL be
+ * invoked" — a plain translation unit PlatformIO's src_dir glob compiles
+ * directly, no #include required anywhere.
+ */
+export const MOCK_HAL_CPP = [
+    '// myHal.cpp — HAL device setup, compiled directly by PlatformIO as its',
+    '// own translation unit (see the doc comment at the top of the real file)',
+    'void halSetup() {}',
+].join('\n') + '\n'
+
+/**
+ * Deliberately EXRAIL-macro-free (this synthetic sketch has no real EXRAIL.h)
+ * — just enough real content to prove myAutomation.h itself compiles cleanly
+ * when actually #included by another translation unit (see MOCK_EXRAIL_MOCK_CPP).
+ */
+export const MOCK_AUTOMATION_MINIMAL = [
+    '// myAutomation.h - imported project',
+    '// Custom EXRAIL commands would normally go here.',
+].join('\n') + '\n'
+
+/**
+ * Stands in for two real CommandStation-EX files at once: EXRAIL2.cpp (which
+ * #include "myAutomation.h") and IODevice.cpp (which declares and invokes
+ * halSetup() via a weak symbol). Exists so myAutomation.h is actually
+ * compiled as part of this test — if a regression ever reintroduced
+ * `#include "myHal.cpp"` into myAutomation.h's generated content, this file's
+ * own halSetup() extern would collide with myHal.cpp's real one at link time
+ * ("multiple definition of halSetup()"), and a reintroduced
+ * `#include "mySetup.h"` would fail to compile here (SETUP is only ever
+ * macro-defined around the .ino's own inclusion, not this one).
+ */
+export const MOCK_EXRAIL_MOCK_CPP = [
+    '// ExrailMock.cpp — stand-in for EXRAIL2.cpp + IODevice.cpp\'s halSetup()',
+    '// weak-symbol hook (see MOCK_AUTOMATION_MINIMAL\'s doc comment)',
+    '#include "config.h"',
+    '#include "myAutomation.h"',
+    '',
+    'extern void halSetup();',
+    'void invokeHalSetup() { halSetup(); }',
+].join('\n') + '\n'
+
 // Resolve Electron main entry relative to repo root (tests/e2e/ → ../../out/main/index.js)
 const ELECTRON_MAIN = resolve(__dirname, '../../out/main/index.js')
 
@@ -162,6 +236,10 @@ interface WorkspaceFixtures {
     workspacePage: Page
     csb1StackedApp: ElectronApplication
     csb1StackedPage: Page
+    importedHalProjectApp: ElectronApplication
+    importedHalProjectPage: Page
+    duplicateAutomationApp: ElectronApplication
+    duplicateAutomationPage: Page
     ioExpanderApp: ElectronApplication
     ioExpanderPage: Page
     rosterGroupedApp: ElectronApplication
@@ -395,6 +473,125 @@ async function launchCsb1StackedApp(): Promise<{ app: ElectronApplication; testD
     return { app, testDataDir }
 }
 
+// ── Imported project with mySetup.h + myHal.cpp (real DCC-EX self-include hazards) ──
+
+async function launchImportedHalProjectApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-hal-import-'))
+
+    const scratchPath = join(testDataDir, 'scratch', 'CommandStation-EX')
+    mkdirSync(scratchPath, { recursive: true })
+    writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
+    writeFileSync(join(scratchPath, 'mySetup.h'), MOCK_SETUP_H, 'utf-8')
+    writeFileSync(join(scratchPath, 'myHal.cpp'), MOCK_HAL_CPP, 'utf-8')
+    writeFileSync(join(scratchPath, 'myAutomation.h'), MOCK_AUTOMATION_MINIMAL, 'utf-8')
+    writeFileSync(join(scratchPath, 'CommandStation-EX.ino'), MOCK_HAL_SKETCH_INO, 'utf-8')
+    writeFileSync(join(scratchPath, 'ExrailMock.cpp'), MOCK_EXRAIL_MOCK_CPP, 'utf-8')
+
+    const prefsDir = join(testDataDir, 'app-preferences')
+    mkdirSync(prefsDir, { recursive: true })
+    const savedConfig = {
+        id: 'e2e-hal-import',
+        name: 'E2E Test Layout',
+        deviceName: 'Arduino Mega 2560',
+        devicePort: '/dev/ttyACM1',
+        deviceFqbn: 'arduino:avr:mega:cpu=atmega2560',
+        product: 'ex_commandstation',
+        productName: 'EX-CommandStation',
+        version: 'v5.4.0-Prod',
+        repoPath: join(testDataDir, 'scratch'),
+        scratchPath,
+        configFiles: [
+            { name: 'config.h', content: MOCK_CONFIG_H },
+            { name: 'mySetup.h', content: MOCK_SETUP_H },
+            { name: 'myHal.cpp', content: MOCK_HAL_CPP },
+            { name: 'myAutomation.h', content: MOCK_AUTOMATION_MINIMAL },
+        ],
+        lastModified: new Date().toISOString(),
+    }
+    writeFileSync(
+        join(prefsDir, 'dcc-rail-commander-preferences.json'),
+        JSON.stringify({ savedConfigurations: [savedConfig] }, null, 2),
+        'utf-8',
+    )
+
+    const args = [
+        ELECTRON_MAIN,
+        '--mock-device',
+        '--mock-upload',
+        '--skip-startup',
+        `--test-data-dir=${testDataDir}`,
+        '--disable-gpu',
+        '--no-sandbox',
+        '--offscreen',
+        '--js-flags=--no-expose-wasm',
+    ]
+
+    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+    return { app, testDataDir }
+}
+
+// ── myAutomation.h with a duplicate AUTOSTART SEQUENCE(id) — Duplicate Automation Blocks dialog ──
+
+/** SEQUENCE(96) is declared twice — the exact shape CommandStation-EX's own seqCount() check rejects. */
+export const MOCK_AUTOMATION_DUPLICATE_SEQUENCE = [
+    'AUTOSTART SEQUENCE(96)',
+    'SET(110)',
+    'FOLLOW(96)',
+    '',
+    'AUTOSTART SEQUENCE(96)',
+    'SET(111) //bm',
+    'FOLLOW(96)',
+].join('\n') + '\n'
+
+async function launchDuplicateAutomationApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-dup-automation-'))
+
+    const scratchPath = join(testDataDir, 'scratch', 'CommandStation-EX')
+    mkdirSync(scratchPath, { recursive: true })
+    writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
+    writeFileSync(join(scratchPath, 'myAutomation.h'), MOCK_AUTOMATION_DUPLICATE_SEQUENCE, 'utf-8')
+
+    const prefsDir = join(testDataDir, 'app-preferences')
+    mkdirSync(prefsDir, { recursive: true })
+    const savedConfig = {
+        id: 'e2e-dup-automation',
+        name: 'E2E Test Layout',
+        deviceName: 'Arduino Mega 2560',
+        devicePort: '/dev/ttyACM1',
+        deviceFqbn: 'arduino:avr:mega:cpu=atmega2560',
+        product: 'ex_commandstation',
+        productName: 'EX-CommandStation',
+        version: 'v5.4.0-Prod',
+        repoPath: join(testDataDir, 'scratch'),
+        scratchPath,
+        configFiles: [
+            { name: 'config.h', content: MOCK_CONFIG_H },
+            { name: 'myAutomation.h', content: MOCK_AUTOMATION_DUPLICATE_SEQUENCE },
+        ],
+        lastModified: new Date().toISOString(),
+    }
+    writeFileSync(
+        join(prefsDir, 'dcc-rail-commander-preferences.json'),
+        JSON.stringify({ savedConfigurations: [savedConfig] }, null, 2),
+        'utf-8',
+    )
+
+    const args = [
+        ELECTRON_MAIN,
+        '--mock-device',
+        '--mock-upload',
+        '--skip-startup',
+        `--test-data-dir=${testDataDir}`,
+        '--disable-gpu',
+        '--no-sandbox',
+        '--offscreen',
+        '--js-flags=--no-expose-wasm',
+    ]
+
+    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+    return { app, testDataDir }
+}
+
 // ── Onboarding (home screen, no saved configs) — drives the "New Device" wizard ──
 
 async function launchOnboardingApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
@@ -524,6 +721,32 @@ export const test = base.extend<WorkspaceFixtures>({
 
     csb1StackedPage: async ({ csb1StackedApp }, use) => {
         await use(await navigateToWorkspace(csb1StackedApp))
+    },
+
+    // ── Imported project with mySetup.h + myHal.cpp ─────────────────────────
+    // eslint-disable-next-line no-empty-pattern
+    importedHalProjectApp: async ({ }, use) => {
+        const { app, testDataDir } = await launchImportedHalProjectApp()
+        await use(app)
+        await app.close()
+        cleanupDir(testDataDir)
+    },
+
+    importedHalProjectPage: async ({ importedHalProjectApp }, use) => {
+        await use(await navigateToWorkspace(importedHalProjectApp))
+    },
+
+    // ── Duplicate Automation Blocks dialog ──────────────────────────────────
+    // eslint-disable-next-line no-empty-pattern
+    duplicateAutomationApp: async ({ }, use) => {
+        const { app, testDataDir } = await launchDuplicateAutomationApp()
+        await use(app)
+        await app.close()
+        cleanupDir(testDataDir)
+    },
+
+    duplicateAutomationPage: async ({ duplicateAutomationApp }, use) => {
+        await use(await navigateToWorkspace(duplicateAutomationApp))
     },
 
     // ── IOExpander workspace ──────────────────────────────────────────────────

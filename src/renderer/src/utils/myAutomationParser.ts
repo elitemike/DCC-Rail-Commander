@@ -680,6 +680,118 @@ export function extractAutomations(fileContent: string): { automations: Automati
     return { automations, remainder };
 }
 
+/** One ROUTE/AUTOMATION/SEQUENCE declaration found while scanning a project for duplicate ids. */
+export interface DuplicateExrailOccurrence {
+    fileName: string;
+    macro: 'ROUTE' | 'SEQUENCE' | 'AUTOMATION';
+    id: number;
+    /** Full block text, header line through terminator, exactly as it appears in the file. */
+    text: string;
+    /** Inclusive start line index (0-based) within that file's content. */
+    startLine: number;
+    /** Exclusive end line index — one past the terminator line. */
+    endLine: number;
+}
+
+export interface DuplicateExrailGroup {
+    macro: 'ROUTE' | 'SEQUENCE' | 'AUTOMATION';
+    id: number;
+    /** Every place this id was declared — length is always >= 2. */
+    occurrences: DuplicateExrailOccurrence[];
+}
+
+/** Matches a block header optionally prefixed by AUTOSTART (e.g. `AUTOSTART SEQUENCE(95)`),
+ *  which none of the dedicated per-file parsers above recognise — SEQUENCE blocks are only ever
+ *  auto-started this way when hand-typed directly in myAutomation.h, never via mySequences.h. */
+const DUPLICATE_CHECK_HEADER = /^\s*(?:AUTOSTART\s+)?(ROUTE|SEQUENCE|AUTOMATION)\s*\(\s*(\d+)\b/;
+
+/**
+ * Scans every given file's raw text for ROUTE/AUTOMATION/SEQUENCE(id) declarations and groups
+ * any id declared more than once — mirroring CommandStation-EX's own compile-time uniqueness
+ * check (EXRAILAsserts.h's `static_assert(seqCount(id)==1, "USER ERROR: Duplicate
+ * ROUTE/AUTOMATION/SEQUENCE(id)")`), which these three macros share one namespace for and which
+ * otherwise fails the real build with no indication of which two blocks collided.
+ *
+ * Scans raw file text directly rather than any already-parsed structured array: a hand-typed
+ * `AUTOSTART SEQUENCE(...)` block living directly in myAutomation.h's free-form content is never
+ * parsed into a structured collection at all (see ConfigEditorState.loadFromInstallerState()) —
+ * only AUTOMATION(...) blocks get migrated out to myAutomations.h, ROUTE/SEQUENCE do not, so a
+ * duplicate of either kind can only be found by scanning the on-disk text itself. Call this
+ * *after* that migration pass has run, since a duplicate AUTOMATION(...) block that started out
+ * in myAutomation.h ends up migrated into myAutomations.h with both copies still intact.
+ */
+export function findDuplicateExrailBlocks(files: { name: string; content: string }[]): DuplicateExrailGroup[] {
+    const byKey = new Map<string, DuplicateExrailOccurrence[]>();
+
+    for (const file of files) {
+        const lines = file.content.split('\n');
+        let i = 0;
+        while (i < lines.length) {
+            const m = lines[i].match(DUPLICATE_CHECK_HEADER);
+            if (m) {
+                const macro = m[1] as 'ROUTE' | 'SEQUENCE' | 'AUTOMATION';
+                const id = parseInt(m[2], 10);
+                const startIdx = i;
+                const { next } = scanBlockBody(lines, i + 1, ANY_BLOCK_START);
+                const text = lines.slice(startIdx, next).join('\n');
+                const key = `${macro}:${id}`;
+                const list = byKey.get(key) ?? [];
+                list.push({ fileName: file.name, macro, id, text, startLine: startIdx, endLine: next });
+                byKey.set(key, list);
+                i = next;
+                continue;
+            }
+            i++;
+        }
+    }
+
+    const groups: DuplicateExrailGroup[] = [];
+    for (const occurrences of byKey.values()) {
+        if (occurrences.length > 1) groups.push({ macro: occurrences[0].macro, id: occurrences[0].id, occurrences });
+    }
+    // Stable, readable ordering for the confirmation dialog and tests.
+    groups.sort((a, b) => a.macro.localeCompare(b.macro) || a.id - b.id);
+    return groups;
+}
+
+/**
+ * Removes every occurrence after the first in each group (keeping the earliest-encountered copy
+ * of each duplicated id, deleting the rest), returning new file entries — the originals are left
+ * untouched. Pass only the groups the user actually agreed to remove.
+ */
+export function removeDuplicateExrailBlocks(
+    files: { name: string; content: string }[],
+    groups: DuplicateExrailGroup[],
+): { name: string; content: string }[] {
+    const rangesByFile = new Map<string, { startLine: number; endLine: number }[]>();
+    for (const group of groups) {
+        for (const occ of group.occurrences.slice(1)) {
+            const list = rangesByFile.get(occ.fileName) ?? [];
+            list.push({ startLine: occ.startLine, endLine: occ.endLine });
+            rangesByFile.set(occ.fileName, list);
+        }
+    }
+
+    return files.map(file => {
+        const ranges = rangesByFile.get(file.name);
+        if (!ranges || ranges.length === 0) return file;
+        ranges.sort((a, b) => a.startLine - b.startLine);
+        const lines = file.content.split('\n');
+        const kept: string[] = [];
+        let cursor = 0;
+        for (const { startLine, endLine } of ranges) {
+            kept.push(...lines.slice(cursor, startLine));
+            cursor = endLine;
+        }
+        kept.push(...lines.slice(cursor));
+        // Collapse the blank-line gap a removed block leaves behind, mirroring how this
+        // file's own serializers keep a single blank line between blocks rather than
+        // letting removed content leave a run of several behind.
+        const collapsed = kept.join('\n').replace(/\n{3,}/g, '\n\n');
+        return { ...file, content: collapsed };
+    });
+}
+
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {

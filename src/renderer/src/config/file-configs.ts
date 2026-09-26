@@ -802,6 +802,34 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
         // contains AUTOSTART...DONE blocks, never those.
         completions: [...EXRAIL_BODY_COMPLETIONS, ...GENERATED_BODY_ONLY_COMPLETIONS],
     },
+
+    'mySetup.h': {
+        friendlyName: 'Setup Commands',
+        completions: [
+            {
+                label: 'SETUP',
+                detail: 'SETUP("<...>")',
+                documentation:
+                    'Run one DCC-EX text command once at startup, before EX-RAIL\'s own AUTOSTART blocks — invoked directly by the firmware\'s own setup(), not by myAutomation.h.',
+                insertText: 'SETUP("${1:<D CMD>}")',
+                hover: {
+                    title: 'SETUP',
+                    description:
+                        'Each SETUP(...) line runs one command through the same parser JMRI or a serial terminal would use. Not part of EX-RAIL.',
+                    example: 'SETUP("<D CMD>")',
+                },
+            },
+        ],
+    },
+
+    // A real C++ translation unit (not EXRAIL). PlatformIO compiles it
+    // directly; halSetup() is invoked via IODevice.cpp's weak-symbol hook.
+    // Never #included as text anywhere — see automationPreview's .cpp
+    // filter in config-editor-state.ts.
+    'myHal.cpp': {
+        friendlyName: 'HAL Setup (myHal.cpp)',
+        completions: [],
+    },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

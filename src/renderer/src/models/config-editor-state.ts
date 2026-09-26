@@ -892,6 +892,18 @@ export class ConfigEditorState {
         'myAutomation.h',
         'myAutomations.h',
         'myStartup.h',
+        // mySetup.h is #include'd directly by the firmware's own setup() (a
+        // #if __has_include hook in CommandStation-EX.ino) — unrelated to
+        // EXRAIL/myAutomation.h. myHal.cpp is a separate .cpp translation unit
+        // PlatformIO's src_dir glob already compiles directly (platformio.ts).
+        // Neither must ever be treated as a "custom" file eligible for
+        // myAutomation.h's auto-#include block, the delete button, or the
+        // AUTOMATION()-block migration scan (loadFromInstallerState()). Unlike
+        // the rest of this set, they are NOT force-injected into every project
+        // (see the "Ensure ... always appear" block below) — most
+        // EX-CommandStation projects use neither file.
+        'mySetup.h',
+        'myHal.cpp',
     ])
 
     /**
@@ -961,6 +973,12 @@ export class ConfigEditorState {
         }
 
         for (const name of this.customFileNames) {
+            // .cpp files are separate translation units PlatformIO already compiles
+            // directly (platformio.ts's src_dir glob) — #including one as text here
+            // compiles it a second time inline, a near-certain "multiple definition"
+            // link error (e.g. myHal.cpp's halSetup()). General rule, not specific
+            // to any one filename — protects any future custom .cpp too.
+            if (name.endsWith('.cpp')) continue
             includes.push(`#include "${name}"`)
         }
 

@@ -868,4 +868,49 @@ test.describe('Load from Folder — internal sketch path setup', () => {
         }
     })
 
+    test('mySetup.h and myHal.cpp are tracked and copied into the internal scratch dir when folder has no .ino', async ({ electronApp, homePage, sourceFolder }) => {
+        // Regression: the folder scan used to be .h-only (HEADER_EXTENSIONS), so a
+        // .cpp file like myHal.cpp was invisible to the editor, and — in this exact
+        // "no .ino" branch — silently dropped from the fresh scratch dir entirely,
+        // since the copy-to-scratch loop only writes whatever's already tracked in
+        // configFiles. See home.ts's USER_CPP_PATTERN.
+        const reposDir = mkdtempSync(join(tmpdir(), 'ex-repos-mock-hal-'))
+        try {
+            const repoDir = join(reposDir, 'CommandStation-EX')
+            mkdirSync(join(repoDir, '.git'), { recursive: true })
+            writeFileSync(join(repoDir, 'CommandStation-EX.ino'), '// sketch placeholder\n', 'utf-8')
+
+            // User's source folder has no .ino — just config.h plus the two files
+            // that must survive the "no .ino" fresh-scratch-dir path.
+            writeFileSync(join(sourceFolder, 'config.h'), CONFIG_H_WITH_DEVICE, 'utf-8')
+            writeFileSync(join(sourceFolder, 'mySetup.h'), 'SETUP("<D CMD>");\n', 'utf-8')
+            writeFileSync(join(sourceFolder, 'myHal.cpp'), 'void halSetup() {}\n', 'utf-8')
+
+            await electronApp.evaluate((_electronApp, dir: string) => {
+                const { ipcMain } = (globalThis as Record<string, NodeRequire>).__e2eRequire('electron') as typeof import('electron')
+                ipcMain.removeHandler('files:get-install-dir')
+                ipcMain.handle('files:get-install-dir', () => dir)
+            }, reposDir)
+
+            await mockSelectDirectory(electronApp, sourceFolder)
+            await homePage.getByText('Load from Folder').first().click()
+
+            await expect(homePage.getByText('config.h').first()).toBeVisible({ timeout: 10_000 })
+            await expect(homePage.getByText('Loading…')).not.toBeVisible({ timeout: 10_000 })
+
+            // Tracked in the editor with their friendly names (file-configs.ts).
+            await expect(homePage.getByText('Setup Commands', { exact: true })).toBeVisible()
+            await expect(homePage.getByText('HAL Setup (myHal.cpp)', { exact: true })).toBeVisible()
+
+            // Physically copied into the fresh internal scratch dir.
+            const buildDir = join(reposDir, '_build')
+            const idDirs = readdirSync(buildDir)
+            const sketchDir = join(buildDir, idDirs[0], 'CommandStation-EX')
+            expect(existsSync(join(sketchDir, 'mySetup.h'))).toBe(true)
+            expect(existsSync(join(sketchDir, 'myHal.cpp'))).toBe(true)
+        } finally {
+            cleanupDir(reposDir)
+        }
+    })
+
 })
