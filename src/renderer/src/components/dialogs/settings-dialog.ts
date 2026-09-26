@@ -4,6 +4,7 @@ import { CheckBox } from '@syncfusion/ej2-buttons'
 import { ThemeService, type ThemeMode } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
 import { EditorDefaultViewService, type EditorViewMode } from '../../services/editor-default-view.service'
+import { InstallerState } from '../../models/installer-state'
 
 export interface SettingsDialogModel {
     autoConnect: boolean
@@ -33,6 +34,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly theme = resolve(ThemeService)
     readonly blocklySounds = resolve(BlocklySoundsService)
     readonly editorDefaultView = resolve(EditorDefaultViewService)
+    readonly installerState = resolve(InstallerState)
 
     private model!: SettingsDialogModel
 
