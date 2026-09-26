@@ -1,9 +1,14 @@
 <template>
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-lg shadow-2xl">
+        <!-- max-height + flex-col/shrink-0/overflow-y-auto: same small-window fix shape as the
+             other dialogs — several of the header's status lines (connecting/connected/error,
+             sendError, lastSentCommand) aren't mutually exclusive and can stack, so this can grow
+             taller than expected and must scroll internally rather than push Save/Cancel off-screen
+             at the app's minimum window size. -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-lg max-h-[90vh] shadow-2xl flex flex-col">
 
             <!-- Header -->
-            <div class="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10">
+            <div class="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10 shrink-0">
                 <h2 class="text-gray-900 dark:text-white text-lg font-semibold">Calibrate Servo</h2>
                 <p class="text-blue-300/70 text-sm mt-1">
                     ${turnoutLabel} &middot; Pin (VPin) ${turnout.pin}
@@ -32,7 +37,7 @@
             </div>
 
             <!-- Body -->
-            <div class="px-6 py-4 flex flex-col gap-5">
+            <div class="px-6 py-4 flex flex-col gap-5 overflow-y-auto flex-1 min-h-0">
 
                 <div if.bind="errorMessage" class="px-3 py-2 bg-red-50 dark:bg-red-950/60 border border-red-500/40 rounded-md text-red-700 dark:text-red-300 text-sm">
                     ${errorMessage}
@@ -101,7 +106,7 @@
             </div>
 
             <!-- Footer -->
-            <div class="px-6 pb-6 pt-2 flex items-center justify-between gap-3">
+            <div class="px-6 pb-6 pt-2 flex items-center justify-between gap-3 shrink-0">
                 <button click.trigger="swap()"
                     class="px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 transition-colors">
                     Swap

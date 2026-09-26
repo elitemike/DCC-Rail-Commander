@@ -156,4 +156,45 @@ test.describe(`at the app's minimum window size (${SMALL_WIDTH}x${SMALL_HEIGHT})
         await expect(doneButton).toBeInViewport()
         await expect(page.getByTestId('app-version')).toBeInViewport()
     })
+
+    test('Home screen: saved-config cards past the fold are reachable by scrolling', async ({ manySavedConfigsApp, manySavedConfigsPage: page }) => {
+        await resizeWindow(manySavedConfigsApp, SMALL_WIDTH, SMALL_HEIGHT)
+        await page.waitForTimeout(300)
+
+        // Deliberately real wheel input, not scrollIntoViewIfNeeded()/toBeInViewport(): home.html
+        // is a normal in-flow page (not a position:fixed dialog), so scrollIntoViewIfNeeded can
+        // reposition scroll through an overflow:hidden ancestor in a way a real mouse wheel cannot —
+        // it gave a false pass here during development. A bounding-box check after actual wheel
+        // events is the only reliable signal for this element shape.
+        const lastCard = page.getByText('Layout 14', { exact: true })
+        await expect(lastCard).not.toBeInViewport()
+
+        await page.mouse.move(SMALL_WIDTH / 2, SMALL_HEIGHT / 2)
+        for (let i = 0; i < 15; i++) {
+            await page.mouse.wheel(0, 400)
+        }
+        await page.waitForTimeout(300)
+
+        const box = await lastCard.boundingBox()
+        expect(box).not.toBeNull()
+        expect(box!.y).toBeGreaterThanOrEqual(0)
+        expect(box!.y + box!.height).toBeLessThanOrEqual(SMALL_HEIGHT)
+    })
+
+    test('Select Port dialog keeps "Use This Board" reachable', async ({ electronApp, workspacePage: page }) => {
+        await resizeWindow(electronApp, SMALL_WIDTH, SMALL_HEIGHT)
+        await page.waitForTimeout(300)
+
+        // Opens device-picker-dialog with the full (8-entry) mock board list — same
+        // position:fixed-overlay shape as the wizard/settings dialogs, so
+        // scrollIntoViewIfNeeded()/toBeInViewport() is valid here (see the Home-screen
+        // test above for why that pairing is NOT valid for in-flow pages).
+        await page.getByTestId('port-badge').click()
+        await expect(page.getByText('Select Port', { exact: true })).toBeVisible({ timeout: 10_000 })
+
+        const useThisBoardButton = page.getByRole('button', { name: 'Use This Board' })
+        await useThisBoardButton.scrollIntoViewIfNeeded()
+        await expect(useThisBoardButton).toBeInViewport()
+        await expect(page.getByRole('button', { name: 'Cancel' })).toBeInViewport()
+    })
 })

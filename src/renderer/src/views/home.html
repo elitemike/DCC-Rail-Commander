@@ -1,6 +1,12 @@
 <template>
+    <!-- h-screen (not min-h-screen) + overflow-y-auto: the saved-configurations grid below grows
+         with however many devices a user has saved over time, unbounded. min-h-screen alone would
+         just let this div grow past the viewport with nothing to scroll it back into view — html/body
+         are pinned with overflow:hidden (styles.css) specifically so nothing mounted under <my-app>
+         can rely on native page scroll. Capping this div's own height is what gives overflow-y-auto
+         something to actually act on. -->
     <div
-        class="min-h-screen bg-linear-to-br from-slate-100 via-blue-50 to-slate-200 dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 flex flex-col items-center justify-center p-8">
+        class="h-screen bg-linear-to-br from-slate-100 via-blue-50 to-slate-200 dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 flex flex-col items-center justify-center p-8 overflow-y-auto">
 
         <!-- Logo / title -->
         <div class="text-center mb-12">

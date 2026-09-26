@@ -168,6 +168,8 @@ interface WorkspaceFixtures {
     rosterGroupedPage: Page
     onboardingApp: ElectronApplication
     onboardingPage: Page
+    manySavedConfigsApp: ElectronApplication
+    manySavedConfigsPage: Page
 }
 
 // ── Shared: seed temp dir + launch Electron ───────────────────────────────────
@@ -425,6 +427,62 @@ async function navigateToOnboarding(app: ElectronApplication): Promise<Page> {
     return page
 }
 
+// ── Home screen with many saved configs (small-window overflow regression) ────
+
+async function launchManySavedConfigsApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-many-configs-'))
+
+    const prefsDir = join(testDataDir, 'app-preferences')
+    mkdirSync(prefsDir, { recursive: true })
+    // Enough cards to overflow the app's 900x600 minimum window size several times over —
+    // see small-window.spec.ts's Home-screen test.
+    const savedConfigurations = Array.from({ length: 14 }, (_, i) => ({
+        id: `many-cfg-${i}`,
+        name: `Layout ${i + 1}`,
+        deviceName: 'Arduino Mega 2560',
+        devicePort: `/dev/ttyACM${i}`,
+        deviceFqbn: 'arduino:avr:mega:cpu=atmega2560',
+        product: 'ex_commandstation',
+        productName: 'EX-CommandStation',
+        version: 'v5.4.0-Prod',
+        repoPath: join(testDataDir, `scratch-${i}`),
+        scratchPath: join(testDataDir, `scratch-${i}`),
+        configFiles: [{ name: 'config.h', content: MOCK_CONFIG_H }],
+        lastModified: new Date().toISOString(),
+    }))
+    writeFileSync(
+        join(prefsDir, 'dcc-rail-commander-preferences.json'),
+        JSON.stringify({ savedConfigurations }, null, 2),
+        'utf-8',
+    )
+
+    const args = [
+        ELECTRON_MAIN,
+        '--mock-device',
+        '--mock-upload',
+        '--skip-startup',
+        `--test-data-dir=${testDataDir}`,
+        '--disable-gpu',
+        '--no-sandbox',
+        '--offscreen',
+        '--js-flags=--no-expose-wasm',
+    ]
+
+    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+    return { app, testDataDir }
+}
+
+async function navigateToManySavedConfigs(app: ElectronApplication): Promise<Page> {
+    const page = await app.firstWindow()
+    page.on('dialog', (dialog) => dialog.accept().catch(() => undefined))
+    await page.waitForLoadState('domcontentloaded')
+    await page.evaluate(() => {
+        document.querySelectorAll('[id^="ej2-licensing"]').forEach(el => el.remove())
+    }).catch(() => undefined)
+    await expect(page.getByText('Layout 1', { exact: true })).toBeVisible({ timeout: 15_000 })
+    return page
+}
+
 // ── Shared test base with workspace fixtures ──────────────────────────────────
 
 async function navigateToIOExpanderWorkspace(app: ElectronApplication): Promise<Page> {
@@ -505,6 +563,19 @@ export const test = base.extend<WorkspaceFixtures>({
 
     onboardingPage: async ({ onboardingApp }, use) => {
         await use(await navigateToOnboarding(onboardingApp))
+    },
+
+    // ── Home screen with many saved configs ─────────────────────────────────
+    // eslint-disable-next-line no-empty-pattern
+    manySavedConfigsApp: async ({ }, use) => {
+        const { app, testDataDir } = await launchManySavedConfigsApp()
+        await use(app)
+        await app.close()
+        cleanupDir(testDataDir)
+    },
+
+    manySavedConfigsPage: async ({ manySavedConfigsApp }, use) => {
+        await use(await navigateToManySavedConfigs(manySavedConfigsApp))
     },
 })
 
