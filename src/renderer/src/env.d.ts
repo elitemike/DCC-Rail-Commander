@@ -9,3 +9,6 @@ declare interface ImportMetaEnv {
 declare interface ImportMeta {
     readonly env: ImportMetaEnv;
 }
+
+/** Injected by electron.vite.config.ts's renderer `define` from package.json's version. */
+declare const __APP_VERSION__: string;

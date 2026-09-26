@@ -1,9 +1,12 @@
 import { resolve } from 'path'
+import { readFileSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import aurelia from '@aurelia/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import monacoEditorPluginImport, { type IMonacoEditorOpts } from 'vite-plugin-monaco-editor'
 import type { Plugin } from 'vite'
+
+const { version: appVersion } = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'))
 
 // Vite's CJS→ESM interop double-wraps this plugin under `moduleResolution:
 // bundler` — the default import resolves to `{ default: actualPluginFn }`
@@ -66,6 +69,9 @@ export default defineConfig({
                 'aurelia': resolve(__dirname, 'node_modules', 'aurelia'),
                 '@aurelia': resolve(__dirname, 'node_modules', '@aurelia'),
             },
+        },
+        define: {
+            __APP_VERSION__: JSON.stringify(appVersion),
         },
         build: {
             rollupOptions: {
