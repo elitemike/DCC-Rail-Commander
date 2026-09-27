@@ -10,6 +10,7 @@
  */
 
 import { readFile, readdir } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -61,10 +62,26 @@ async function findReleaseArtifacts() {
     return entries.filter((name) => installerExts.includes(name.slice(name.lastIndexOf('.')).toLowerCase()))
 }
 
+/**
+ * electron-builder packages into the fixed `release/` directory (directories.output in
+ * package.json's "build" config) rather than a fresh unique folder per run, so a second
+ * release right after a first one has to overwrite the previous run's still-warm
+ * win-unpacked\resources\app.asar in place. On Windows that file can briefly be held open
+ * by AV/EDR real-time scanning or the search indexer right after being written — nothing to
+ * do with a leftover app process (there isn't one) — which turns the overwrite into an EBUSY.
+ * Delete the whole directory first instead, with the same retry/delay tests/e2e/fixtures.ts's
+ * cleanupDir() uses for this exact class of transient Windows lock.
+ */
+function cleanReleaseDir() {
+    log('Cleaning previous release output...')
+    rmSync(join(ROOT, 'release'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+}
+
 async function main() {
     const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf-8'))
     checkNodeVersion(pkg.engines.node)
 
+    cleanReleaseDir()
     await run('pnpm', ['install'])
     await run('pnpm', ['build'])
     await run('pnpm', ['exec', 'electron-builder'])
