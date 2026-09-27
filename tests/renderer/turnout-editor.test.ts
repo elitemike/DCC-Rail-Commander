@@ -296,6 +296,89 @@ describe('TurnoutEditorCustomElement hidden-from-throttles', () => {
     })
 })
 
+describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
+    function makeCloneEditor(turnouts: unknown[]) {
+        const state = {
+            turnouts,
+            addTurnoutEntry: vi.fn((entry: unknown) => { turnouts.push(entry) }),
+            getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+        }
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, { state, editBuffer: null, editBufferIndex: null })
+        return { editor, state }
+    }
+
+    it('clones a SERVO turnout with a new ID, HIDDEN description, and Instant profile, keeping the same pin', () => {
+        const source = {
+            type: 'SERVO' as const, id: 6, pin: 105, activeAngle: 343, inactiveAngle: 295,
+            profile: 'Slow' as const, description: 'Reverse Loop', comment: 'note', defaultState: 'CLOSED' as const,
+        }
+        const { editor, state } = makeCloneEditor([source])
+
+        editor.cloneAsHiddenInstant(0)
+
+        expect(state.addTurnoutEntry).toHaveBeenCalledOnce()
+        const [clone] = state.addTurnoutEntry.mock.calls[0]
+        // Matches the real-world pairing this feature is for:
+        // SERVO_TURNOUT(6, 105, 343, 295, Slow, "Reverse Loop") + SERVO_TURNOUT(7, 105, 343, 295, Instant, HIDDEN)
+        expect(clone).toEqual({
+            type: 'SERVO', id: 7, pin: 105, activeAngle: 343, inactiveAngle: 295,
+            profile: 'Instant', description: 'HIDDEN', comment: '', defaultState: 'CLOSED',
+        })
+        // Original entry is untouched.
+        expect(source).toMatchObject({ id: 6, pin: 105, description: 'Reverse Loop', profile: 'Slow' })
+    })
+
+    it('clones a PIN turnout onto the same pin', () => {
+        const source = { type: 'PIN' as const, id: 5, pin: 22, description: 'GPIO Siding', comment: '', defaultState: 'CLOSED' as const }
+        const { editor, state } = makeCloneEditor([source])
+
+        editor.cloneAsHiddenInstant(0)
+
+        const [clone] = state.addTurnoutEntry.mock.calls[0]
+        expect(clone).toEqual({ type: 'PIN', id: 6, pin: 22, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' })
+    })
+
+    it('clones a DCC turnout, keeping its address', () => {
+        const source = { type: 'DCC' as const, id: 5, addr: 100, subAddr: 1, description: 'Yard Exit', comment: '', defaultState: 'CLOSED' as const }
+        const { editor, state } = makeCloneEditor([source])
+
+        editor.cloneAsHiddenInstant(0)
+
+        const [clone] = state.addTurnoutEntry.mock.calls[0]
+        expect(clone).toEqual({ type: 'DCC', id: 6, addr: 100, subAddr: 1, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' })
+    })
+
+    it('assigns the new ID as one past the highest existing ID, not source.id + 1', () => {
+        const source = { type: 'VIRTUAL' as const, id: 3, description: 'Sim Siding', comment: '', defaultState: 'CLOSED' as const }
+        const other = { type: 'VIRTUAL' as const, id: 50, description: 'Other', comment: '', defaultState: 'CLOSED' as const }
+        const { editor, state } = makeCloneEditor([source, other])
+
+        editor.cloneAsHiddenInstant(0)
+
+        const [clone] = state.addTurnoutEntry.mock.calls[0]
+        expect(clone.id).toBe(51)
+    })
+
+    it('selects the newly-created clone', () => {
+        const source = { type: 'DCCL' as const, id: 5, addr: 401, description: 'Linear', comment: '', defaultState: 'CLOSED' as const }
+        const { editor } = makeCloneEditor([source])
+
+        editor.cloneAsHiddenInstant(0)
+
+        expect(editor.editBufferIndex).toBe(1)
+        expect(editor.editBuffer).toMatchObject({ id: 6, description: 'HIDDEN' })
+    })
+
+    it('does nothing when the index is out of range', () => {
+        const { editor, state } = makeCloneEditor([])
+
+        editor.cloneAsHiddenInstant(0)
+
+        expect(state.addTurnoutEntry).not.toHaveBeenCalled()
+    })
+})
+
 describe('TurnoutEditorCustomElement alias integration', () => {
     it('populates aliasInput from myAliases.h when selecting a turnout entry', () => {
         const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement

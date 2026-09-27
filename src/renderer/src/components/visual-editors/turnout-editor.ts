@@ -422,6 +422,30 @@ export class TurnoutEditorCustomElement {
         return (result.value as { pin: number }).pin
     }
 
+    /**
+     * Clones an entry into a new hidden, instant-throw twin sharing the same VPin/address —
+     * e.g. `SERVO_TURNOUT(6, 105, 343, 295, Slow, "Reverse Loop")` paired with a hidden
+     * `SERVO_TURNOUT(7, 105, 343, 295, Instant, HIDDEN)`. DCC-EX allows any number of
+     * turnout entries on one physical output; this gives EXRAIL automation a second ID
+     * that snaps the same servo/pin/accessory instantly, without it appearing on a
+     * throttle or easing through the original's profile.
+     */
+    cloneAsHiddenInstant(index: number, event?: Event): void {
+        event?.stopPropagation()
+        if (this.editBuffer !== null) this.commitBuffer()
+        const source = this.state.turnouts[index]
+        if (!source) return
+
+        const ts = this.state.turnouts
+        const id = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
+        const base = { ...source, id, description: 'HIDDEN', comment: '' }
+        const clone: Turnout = base.type === 'SERVO' ? { ...base, profile: 'Instant' } : base
+
+        this.state.addTurnoutEntry(clone)
+        const idx = this.state.turnouts.length - 1
+        this._setBuffer(idx, this.state.turnouts[idx])
+    }
+
     async removeEntryByIndex(index: number, event?: Event): Promise<void> {
         event?.stopPropagation()
         const entry = this.state.turnouts[index]

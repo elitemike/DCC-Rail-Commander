@@ -51,6 +51,10 @@
                                 title="No alias set (Strict aliases is enabled)"
                                 class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                             <button
+                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-blue-500/20 hover:text-blue-400 transition-colors"
+                                click.trigger="cloneAsHiddenInstant($index, $event)"
+                                title="Clone onto the same pin/address as a hidden, instant-throw turnout">⧉</button>
+                            <button
                                 class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
                                 click.trigger="removeEntryByIndex($index, $event)" title="Remove">×</button>
                         </a>
@@ -141,7 +145,7 @@
                                         Hidden from throttles
                                     </label>
                                     <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                        This turnout won't be shown to the user in their throttle (description is set to HIDDEN).</p>
                                 </div>
                                 <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
@@ -212,7 +216,7 @@
                                         Hidden from throttles
                                     </label>
                                     <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                        This turnout won't be shown to the user in their throttle (description is set to HIDDEN).</p>
                                 </div>
                                 <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
@@ -272,7 +276,7 @@
                                         Hidden from throttles
                                     </label>
                                     <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                        This turnout won't be shown to the user in their throttle (description is set to HIDDEN).</p>
                                 </div>
                                 <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
@@ -335,7 +339,7 @@
                                         Hidden from throttles
                                     </label>
                                     <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                        This turnout won't be shown to the user in their throttle (description is set to HIDDEN).</p>
                                 </div>
                                 <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
@@ -390,7 +394,7 @@
                                         Hidden from throttles
                                     </label>
                                     <p if.bind="isHidden" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        This turnout won't be shown to the user in their throttle (description is set to "HIDDEN").</p>
+                                        This turnout won't be shown to the user in their throttle (description is set to HIDDEN).</p>
                                 </div>
                                 <div if.bind="!isHidden" class="flex flex-col gap-1.5">
                                     <label
