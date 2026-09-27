@@ -90,7 +90,31 @@ export class SensorsEditorCustomElement {
 
     removeSensor(idx: number) {
         this.state.sensors = this.state.sensors.filter((_, i) => i !== idx)
+        this._reindexEditMapsAfterRemoval(idx)
         this.state.syncAll()
+    }
+
+    /**
+     * updateSensor() now re-arms (rather than clears) `_rowBeforeEdit`/`_idBeforeEdit` after every
+     * commit, so they stay populated indefinitely as a per-row "current known state" baseline —
+     * necessary because <vpin-picker>'s board/channel commits fire on every 'change' without an
+     * intervening `focusin` to re-capture via captureRowBeforeEdit(). That means the entries now
+     * outlive a row's removal and must be shifted down to match, or the row that slides into the
+     * removed index would inherit a stale baseline belonging to whatever used to sit there.
+     */
+    private _reindexEditMapsAfterRemoval(removedIdx: number): void {
+        const rowEntries = [...this._rowBeforeEdit.entries()]
+        this._rowBeforeEdit.clear()
+        for (const [i, v] of rowEntries) {
+            if (i === removedIdx) continue
+            this._rowBeforeEdit.set(i > removedIdx ? i - 1 : i, v)
+        }
+        const idEntries = [...this._idBeforeEdit.entries()]
+        this._idBeforeEdit.clear()
+        for (const [i, v] of idEntries) {
+            if (i === removedIdx) continue
+            this._idBeforeEdit.set(i > removedIdx ? i - 1 : i, v)
+        }
     }
 
     updateSensor(idx: number, s: SensorEntry) {
@@ -110,21 +134,32 @@ export class SensorsEditorCustomElement {
             // The field(s) the user just edited are already live in state.sensors[idx]
             // (two-way binding, not an edit-buffer) — revert to the pre-edit snapshot so
             // the block actually takes visible effect, not just skips syncAll()/alias-carry.
+            // Deliberately NOT cleared from the maps below (unlike the success path) — the
+            // snapshot IS the sensor's current (reverted) state, so it's already the correct
+            // baseline for whatever the user tries next, focusin or not (see the re-arming
+            // comment below for why that matters).
             const snapshot = this._rowBeforeEdit.get(idx)
             if (snapshot) this.state.sensors = this.state.sensors.map((v, i) => i === idx ? { ...snapshot } : v)
-            this._rowBeforeEdit.delete(idx)
-            this._idBeforeEdit.delete(idx)
             this.toastService.show({ title: 'Alias Required', content: 'This sensor requires an alias when Strict aliases is enabled.', cssClass: 'e-toast-warning' })
             return
         }
-        this._rowBeforeEdit.delete(idx)
         const previousId = this._idBeforeEdit.get(idx)
-        this._idBeforeEdit.delete(idx)
         this.state.sensors = this.state.sensors.map((v, i) => i === idx ? entry : v)
         if (previousId !== undefined && previousId !== entry.id) {
             const aliasName = this.state.getPrimaryAliasNameForId(previousId, 'Sensor')
             if (aliasName) this.state.syncAliasForId(previousId, entry.id, aliasName, 'Sensor', aliasName)
         }
+        // Re-arm (not clear) with the just-committed entry as the new baseline — <vpin-picker>'s
+        // board/channel <select>s commit on every 'change' without losing focus in between, so a
+        // second channel pick in the same focus session fires no new `focusin` to re-capture via
+        // captureRowBeforeEdit(). Deleting here left `_idBeforeEdit` empty for that second commit,
+        // which fell back to the *already-mutated* id as its own "previous" value — previousId
+        // effectively became a no-op equal to entry.id, so the alias carry-forward above never
+        // ran and the alias stayed pinned to the sensor's now-stale original id (looking, from the
+        // sensor's row, like the alias had simply vanished). Re-arming keeps the map accurate
+        // regardless of whether a fresh focusin ever fires before the next edit.
+        this._rowBeforeEdit.set(idx, entry)
+        this._idBeforeEdit.set(idx, entry.id)
         this.state.syncAll()
     }
 

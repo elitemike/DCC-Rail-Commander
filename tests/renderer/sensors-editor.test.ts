@@ -142,6 +142,54 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
 
         expect(state.syncAliasForId).not.toHaveBeenCalled()
     })
+
+    // <vpin-picker>'s board/channel <select>s commit on every 'change' event without the element
+    // ever losing focus in between (e.g. picking channel 1, then reopening the same still-focused
+    // dropdown to pick channel 3 instead) — so a second ID change in one focus session fires no new
+    // `focusin`, and thus no second captureRowBeforeEdit() call. The bug: previousId used to be
+    // deleted after the first commit, so the second commit fell back to `entry.id` (the value it was
+    // ALREADY mutated to) as its own "previous" id, which is always equal to itself — the alias
+    // carry-forward's `previousId !== entry.id` check then never fired, permanently orphaning the
+    // alias on the sensor's original id while the sensor itself moved on.
+    it('carries an alias through a second ID change in the same focus session, with no intervening captureRowBeforeEdit', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 100, description: 'Track Sensor' }],
+            [{ name: 'TRACK1', value: '100', aliasType: 'Sensor' }],
+        )
+
+        editor.captureRowBeforeEdit(0)
+        // First commit: picking a board recomputes channel 1's VPin, which can coincide with the
+        // sensor's current id (a board starting at VPin 100 makes channel 1 = 100 too).
+        state.sensors[0].id = 100
+        editor.updateSensor(0, state.sensors[0])
+
+        // Second commit, no captureRowBeforeEdit() in between — the channel <select> never lost focus.
+        state.sensors[0].id = 102
+        editor.updateSensor(0, state.sensors[0])
+
+        expect(state.syncAliasForId).toHaveBeenCalledWith(100, 102, 'TRACK1', 'Sensor', 'TRACK1')
+    })
+
+    it('reindexes the pre-edit-id baseline after a row is removed, so the row that slides into its index does not inherit a stale one', () => {
+        const { editor, state } = makeEditor([
+            { id: 10, description: 'A' },
+            { id: 20, description: 'B' },
+            { id: 30, description: 'C' },
+        ])
+
+        // Prime baselines for rows 1 (B) and 2 (C).
+        editor.captureRowBeforeEdit(1)
+        editor.captureRowBeforeEdit(2)
+
+        // Remove row 0 (A) — B and C each shift down one index.
+        editor.removeSensor(0)
+
+        const idMap = (editor as unknown as { _idBeforeEdit: Map<number, number> })._idBeforeEdit
+        // B's baseline (originally at idx 1) must now live at idx 0, not vanish or collide.
+        expect(idMap.get(0)).toBe(20)
+        // C's baseline (originally at idx 2) must now live at idx 1.
+        expect(idMap.get(1)).toBe(30)
+    })
 })
 
 // ── makeAliasChangeHandler ────────────────────────────────────────────────────

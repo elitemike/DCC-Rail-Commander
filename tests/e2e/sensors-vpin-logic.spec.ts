@@ -124,4 +124,40 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
         await switchToRaw(page)
         await expect(page.locator('div.monaco-editor')).toContainText('// Sensor 102 - New Sensor')
     })
+
+    // Regression: changing a channel a second time (e.g. moving a sensor onto a board at
+    // channel 1, then correcting the channel to 3) fires no new `focusin` on the row —
+    // the <select> never lost focus in between — so updateSensor() must not rely on a
+    // fresh captureRowBeforeEdit() call to know the sensor's pre-edit id for the second
+    // change. Losing that orphaned the sensor's alias, pinning it to the stale original id.
+    test('an alias survives a second channel change on the same sensor with no refocus in between', async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openAccessoriesTab(page)
+        await addPca9685(page)
+
+        await openSensorsEditor(page)
+        await addSensor(page)
+        const row = sensorRows(page).first()
+
+        const aliasInput = row.locator('alias-picker input')
+        await aliasInput.fill('TRACK1')
+        await aliasInput.blur()
+        await expect(aliasInput).toHaveValue('TRACK1')
+
+        // Move onto the board (channel 1) — for a board starting at VPin 100 this computes
+        // back to the same VPin 100 the sensor already had.
+        await row.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await expect(aliasInput).toHaveValue('TRACK1')
+
+        // Now change the channel again, without ever leaving/refocusing the row.
+        await row.locator('[data-field="pin-channel"]').selectOption({ label: 'Ch 3' })
+        await expect(row.getByText('VPin 102', { exact: true })).toBeVisible()
+        await expect(aliasInput).toHaveValue('TRACK1')
+
+        await page.getByText('Aliases', { exact: true }).first().click()
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(TRACK1, 102)')
+        await expect(page.locator('div.monaco-editor')).not.toContainText('ALIAS(TRACK1, 100)')
+    })
 })
