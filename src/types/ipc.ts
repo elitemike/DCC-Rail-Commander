@@ -188,6 +188,22 @@ export interface PreferencesElectronApi {
     getAll: () => Promise<Record<string, unknown>>
 }
 
+// ── Local history ────────────────────────────────────────────────────────────
+
+/** One prior version of a config file's content, kept locally (never written to the project folder). */
+export interface LocalHistorySnapshot {
+    id: string
+    savedAt: string
+    content: string
+}
+
+export interface LocalHistoryElectronApi {
+    /** Records `content` as a snapshot for `fileName` under `projectKey` (normally the scratch/source path). */
+    record: (projectKey: string, fileName: string, content: string) => Promise<void>
+    /** Newest first. */
+    list: (projectKey: string, fileName: string) => Promise<LocalHistorySnapshot[]>
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 export interface ConfigElectronApi {
@@ -229,5 +245,6 @@ declare global {
         config: ConfigElectronApi
         electronWindow: WindowElectronApi
         theme: ThemeElectronApi
+        localHistory: LocalHistoryElectronApi
     }
 }

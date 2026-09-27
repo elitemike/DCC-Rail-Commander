@@ -9,6 +9,7 @@ import type {
     CompileResult,
     UploadResult,
     QuickCompileResult,
+    LocalHistorySnapshot,
 } from '../types/ipc'
 
 // ── USB API ──────────────────────────────────────────────────────────────────
@@ -243,6 +244,19 @@ const themeApi = {
 }
 
 contextBridge.exposeInMainWorld('theme', themeApi)
+
+// ── Local history API ────────────────────────────────────────────────────────
+// Named `localHistory`, not `history` — `window.history` is the browser's native
+// navigation API and contextBridge cannot shadow it.
+const localHistoryApi = {
+    record: (projectKey: string, fileName: string, content: string): Promise<void> =>
+        ipcRenderer.invoke('local-history:record', projectKey, fileName, content),
+
+    list: (projectKey: string, fileName: string): Promise<LocalHistorySnapshot[]> =>
+        ipcRenderer.invoke('local-history:list', projectKey, fileName),
+}
+
+contextBridge.exposeInMainWorld('localHistory', localHistoryApi)
 
 // ── Window API ───────────────────────────────────────────────────────────────
 const windowApi = {

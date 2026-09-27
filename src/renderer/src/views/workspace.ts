@@ -7,6 +7,7 @@ import { ConfigEditorState } from '../models/config-editor-state'
 import { friendlyName } from '../utils/friendly-names'
 import { PreferencesService } from '../services/preferences.service'
 import { FileService } from '../services/file.service'
+import { LocalHistoryService, type LocalHistorySnapshot } from '../services/local-history.service'
 import { GitService } from '../services/git.service'
 import { PlatformIoService } from '../services/platformio.service'
 import { UsbService } from '../services/usb.service'
@@ -36,6 +37,7 @@ export class Workspace {
     private readonly toastService = resolve(ToastService)
     private readonly preferences = resolve(PreferencesService)
     private readonly files = resolve(FileService)
+    private readonly localHistory = resolve(LocalHistoryService)
     private readonly git = resolve(GitService)
     private readonly pio = resolve(PlatformIoService)
     private readonly usb = resolve(UsbService)
@@ -950,11 +952,38 @@ export class Workspace {
      * PlatformIO's incremental build: rewriting a file with identical content
      * still bumps its mtime, which needlessly invalidates that file's
      * compilation cache entry on the next build.
+     *
+     * When `historyFileName` is given, the content about to be overwritten is first
+     * snapshotted to LocalHistoryService — this is the one choke point every save goes
+     * through (the reviewed Save-button path via openChangesDialog() *and* the direct
+     * saveFiles() calls from compile()/uploadFirmware()/etc. that skip that review), so
+     * it's also the right place to catch content an in-memory mutation (e.g.
+     * checkForDuplicateExrailBlocks()/checkForUnrecognizedExrailCommands() rewriting
+     * state.configFiles on load) is about to permanently overwrite on disk. Only passed
+     * for one of the (up to two) roots a file is written to, so a from-folder project
+     * with both scratchPath and sourceFolder doesn't record the same content twice.
+     *
+     * The snapshot is best-effort: a failure here (stale preload build without
+     * window.localHistory exposed yet, disk error, IPC hiccup, ...) must never block the
+     * write itself — this is a recovery safety net, and a safety net that can break the
+     * save/compile/upload path it's meant to protect defeats its own purpose.
      */
-    private async writeIfChanged(path: string, content: string): Promise<void> {
+    private async writeIfChanged(
+        path: string,
+        content: string,
+        historyProjectKey?: string,
+        historyFileName?: string,
+    ): Promise<void> {
         const existing = (await this.files.exists(path)) ? await this.files.readFile(path) : null
         if (existing !== null && normalizeForComparison(existing) === normalizeForComparison(content)) {
             return
+        }
+        if (existing !== null && historyProjectKey && historyFileName) {
+            try {
+                await this.localHistory.record(historyProjectKey, historyFileName, existing)
+            } catch (err) {
+                console.error('Local history snapshot failed; continuing with the save.', err)
+            }
         }
         await this.files.writeFile(path, content)
     }
@@ -971,7 +1000,7 @@ export class Workspace {
         const writes: Promise<void>[] = []
         for (const f of this.state.configFiles) {
             if (this.state.scratchPath) {
-                writes.push(this.writeIfChanged(`${this.state.scratchPath}/${f.name}`, f.content))
+                writes.push(this.writeIfChanged(`${this.state.scratchPath}/${f.name}`, f.content, this.state.scratchPath, f.name))
             }
             // When loaded from a folder that lacks a .ino, the internal scratch path
             // is used for compilation but we must also write back to the user's
@@ -1068,6 +1097,57 @@ export class Workspace {
             component: () =>
                 import('../components/dialogs/file-changes-dialog').then((m) => m.FileChangesDialog).catch(() => null),
             model: { files, onSave: () => this.saveFiles() },
+        })
+    }
+
+    /** History is only ever recorded against scratchPath — see writeIfChanged()'s doc comment. */
+    get canShowLocalHistory(): boolean {
+        return !!this.state.scratchPath && !!this.activeFile
+    }
+
+    /**
+     * Opens the local (app-only) version history for the active file — every prior version
+     * that a Save (whether reviewed via openChangesDialog() or triggered directly by
+     * compile()/uploadFirmware()) has ever overwritten on disk. This is the recovery path for
+     * content an automatic in-memory fix (duplicate-block removal, unrecognized-command
+     * comment-out) discarded — see writeIfChanged()'s doc comment for where snapshots are taken.
+     */
+    async openLocalHistory(): Promise<void> {
+        const file = this.activeFile
+        if (!file || !this.state.scratchPath) return
+        const projectKey = this.state.scratchPath
+        let snapshots: LocalHistorySnapshot[]
+        try {
+            snapshots = await this.localHistory.list(projectKey, file.name)
+        } catch (err) {
+            console.error('Failed to load local history.', err)
+            this.toastService.show({
+                title: 'History Unavailable',
+                content: 'Could not load local history for this file.',
+                cssClass: 'e-toast-warning',
+            })
+            return
+        }
+
+        const result = await this.dialogService
+            .open({
+                component: () =>
+                    import('../components/dialogs/local-history-dialog').then((m) => m.LocalHistoryDialog).catch(() => null),
+                model: { fileName: file.name, currentContent: file.content, snapshots },
+            })
+            .whenClosed((r) => r)
+        const outcome = result as { status: string; value?: string }
+        if (outcome.status !== 'ok' || typeof outcome.value !== 'string') return
+
+        file.content = outcome.value
+        // Re-derive structured state from the restored content — same reasoning as
+        // checkForDuplicateExrailBlocks()'s post-removal reload.
+        this.configEditorState.loadFromInstallerState()
+        this.configEditorState.hasChanges = true
+        this.toastService.show({
+            title: 'Version Restored',
+            content: `Restored a previous version of ${friendlyName(file.name)}. Save to write it to disk.`,
+            cssClass: 'e-toast-success',
         })
     }
 

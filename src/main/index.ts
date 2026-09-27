@@ -8,6 +8,7 @@ import { PlatformIoService } from './platformio'
 import { GitService } from './git-client'
 import { FileService } from './file-manager'
 import { PreferencesService } from './preferences'
+import { LocalHistoryService } from './local-history'
 
 // ── E2E Test isolation ───────────────────────────────────────────────────────
 // Allow tests to point userData at a temp directory so preferences don't bleed.
@@ -63,6 +64,7 @@ export const platformIoService = new PlatformIoService(usbManager)
 export const gitService = new GitService()
 export const fileService = new FileService()
 export const preferencesService = new PreferencesService()
+export const localHistoryService = new LocalHistoryService()
 
 // ── Window factory ───────────────────────────────────────────────────────────
 // electron-builder's win/linux `icon` config only brands the packaged installer/exe —
@@ -217,6 +219,7 @@ app.whenReady().then(() => {
         gitService,
         fileService,
         preferencesService,
+        localHistoryService,
     })
     createWindow()
 

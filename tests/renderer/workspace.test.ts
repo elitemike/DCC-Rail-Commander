@@ -75,7 +75,8 @@ function makeWorkspace(opts: {
         configEditorState: { configHContent: '', syncAll: vi.fn(), clearChanges: vi.fn(), strictAliases: true },
         toastService: { show: toastShowFn },
         preferences: { get: vi.fn().mockResolvedValue(undefined), set: preferencesSetFn },
-        files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) },
+        files: { writeFile: vi.fn().mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false), readFile: vi.fn().mockResolvedValue('') },
+        localHistory: { record: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]) },
         git: { pull: vi.fn().mockResolvedValue(undefined), listTags: listTagsFn },
         useLatestProdVersion: opts.useLatestProdVersion ?? true,
         pio: {
@@ -112,6 +113,16 @@ function makeWorkspace(opts: {
     })
 
     return { workspace, uploadFn, openPortFn, closePortFn, isPortOpenFn, preferencesSetFn, toastShowFn, listTagsFn }
+}
+
+function historyMock(workspace: Workspace) {
+    return (workspace as unknown as { localHistory: { record: ReturnType<typeof vi.fn>; list: ReturnType<typeof vi.fn> } }).localHistory
+}
+
+function filesMock(workspace: Workspace) {
+    return (workspace as unknown as {
+        files: { writeFile: ReturnType<typeof vi.fn>; exists: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn> }
+    }).files
 }
 
 // ── connect() / disconnect() / toggleConnect() ───────────────────────────────
@@ -724,5 +735,169 @@ describe('Workspace.removeCustomFile', () => {
 
         expect(deleteFilesFn).not.toHaveBeenCalled()
         expect(removeCustomFileFn).not.toHaveBeenCalled()
+    })
+})
+
+// ── saveFiles() — local history snapshotting ─────────────────────────────────
+// The app can rewrite a config file's content on its own (e.g. checkForDuplicateExrailBlocks()/
+// checkForUnrecognizedExrailCommands() on load), and that rewrite only lands on disk the next
+// time something calls saveFiles() — the reviewed Save button, or a direct call from
+// compile()/upload(). writeIfChanged() must snapshot whatever content it's about to overwrite
+// into LocalHistoryService before every such write, so that content is always recoverable
+// locally even though it's gone from the user's project folder.
+
+describe('Workspace.saveFiles — local history', () => {
+    it('records the previous on-disk content before overwriting a changed file', async () => {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'NEW CONTENT' }] })
+        workspace.state.scratchPath = '/scratch'
+        workspace.state.sourceFolder = null
+        Object.assign(filesMock(workspace), {
+            exists: vi.fn().mockResolvedValue(true),
+            readFile: vi.fn().mockResolvedValue('OLD CONTENT'),
+        })
+
+        await workspace.saveFiles()
+
+        expect(historyMock(workspace).record).toHaveBeenCalledWith('/scratch', 'myAutomation.h', 'OLD CONTENT')
+    })
+
+    it('does not record history when the file content is unchanged', async () => {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'SAME' }] })
+        workspace.state.scratchPath = '/scratch'
+        Object.assign(filesMock(workspace), {
+            exists: vi.fn().mockResolvedValue(true),
+            readFile: vi.fn().mockResolvedValue('SAME'),
+        })
+
+        await workspace.saveFiles()
+
+        expect(historyMock(workspace).record).not.toHaveBeenCalled()
+    })
+
+    it('does not record history for a brand new file with nothing on disk yet', async () => {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myNewFile.h', content: 'hello' }] })
+        workspace.state.scratchPath = '/scratch'
+        Object.assign(filesMock(workspace), { exists: vi.fn().mockResolvedValue(false) })
+
+        await workspace.saveFiles()
+
+        expect(historyMock(workspace).record).not.toHaveBeenCalled()
+    })
+
+    it('records only once per file even when also writing back to sourceFolder', async () => {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'NEW' }] })
+        workspace.state.scratchPath = '/scratch'
+        workspace.state.sourceFolder = '/source'
+        Object.assign(filesMock(workspace), {
+            exists: vi.fn().mockResolvedValue(true),
+            readFile: vi.fn().mockResolvedValue('OLD'),
+        })
+
+        await workspace.saveFiles()
+
+        expect(historyMock(workspace).record).toHaveBeenCalledTimes(1)
+        expect(historyMock(workspace).record).toHaveBeenCalledWith('/scratch', 'myAutomation.h', 'OLD')
+    })
+
+    // A stale preload build (window.localHistory not yet exposed after the feature was added),
+    // a disk error, or an IPC hiccup must never block the write itself — the snapshot is a
+    // best-effort recovery net, not a save precondition. This is the bug behind "Compile & Upload"
+    // failing outright with "Cannot read properties of undefined (reading 'record')".
+    it('still writes the file when the local history snapshot fails', async () => {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'NEW CONTENT' }] })
+        workspace.state.scratchPath = '/scratch'
+        workspace.state.sourceFolder = null
+        Object.assign(filesMock(workspace), {
+            exists: vi.fn().mockResolvedValue(true),
+            readFile: vi.fn().mockResolvedValue('OLD CONTENT'),
+        })
+        Object.assign(historyMock(workspace), {
+            record: vi.fn().mockRejectedValue(new TypeError("Cannot read properties of undefined (reading 'record')")),
+        })
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        await expect(workspace.saveFiles()).resolves.not.toThrow()
+
+        expect(filesMock(workspace).writeFile).toHaveBeenCalledWith(expect.stringContaining('myAutomation.h'), 'NEW CONTENT')
+        consoleError.mockRestore()
+    })
+})
+
+// ── openLocalHistory() ────────────────────────────────────────────────────────
+
+describe('Workspace.openLocalHistory', () => {
+    function makeHistoryWorkspace() {
+        const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'CURRENT' }] })
+        workspace.state.scratchPath = '/scratch'
+        workspace.activeFileIndex = 0
+        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), hasChanges: false })
+        return workspace
+    }
+
+    it('does nothing when there is no scratchPath', async () => {
+        const workspace = makeHistoryWorkspace()
+        workspace.state.scratchPath = null as unknown as string
+        Object.assign(workspace, { dialogService: { open: vi.fn() } })
+
+        await workspace.openLocalHistory()
+
+        expect(historyMock(workspace).list).not.toHaveBeenCalled()
+    })
+
+    it('shows a toast instead of throwing when the history list call fails (e.g. a stale preload build)', async () => {
+        const { workspace, toastShowFn } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'CURRENT' }] })
+        workspace.state.scratchPath = '/scratch'
+        workspace.activeFileIndex = 0
+        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), hasChanges: false })
+        const dialogOpen = vi.fn()
+        Object.assign(historyMock(workspace), {
+            list: vi.fn().mockRejectedValue(new TypeError("Cannot read properties of undefined (reading 'list')")),
+        })
+        Object.assign(workspace, { dialogService: { open: dialogOpen } })
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        await expect(workspace.openLocalHistory()).resolves.not.toThrow()
+
+        expect(dialogOpen).not.toHaveBeenCalled()
+        expect(toastShowFn).toHaveBeenCalledWith(expect.objectContaining({ title: 'History Unavailable' }))
+        consoleError.mockRestore()
+    })
+
+    it('restores the picked snapshot into the active file and marks changes pending', async () => {
+        const workspace = makeHistoryWorkspace()
+        Object.assign(historyMock(workspace), {
+            list: vi.fn().mockResolvedValue([{ id: '1', savedAt: '2026-01-01T00:00:00.000Z', content: 'RESTORED' }]),
+        })
+        Object.assign(workspace, {
+            dialogService: {
+                open: vi.fn().mockReturnValue({
+                    whenClosed: (cb: (r: unknown) => unknown) => cb({ status: 'ok', value: 'RESTORED' }),
+                }),
+            },
+        })
+
+        await workspace.openLocalHistory()
+
+        expect(workspace.state.configFiles[0].content).toBe('RESTORED')
+        expect(workspace.configEditorState.hasChanges).toBe(true)
+    })
+
+    it('leaves the file untouched when the dialog is cancelled', async () => {
+        const workspace = makeHistoryWorkspace()
+        Object.assign(historyMock(workspace), {
+            list: vi.fn().mockResolvedValue([{ id: '1', savedAt: '2026-01-01T00:00:00.000Z', content: 'RESTORED' }]),
+        })
+        Object.assign(workspace, {
+            dialogService: {
+                open: vi.fn().mockReturnValue({
+                    whenClosed: (cb: (r: unknown) => unknown) => cb({ status: 'cancel' }),
+                }),
+            },
+        })
+
+        await workspace.openLocalHistory()
+
+        expect(workspace.state.configFiles[0].content).toBe('CURRENT')
+        expect(workspace.configEditorState.hasChanges).toBe(false)
     })
 })

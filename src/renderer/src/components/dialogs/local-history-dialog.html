@@ -1,0 +1,56 @@
+<template>
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-white/10 w-full max-w-6xl h-[80vh] shadow-2xl flex flex-col">
+
+            <!-- Header -->
+            <div class="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10 flex items-start justify-between shrink-0">
+                <div>
+                    <h2 class="text-gray-900 dark:text-white text-lg font-semibold">Local History — ${fileName}</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Versions of this file DCC-Rail-Commander overwrote on Save, kept locally on this machine
+                        only. This history is never written into the project folder.
+                    </p>
+                </div>
+                <button click.trigger="close()" data-testid="local-history-dialog-close-x"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-900/10 dark:hover:bg-white/10 transition-colors"
+                    aria-label="Close">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Empty state: no prior versions recorded -->
+            <div if.bind="snapshots.length === 0" class="flex-1 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400" data-testid="local-history-empty">
+                No local history recorded for this file yet — it's only captured when a Save actually changes
+                the file's content on disk.
+            </div>
+
+            <!-- Body: snapshot list + diff editor (snapshot on the left, current content on the right) -->
+            <div if.bind="snapshots.length > 0" class="flex flex-1 min-h-0">
+                <aside class="w-64 shrink-0 border-r border-gray-200 dark:border-white/10 overflow-y-auto py-2" data-testid="local-history-list">
+                    <div repeat.for="s of snapshots" click.trigger="selectSnapshot($index)" data-testid="local-history-row"
+                        class="flex items-center gap-2 px-4 py-2 cursor-pointer text-sm border-l-2 ${$index === selectedIndex
+                            ? 'border-l-blue-500 bg-blue-50 dark:bg-blue-950/40 text-gray-900 dark:text-white'
+                            : 'border-l-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-900/5 dark:hover:bg-white/5'}">
+                        <span class="truncate text-xs">${formatTimestamp(s.savedAt)}</span>
+                    </div>
+                </aside>
+
+                <div class="flex-1 min-w-0 relative">
+                    <div ref="container" class="absolute inset-0" data-testid="local-history-diff-editor"></div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-white/10 shrink-0">
+                <button click.trigger="close()" data-testid="local-history-close-button"
+                    class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 rounded-lg transition-colors">
+                    Close
+                </button>
+                <button if.bind="snapshots.length > 0" click.trigger="restore()" data-testid="local-history-restore-button"
+                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors">
+                    Restore This Version
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

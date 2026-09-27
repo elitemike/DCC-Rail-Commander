@@ -167,6 +167,17 @@
             <span if.bind="configEditorState.hasChanges" data-testid="save-dirty-indicator" class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
         </button>
 
+        <!-- Local History — recovers a version of the active file DCC-Rail-Commander itself overwrote (e.g. an automatic duplicate/unrecognized-command fix), never written to the project folder -->
+        <button if.bind="canShowLocalHistory" click.trigger="openLocalHistory()" data-testid="local-history-button"
+            title="View and restore a previous local version of this file"
+            class="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors bg-gray-900/5 dark:bg-white/5 hover:bg-gray-900/10 dark:hover:bg-white/10 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-9-9 9 9 0 019 9z" />
+            </svg>
+            History
+        </button>
+
         <!-- Connect/Disconnect — the actual serial connection; Monitor below is just a view over it -->
         <button click.trigger="toggleConnect()" data-testid="connect-toggle" disabled.bind="!state.selectedDevice?.port"
             title.bind="portConnected ? 'Disconnect from ' + state.selectedDevice?.port : 'Connect to ' + (state.selectedDevice?.port || 'the selected device')"

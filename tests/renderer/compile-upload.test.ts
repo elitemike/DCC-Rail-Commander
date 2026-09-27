@@ -80,6 +80,7 @@ function makeWorkspace(overrides: {
         router: { load: vi.fn() },
         dialogService: {},
         preferences: { get: vi.fn(), set: vi.fn() },
+        localHistory: { record: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]) },
         isCompiling: false,
         compileLog: '',
         compileError: null,
