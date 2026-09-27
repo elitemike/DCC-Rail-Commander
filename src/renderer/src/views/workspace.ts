@@ -20,12 +20,12 @@ import { parseDeviceFromHeader, injectDeviceHeader, hasDeviceHeader, reconcileDe
 import { copyProductSourceFiles, isExampleConfigFile, collectExampleConfigFiles } from '../utils/product-source-files'
 import { mergeDetectedBoards } from '../utils/device-scan'
 import { buildFileChangeSet, normalizeForComparison } from '../utils/config-file-diff'
-import { findDuplicateExrailBlocks, removeDuplicateExrailBlocks } from '../utils/myAutomationParser'
+import { findDuplicateExrailBlocks, removeDuplicateExrailBlocks, findUnrecognizedExrailBlockRanges, commentOutUnrecognizedExrailBlocks } from '../utils/myAutomationParser'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import type { FileEditorPanelCustomElement } from '../components/visual-editors/file-editor-panel'
 import type { CompileOutputTerminalCustomElement } from '../components/compile-output-terminal'
-import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels, setQuickCompileMarkers } from '../config/dccex-validators'
+import { hasErrorMarkers, onMarkersChanged, filesWithErrorMarkers, revalidateAllModels, setQuickCompileMarkers, findUnrecognizedExrailCommands } from '../config/dccex-validators'
 import type { IDisposable } from 'monaco-editor'
 
 export class Workspace {
@@ -358,10 +358,23 @@ export class Workspace {
         // and (on a fresh connect, if autoConnectMonitor is on) auto-opening
         // the Monitor.
         void this.checkDeviceConnection()
-        // Fire-and-forget: opens a modal dialog, so it must never be awaited here —
+        // Fire-and-forget: opens modal dialogs, so it must never be awaited here —
         // binding() gates the whole view's first render, and an awaited dialog would
         // leave the workspace shell blank behind it until the user answers.
-        void this.checkForDuplicateExrailBlocks()
+        void this.checkForKnownImportIssues()
+    }
+
+    /**
+     * Runs every "flag this at load time instead of letting it surface only as a real compile
+     * failure" check, one at a time (never concurrently — each opens its own modal dialog, and
+     * two dialogService.open() calls racing would either stack confusingly or have the second
+     * silently lost). Order doesn't affect correctness here (the two checks are independent), but
+     * running the duplicate-removal dialog first means the unrecognized-command scan afterward
+     * sees whatever state the user actually ended up with, not the pre-removal one.
+     */
+    private async checkForKnownImportIssues(): Promise<void> {
+        await this.checkForDuplicateExrailBlocks()
+        await this.checkForUnrecognizedExrailCommands()
     }
 
     /**
@@ -405,6 +418,74 @@ export class Workspace {
             content: `Removed ${groups.reduce((n, g) => n + g.occurrences.length - 1, 0)} duplicate block(s). Save to write the change to disk.`,
             cssClass: 'e-toast-success',
         })
+    }
+
+    /**
+     * Catches a macro name that was never valid EXRAIL syntax at any released
+     * CommandStation-EX version (a real project's own invented/misremembered command, or code
+     * copied from an outside source) — the same check dccex-validators.ts's Monaco integration
+     * already runs, but that only fires for a file with a *live editor model*, which Monaco only
+     * creates once a file has actually been opened. A file the user never clicked into (very
+     * plausible for e.g. a leftover/imported file from a real-world project) would otherwise get
+     * no feedback at all until a real Compile fails with a wall of cascading, hard-to-trace C++
+     * errors. Scans myAutomation.h plus every custom file (never mySetup.h/myHal.cpp — see
+     * findUnrecognizedExrailCommands()'s own doc comment on why those must be excluded).
+     *
+     * Offers to fix it in place rather than just naming the problem: each offending command's
+     * enclosing block (header line through its own DONE/RETURN/FOLLOW terminator — see
+     * findUnrecognizedExrailBlockRanges()) gets wrapped in a `/* ... *\/` comment with the
+     * original text preserved underneath, so the rest of the project still compiles and nothing
+     * is silently discarded. The user is still shown the first affected file afterward so they
+     * can see exactly what changed and decide whether to rewrite it properly.
+     */
+    private async checkForUnrecognizedExrailCommands(): Promise<void> {
+        const candidateFiles = this.state.configFiles.filter(f =>
+            f.name === 'myAutomation.h' || (this.configEditorState.isCustomFile(f.name) && !f.name.endsWith('.cpp')),
+        )
+        const unknown = findUnrecognizedExrailCommands(candidateFiles)
+        if (unknown.length === 0) return
+
+        const uniqueCommands = Array.from(new Set(unknown.map(u => u.command)))
+        const summary = uniqueCommands
+            .map(cmd => `${cmd} (${unknown.find(u => u.command === cmd)!.fileName}:${unknown.find(u => u.command === cmd)!.line})`)
+            .join(', ')
+
+        const result = await this.dialogService
+            .open({
+                component: () =>
+                    import('../components/dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+                model: {
+                    title: 'Unrecognized EXRAIL Commands Found',
+                    message: `This project uses commands CommandStation-EX doesn't recognize: ${summary}. ` +
+                        'These were never valid EXRAIL syntax and will fail to compile as written.',
+                    detail: 'This can happen with code copied from an outside source, or an invented or ' +
+                        'misremembered command name. DCC-Rail-Commander can comment out the affected block(s) ' +
+                        'now so the rest of the project still compiles — the original code is preserved as a ' +
+                        'comment, not deleted, and the first affected file is opened afterward for review.',
+                    confirmLabel: 'Comment Out & Continue',
+                    cancelLabel: 'Dismiss',
+                    confirmClass: 'bg-blue-600 hover:bg-blue-500',
+                },
+            })
+            .whenClosed(r => r)
+        if ((result as any).status !== 'ok') return
+
+        const ranges = findUnrecognizedExrailBlockRanges(candidateFiles, unknown)
+        this.state.configFiles = commentOutUnrecognizedExrailBlocks(this.state.configFiles, ranges)
+        // Re-derive structured state from the now-commented-out file content — same reasoning as
+        // checkForDuplicateExrailBlocks()'s post-removal reload.
+        this.configEditorState.loadFromInstallerState()
+        this.configEditorState.hasChanges = true
+        this.toastService.show({
+            title: 'Unrecognized Commands Commented Out',
+            content: `Disabled ${ranges.length} block(s) using unrecognized commands. Save to write the change ` +
+                'to disk, or undo by editing the file directly.',
+            cssClass: 'e-toast-success',
+        })
+
+        const first = unknown[0]
+        const idx = this.state.configFiles.findIndex(f => f.name === first.fileName)
+        if (idx !== -1) this.setActiveFile(idx)
     }
 
     /** Persists the auto-connect preference — called from the Settings dialog. */

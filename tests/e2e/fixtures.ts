@@ -240,6 +240,8 @@ interface WorkspaceFixtures {
     importedHalProjectPage: Page
     duplicateAutomationApp: ElectronApplication
     duplicateAutomationPage: Page
+    unknownCommandApp: ElectronApplication
+    unknownCommandPage: Page
     ioExpanderApp: ElectronApplication
     ioExpanderPage: Page
     rosterGroupedApp: ElectronApplication
@@ -592,6 +594,65 @@ async function launchDuplicateAutomationApp(): Promise<{ app: ElectronApplicatio
     return { app, testDataDir }
 }
 
+// ── myAutomation.h with an invalid macro (ONBEFORE/ONAFTER never existed) — Unrecognized ──
+// ── EXRAIL Commands Found dialog. No duplicate blocks here — isolates that dialog from the ──
+// ── Duplicate Automation Blocks one, which fires first when both conditions are present.  ──
+
+export const MOCK_AUTOMATION_UNKNOWN_COMMAND = [
+    'ONBEFORE(IR_SENSOR)',
+    '  SET(100)',
+    'DONE',
+].join('\n') + '\n'
+
+async function launchUnknownCommandApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
+    const testDataDir = mkdtempSync(join(tmpdir(), 'dcc-rail-commander-e2e-unknown-cmd-'))
+
+    const scratchPath = join(testDataDir, 'scratch', 'CommandStation-EX')
+    mkdirSync(scratchPath, { recursive: true })
+    writeFileSync(join(scratchPath, 'config.h'), MOCK_CONFIG_H, 'utf-8')
+    writeFileSync(join(scratchPath, 'myAutomation.h'), MOCK_AUTOMATION_UNKNOWN_COMMAND, 'utf-8')
+
+    const prefsDir = join(testDataDir, 'app-preferences')
+    mkdirSync(prefsDir, { recursive: true })
+    const savedConfig = {
+        id: 'e2e-unknown-command',
+        name: 'E2E Test Layout',
+        deviceName: 'Arduino Mega 2560',
+        devicePort: '/dev/ttyACM1',
+        deviceFqbn: 'arduino:avr:mega:cpu=atmega2560',
+        product: 'ex_commandstation',
+        productName: 'EX-CommandStation',
+        version: 'v5.4.0-Prod',
+        repoPath: join(testDataDir, 'scratch'),
+        scratchPath,
+        configFiles: [
+            { name: 'config.h', content: MOCK_CONFIG_H },
+            { name: 'myAutomation.h', content: MOCK_AUTOMATION_UNKNOWN_COMMAND },
+        ],
+        lastModified: new Date().toISOString(),
+    }
+    writeFileSync(
+        join(prefsDir, 'dcc-rail-commander-preferences.json'),
+        JSON.stringify({ savedConfigurations: [savedConfig] }, null, 2),
+        'utf-8',
+    )
+
+    const args = [
+        ELECTRON_MAIN,
+        '--mock-device',
+        '--mock-upload',
+        '--skip-startup',
+        `--test-data-dir=${testDataDir}`,
+        '--disable-gpu',
+        '--no-sandbox',
+        '--offscreen',
+        '--js-flags=--no-expose-wasm',
+    ]
+
+    const app = await electron.launch({ args, chromiumSandbox: false, env: ELECTRON_ENV })
+    return { app, testDataDir }
+}
+
 // ── Onboarding (home screen, no saved configs) — drives the "New Device" wizard ──
 
 async function launchOnboardingApp(): Promise<{ app: ElectronApplication; testDataDir: string }> {
@@ -747,6 +808,19 @@ export const test = base.extend<WorkspaceFixtures>({
 
     duplicateAutomationPage: async ({ duplicateAutomationApp }, use) => {
         await use(await navigateToWorkspace(duplicateAutomationApp))
+    },
+
+    // ── Unrecognized EXRAIL Commands Found dialog ───────────────────────────
+    // eslint-disable-next-line no-empty-pattern
+    unknownCommandApp: async ({ }, use) => {
+        const { app, testDataDir } = await launchUnknownCommandApp()
+        await use(app)
+        await app.close()
+        cleanupDir(testDataDir)
+    },
+
+    unknownCommandPage: async ({ unknownCommandApp }, use) => {
+        await use(await navigateToWorkspace(unknownCommandApp))
     },
 
     // ── IOExpander workspace ──────────────────────────────────────────────────

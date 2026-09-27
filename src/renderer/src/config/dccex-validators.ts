@@ -892,6 +892,71 @@ function validateUnknownExrailCommand(text: string, filename: string, out: monac
     }
 }
 
+export interface UnrecognizedExrailCommand {
+    fileName: string
+    command: string
+    /** 1-based line number within that file's own content. */
+    line: number
+}
+
+/**
+ * Batch, Monaco-model-independent version of validateUnknownExrailCommand's check — usable at
+ * import/load time across every file that might hold free-form EXRAIL body text, regardless of
+ * whether it has ever been opened in the editor. validateModel() (and therefore
+ * revalidateAllModels()/filesWithErrorMarkers()) only runs against files with a *live Monaco
+ * model*, which Monaco only creates once a file has actually been displayed — a file the user
+ * never clicked into gets no validation at all under that system, silently, until a real compile
+ * fails. This is what lets a project be checked as a whole right after import.
+ *
+ * Always uses myAutomation.h's own canonical vocabulary (not getCompletions(fileName) per file):
+ * mySetup.h/myHal.cpp legitimately mix real C++ statements with EXRAIL syntax (mySetup.h's
+ * `I2CManager.forceClock(100000)` is not an EXRAIL command, but is a "canonical name" match's
+ * false-positive trap if a file's own narrow vocabulary set were used instead), so callers must
+ * only pass genuinely EXRAIL-body-shaped files — myAutomation.h itself, and custom files (see
+ * CLAUDE.md's note that custom files are for "custom EXRAIL code") — never mySetup.h/myHal.cpp.
+ */
+export function findUnrecognizedExrailCommands(
+    files: { name: string; content: string }[],
+): UnrecognizedExrailCommand[] {
+    const canonicalNames = new Set(
+        getCompletions('myAutomation.h')
+            .map((s) => s.label)
+            .filter((label) => /^[A-Z][A-Z0-9_]*$/.test(label)),
+    )
+    if (canonicalNames.size === 0) return []
+
+    const results: UnrecognizedExrailCommand[] = []
+    for (const file of files) {
+        const scanText = blankLineComments(file.content)
+        const stringMask = buildStringMask(scanText)
+        const stealthMask = buildStealthArgMask(scanText)
+
+        const tokenRe = /[A-Za-z_][A-Za-z0-9_]*/g
+        let m: RegExpExecArray | null
+        while ((m = tokenRe.exec(scanText)) !== null) {
+            const token = m[0]
+            const upper = token.toUpperCase()
+            if (canonicalNames.has(upper)) continue
+            if (stringMask[m.index]) continue
+            if (stealthMask[m.index]) continue
+
+            const afterIdx = m.index + token.length
+            const lineEnd = scanText.indexOf('\n', m.index)
+            const restOfLine = scanText.slice(afterIdx, lineEnd === -1 ? scanText.length : lineEnd)
+            const followedByParen = /^\s*\(/.test(restOfLine)
+
+            const lineStart = scanText.lastIndexOf('\n', m.index) + 1
+            const line = scanText.slice(lineStart, lineEnd === -1 ? scanText.length : lineEnd)
+            const isBareLine = line.trim() === token
+
+            if (followedByParen || isBareLine) {
+                results.push({ fileName: file.name, command: token, line: offsetToPos(file.content, m.index).line })
+            }
+        }
+    }
+    return results
+}
+
 /**
  * Scans forward from `openIdx` (the absolute index of a `(` within `text`) for its
  * matching `)`, ignoring parens inside double-quoted strings and freely crossing line

@@ -792,6 +792,119 @@ export function removeDuplicateExrailBlocks(
     });
 }
 
+/** Matches the header line of any real-or-fabricated EXRAIL event handler (ONSENSOR(...),
+ *  ONACTIVATE(...), a bare ONRAILSYNCON, or an invented lookalike such as ONBEFORE/ONAFTER — this
+ *  intentionally does not check the name against EXRAIL_RESERVED_WORDS, since the whole point of
+ *  findUnrecognizedExrailBlockRanges is to bound an *unrecognized* ON*-shaped block). Passed as
+ *  scanBlockBody's `blockStart` so a malformed block missing its own DONE still stops at the next
+ *  real or fabricated handler rather than swallowing it. */
+const EVENT_HANDLER_HEADER = /^\s*ON[A-Z0-9_]*\s*(?:\(|\s*$)/;
+
+/** One contiguous run of lines that should be commented out together because it's the block a
+ *  findUnrecognizedExrailCommands() finding's header line opens — see
+ *  findUnrecognizedExrailBlockRanges' own doc comment for why a whole block, not just the
+ *  offending line, has to move. */
+export interface UnrecognizedExrailBlockRange {
+    fileName: string;
+    /** Inclusive, 0-based index into content.split('\n'). */
+    startLine: number;
+    /** Exclusive, 0-based index — one past the block's last line. */
+    endLine: number;
+    /** Every unrecognized command name found inside this range, in the order encountered. */
+    commands: string[];
+}
+
+/**
+ * Turns findUnrecognizedExrailCommands()'s flat list of offending tokens into contiguous block
+ * ranges safe to comment out as a unit. A single invalid line can't just be commented out on its
+ * own: EXRAIL's ONBEFORE/ONAFTER/LOOP-shaped invented commands (and any real ON*-handler-shaped
+ * block) only compile as a matched header-through-DONE pair — commenting out just the header
+ * line would leave its body as orphaned top-level statements, which is not how the EXRAIL macro
+ * chain expands (confirmed against the real firmware: an ONSENSOR/ONACTIVATE/etc. body only
+ * exists inside the macro frame its own header opens).
+ *
+ * Each finding's own line is treated as a block header and scanned forward with the same
+ * scanBlockBody() used for ROUTE/SEQUENCE/AUTOMATION, stopping at that block's own DONE/RETURN/
+ * FOLLOW terminator or the next real block. A finding whose line already falls inside a range
+ * just computed (e.g. LOOP/ENDLOOP nested inside an ONBEFORE...DONE block) is skipped — it's
+ * already covered by the outer block's range, and treating it as its own header would double up
+ * or mis-scan.
+ */
+export function findUnrecognizedExrailBlockRanges(
+    files: { name: string; content: string }[],
+    findings: { fileName: string; command: string; line: number }[],
+): UnrecognizedExrailBlockRange[] {
+    const contentByFile = new Map(files.map(f => [f.name, f.content]));
+    const findingsByFile = new Map<string, { command: string; line: number }[]>();
+    for (const finding of findings) {
+        const list = findingsByFile.get(finding.fileName) ?? [];
+        list.push(finding);
+        findingsByFile.set(finding.fileName, list);
+    }
+
+    const ranges: UnrecognizedExrailBlockRange[] = [];
+    for (const [fileName, fileFindings] of findingsByFile) {
+        const content = contentByFile.get(fileName);
+        if (content === undefined) continue;
+        const lines = content.split('\n');
+        fileFindings.sort((a, b) => a.line - b.line);
+
+        let coveredUntil = -1;
+        for (const finding of fileFindings) {
+            const headerLine = finding.line - 1;
+            if (headerLine < coveredUntil) {
+                ranges[ranges.length - 1].commands.push(finding.command);
+                continue;
+            }
+            const { next } = scanBlockBody(lines, headerLine + 1, EVENT_HANDLER_HEADER);
+            ranges.push({ fileName, startLine: headerLine, endLine: next, commands: [finding.command] });
+            coveredUntil = next;
+        }
+    }
+    return ranges;
+}
+
+/**
+ * Comments out each given block range with a `/* ... *\/` wrapper plus a one-line explanatory
+ * header naming the unrecognized command(s), preserving the original text underneath rather than
+ * deleting it — the same "disable, don't discard" convention as commentInvalidRosterLines().
+ * Ranges for the same file are applied in one pass (sorted, non-overlapping — see
+ * findUnrecognizedExrailBlockRanges' coveredUntil logic).
+ */
+export function commentOutUnrecognizedExrailBlocks(
+    files: { name: string; content: string }[],
+    ranges: UnrecognizedExrailBlockRange[],
+): { name: string; content: string }[] {
+    const rangesByFile = new Map<string, UnrecognizedExrailBlockRange[]>();
+    for (const range of ranges) {
+        const list = rangesByFile.get(range.fileName) ?? [];
+        list.push(range);
+        rangesByFile.set(range.fileName, list);
+    }
+
+    return files.map(file => {
+        const fileRanges = rangesByFile.get(file.name);
+        if (!fileRanges || fileRanges.length === 0) return file;
+        fileRanges.sort((a, b) => a.startLine - b.startLine);
+
+        const lines = file.content.split('\n');
+        const out: string[] = [];
+        let cursor = 0;
+        for (const range of fileRanges) {
+            out.push(...lines.slice(cursor, range.startLine));
+            const uniqueCommands = Array.from(new Set(range.commands));
+            out.push(`// [UNRECOGNIZED — commented out by DCC-Rail-Commander: ${uniqueCommands.join(', ')} ` +
+                'is not valid EXRAIL syntax. Original code preserved below for review.]');
+            out.push('/*');
+            out.push(...lines.slice(range.startLine, range.endLine));
+            out.push('*/');
+            cursor = range.endLine;
+        }
+        out.push(...lines.slice(cursor));
+        return { ...file, content: out.join('\n') };
+    });
+}
+
 export function serializeRoutesToFile(routes: RouteEntry[]): string {
     const lines: string[] = [];
     for (const r of routes) {

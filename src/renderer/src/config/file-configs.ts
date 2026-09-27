@@ -42,6 +42,210 @@ export interface FileConfig {
     completions?: CompletionSnippet[]
 }
 
+// Declaration macros that legitimately belong in their own dedicated file (myRoster.h,
+// mySignals.h, myTurnouts.h) *or* directly inline in myAutomation.h/a custom file — real EXRAIL
+// has no rule requiring them to live in the dedicated file, a hand-rolled project routinely
+// declares them wherever's convenient. Defined once here and reused by both that file's own
+// FILE_CONFIGS entry and EXRAIL_BODY_COMPLETIONS below, so myAutomation.h's vocabulary (and
+// therefore validateUnknownExrailCommand's/findUnrecognizedExrailCommands' "is this a real
+// EXRAIL command" check) never drifts out of sync with what mySignals.h/myTurnouts.h offer.
+const ROSTER_COMPLETION: CompletionSnippet = {
+    label: 'ROSTER',
+    detail: 'ROSTER(dccAddress, "Name", "Fn0/Fn1/..." | DEFINE)',
+    documentation: 'Define a locomotive roster entry.',
+    insertText: 'ROSTER(${1:dccAddress}, "${2:Loco Name}", "${3:Fn0/Fn1/Fn2}")',
+    hover: {
+        title: 'ROSTER Macro',
+        description: 'Define a locomotive roster entry visible in throttle apps.',
+        example: 'ROSTER(1234, "My Loco", "Lights/*Bell/*Whistle/Mute")',
+        note: 'Prefix a function name with `*` to make it momentary. The function list can also be a `#define` identifier — define it above with `#define MY_LOCO_F "Fn0/Fn1/..."`.',
+    },
+}
+
+const SIGNAL_COMPLETION: CompletionSnippet = {
+    label: 'SIGNAL',
+    detail: 'SIGNAL(red_pin, amber_pin, green_pin)',
+    documentation: 'Define a signal connected to a GPIO pin.',
+    insertText: 'SIGNAL(${1:red_pin}, ${2:amber_pin}, ${3:green_pin})',
+    hover: {
+        title: 'SIGNAL Macro',
+        description: 'Define a 3-aspect signal connected to GPIO pins.',
+        example: 'SIGNAL(5, 6, 13) // red=GPIO5, amber=GPIO6, green=GPIO13',
+    },
+}
+
+const SIGNALH_COMPLETION: CompletionSnippet = {
+    label: 'SIGNALH',
+    detail: 'SIGNALH(red_pin, amber_pin, green_pin)',
+    documentation: 'Like SIGNAL, but for a signal head wired active-low (inverted output).',
+    insertText: 'SIGNALH(${1:red_pin}, ${2:amber_pin}, ${3:green_pin})',
+    hover: {
+        title: 'SIGNALH Macro',
+        description: 'Define a 3-aspect signal connected to GPIO pins wired active-low.',
+        example: 'SIGNALH(5, 6, 13)',
+    },
+}
+
+const TURNOUT_FAMILY_COMPLETIONS: CompletionSnippet[] = [
+    {
+        label: 'SERVO_TURNOUT',
+        detail: 'SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile, "desc")',
+        documentation: 'Define a servo-controlled turnout / point.',
+        insertText: 'SERVO_TURNOUT(${1:id}, ${2:pin}, ${3:400}, ${4:100}, ${5|Instant,Fast,Medium,Slow,Bounce|}, "${6:description}")',
+        hover: {
+            title: 'SERVO_TURNOUT Macro',
+            description: 'Define a servo-controlled turnout or point.',
+            example: 'SERVO_TURNOUT(1, 25, 400, 100, Slow, "Platform 1")',
+            note: 'Profiles: `Instant` `Fast` `Medium` `Slow` `Bounce`',
+        },
+    },
+    {
+        label: 'TURNOUT',
+        detail: 'TURNOUT(id, addr, subAddr, "desc")',
+        documentation: 'Define a DCC accessory turnout.',
+        insertText: 'TURNOUT(${1:id}, ${2:addr}, ${3:subAddr}, "${4:description}")',
+        hover: {
+            title: 'TURNOUT Macro',
+            description: 'Define a DCC accessory decoder-controlled turnout.',
+            example: 'TURNOUT(1, 100, 0, "Yard Exit")',
+        },
+    },
+    {
+        label: 'TURNOUTL',
+        detail: 'TURNOUTL(id, addr, "desc")',
+        documentation: 'Define a DCC accessory turnout with a single linear address.',
+        insertText: 'TURNOUTL(${1:id}, ${2:addr}, "${3:description}")',
+        hover: {
+            title: 'TURNOUTL Macro',
+            description: 'Define a DCC accessory decoder-controlled turnout using one linear address instead of an addr/subAddr pair.',
+            example: 'TURNOUTL(1, 401, "Yard Exit")',
+        },
+    },
+    {
+        label: 'PIN_TURNOUT',
+        detail: 'PIN_TURNOUT(id, pin, "desc")',
+        documentation: 'Define a GPIO-pin-driven turnout.',
+        insertText: 'PIN_TURNOUT(${1:id}, ${2:pin}, "${3:description}")',
+        hover: {
+            title: 'PIN_TURNOUT Macro',
+            description: 'Define a turnout driven directly by a GPIO pin.',
+            example: 'PIN_TURNOUT(2, 22, "Siding")',
+        },
+    },
+    {
+        label: 'VIRTUAL_TURNOUT',
+        detail: 'VIRTUAL_TURNOUT(id, "desc")',
+        documentation: 'Define a turnout with no hardware, driven by ONCLOSE/ONTHROW handlers.',
+        insertText: 'VIRTUAL_TURNOUT(${1:id}, "${2:description}")',
+        hover: {
+            title: 'VIRTUAL_TURNOUT Macro',
+            description: 'Define a virtual turnout with no hardware — simulate it with ONCLOSE/ONTHROW event handlers.',
+            example: 'VIRTUAL_TURNOUT(3, "Simulated Siding")',
+        },
+    },
+]
+
+// Further real EXRAIL declaration macros with no dedicated file of their own — a real project's
+// myAutomation.h (or a custom EXRAIL file) can legitimately use any of these directly. Absent
+// from here before, every one of these was a false "not a recognised EXRAIL command" positive
+// from validateUnknownExrailCommand/findUnrecognizedExrailCommands, in both myAutomation.h and
+// any custom file — confirmed against the full macro list in DCC-EX/CommandStation-EX's own
+// EXRAILMacros.h. Deliberately excludes that header's internal/plumbing-only macros (EXRAIL,
+// ENDEXRAIL, FOR_EACH_NARG, the token-placeholder V/N/O_DESC/T_DESC, THRUNGE, STRIP_ZERO, the
+// ZC0-ZC8/ZCRIP/ZTEST* calibration macros) — those are never meant to be typed by a user.
+const EXRAIL_MISC_DECLARATION_COMPLETIONS: CompletionSnippet[] = [
+    {
+        label: 'SERVO_SIGNAL',
+        detail: 'SERVO_SIGNAL(vpin, redAngle, amberAngle, greenAngle)',
+        documentation: 'Define a signal (e.g. a semaphore) driven by a servo, with one angle per aspect.',
+        insertText: 'SERVO_SIGNAL(${1:vpin}, ${2:100}, ${3:150}, ${4:200})',
+    },
+    {
+        label: 'VIRTUAL_SIGNAL',
+        detail: 'VIRTUAL_SIGNAL(id)',
+        documentation: 'Define a signal with no physical output — useful purely for EXRAIL logic/state.',
+        insertText: 'VIRTUAL_SIGNAL(${1:id})',
+    },
+    {
+        label: 'DCC_SIGNAL',
+        detail: 'DCC_SIGNAL(id, addr, subaddr)',
+        documentation: 'Define a signal controlled via a DCC accessory decoder address.',
+        insertText: 'DCC_SIGNAL(${1:id}, ${2:addr}, ${3:subaddr})',
+    },
+    {
+        label: 'DCCX_SIGNAL',
+        detail: 'DCCX_SIGNAL(id, redAspect, amberAspect, greenAspect)',
+        documentation: 'Define a multi-aspect DCC extended-accessory signal.',
+        insertText: 'DCCX_SIGNAL(${1:id}, ${2:0}, ${3:1}, ${4:2})',
+    },
+    {
+        label: 'NEOPIXEL_SIGNAL',
+        detail: 'NEOPIXEL_SIGNAL(id, redColour, amberColour, greenColour)',
+        documentation: 'Define a signal driven by a NeoPixel/WS2811 RGB LED.',
+        insertText: 'NEOPIXEL_SIGNAL(${1:id}, ${2:0xFF0000}, ${3:0xFFFF00}, ${4:0x00FF00})',
+    },
+    {
+        label: 'DCC_TURNTABLE',
+        detail: 'DCC_TURNTABLE(id, home, "desc")',
+        documentation: 'Define a DCC-controlled turntable and its home position.',
+        insertText: 'DCC_TURNTABLE(${1:id}, ${2:0}, "${3:description}")',
+    },
+    {
+        label: 'EXTT_TURNTABLE',
+        detail: 'EXTT_TURNTABLE(id, vpin, home, "desc")',
+        documentation: 'Define an EX-Turntable device and its home position.',
+        insertText: 'EXTT_TURNTABLE(${1:id}, ${2:vpin}, ${3:0}, "${4:description}")',
+    },
+    {
+        label: 'TT_ADDPOSITION',
+        detail: 'TT_ADDPOSITION(turntableId, position, value, angle, "desc")',
+        documentation: 'Add a numbered stopping position to a previously defined turntable.',
+        insertText: 'TT_ADDPOSITION(${1:turntableId}, ${2:1}, ${3:100}, ${4:0}, "${5:description}")',
+    },
+    {
+        label: 'HIDDEN',
+        detail: 'HIDDEN',
+        documentation: 'Use in place of a description string to mark a route/turnout/etc. hidden from throttle apps.',
+        insertText: 'HIDDEN',
+    },
+    {
+        label: 'PLAYSOUND',
+        detail: 'PLAYSOUND(vpin, v1, v2, code)',
+        documentation: 'Trigger a sound-module action (e.g. a DFPlayer MP3 module) on the given VPin.',
+        insertText: 'PLAYSOUND(${1:vpin}, ${2:0}, ${3:0}, ${4:code})',
+    },
+    {
+        label: 'LCN',
+        detail: 'LCN("message")',
+        documentation: 'Send a message over the Layout Control Network to other connected command stations.',
+        insertText: 'LCN("${1:message}")',
+    },
+    {
+        label: 'HAL_IGNORE_DEFAULTS',
+        detail: 'HAL_IGNORE_DEFAULTS',
+        documentation: "Suppress the two free default MCP23017/PCA9685 HAL devices DCC-EX otherwise configures automatically.",
+        insertText: 'HAL_IGNORE_DEFAULTS',
+    },
+    {
+        label: 'JMRI_SENSOR_NOPULLUP',
+        detail: 'JMRI_SENSOR_NOPULLUP(vpin[, count])',
+        documentation: "Like JMRI_SENSOR, but without enabling the pin's internal pull-up resistor.",
+        insertText: 'JMRI_SENSOR_NOPULLUP(${1:164}, ${2:16})',
+    },
+    {
+        label: 'SEG7',
+        detail: 'SEG7(vpin, value, format)',
+        documentation: 'Write a value to a 7-segment display device.',
+        insertText: 'SEG7(${1:vpin}, ${2:value}, ${3:format})',
+    },
+    {
+        label: 'DRIVE',
+        detail: 'DRIVE(analogPin)',
+        documentation: 'Drive an analogue output pin directly from EXRAIL.',
+        insertText: 'DRIVE(${1:analogPin})',
+    },
+]
+
 const EXRAIL_BODY_COMPLETIONS: CompletionSnippet[] = [
     {
         label: 'AUTOSTART',
@@ -513,6 +717,31 @@ const EXRAIL_BODY_COMPLETIONS: CompletionSnippet[] = [
             example: 'JMRI_SENSOR(164, 16)',
         },
     },
+    {
+        // ALIAS is real EXRAIL syntax usable anywhere body commands can appear, not just
+        // myAliases.h's own dedicated file — a hand-rolled myAutomation.h routinely declares
+        // its aliases inline, right next to the HAL()/SIGNAL() lines they name. Without this,
+        // every such use was flagged as "not a recognised EXRAIL command" by
+        // validateUnknownExrailCommand, a false positive on entirely valid code.
+        label: 'ALIAS',
+        detail: 'ALIAS(name[, value])',
+        documentation: 'Define a readable name for a numeric ID (turnout, sensor, route, sequence, or roster address).',
+        insertText: 'ALIAS(${1:NAME}, ${2:VALUE})',
+        hover: {
+            title: 'ALIAS Macro',
+            description: 'Creates a readable name that can be used in place of a numeric ID elsewhere in EX-RAIL. The value is optional — if omitted, EX-RAIL auto-assigns one.',
+            example: 'ALIAS(YARD_SWITCH, 200)',
+            note: 'Names must start with a letter or underscore and contain only letters, numbers, and underscores. Avoid a leading zero on the value (e.g. 010) — C treats it as octal.',
+        },
+    },
+    // Declarations that have their own dedicated file too (myRoster.h/mySignals.h/
+    // myTurnouts.h) but are equally valid written directly in myAutomation.h/a custom file —
+    // see the doc comment on ROSTER_COMPLETION above.
+    ROSTER_COMPLETION,
+    SIGNAL_COMPLETION,
+    SIGNALH_COMPLETION,
+    ...TURNOUT_FAMILY_COMPLETIONS,
+    ...EXRAIL_MISC_DECLARATION_COMPLETIONS,
 ]
 
 const EXRAIL_BLOCK_COMPLETIONS: CompletionSnippet[] = [
@@ -626,20 +855,7 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
 
     'myRoster.h': {
         friendlyName: 'Roster',
-        completions: [
-            {
-                label: 'ROSTER',
-                detail: 'ROSTER(dccAddress, "Name", "Fn0/Fn1/..." | DEFINE)',
-                documentation: 'Define a locomotive roster entry.',
-                insertText: 'ROSTER(${1:dccAddress}, "${2:Loco Name}", "${3:Fn0/Fn1/Fn2}")',
-                hover: {
-                    title: 'ROSTER Macro',
-                    description: 'Define a locomotive roster entry visible in throttle apps.',
-                    example: 'ROSTER(1234, "My Loco", "Lights/*Bell/*Whistle/Mute")',
-                    note: 'Prefix a function name with `*` to make it momentary. The function list can also be a `#define` identifier — define it above with `#define MY_LOCO_F "Fn0/Fn1/..."`.',
-                },
-            },
-        ],
+        completions: [ROSTER_COMPLETION],
     },
     'mySensors.h': {
         // Pure bookkeeping for this app's own Visual editor, not compiled EXRAIL — a sensor's
@@ -668,19 +884,7 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
     },
     'mySignals.h': {
         friendlyName: 'Signals',
-        completions: [
-            {
-                label: 'SIGNAL',
-                detail: 'SIGNAL(red_pin, amber_pin, green_pin)',
-                documentation: 'Define a signal connected to a GPIO pin.',
-                insertText: 'SIGNAL(${1:red_pin}, ${2:amber_pin}, ${3:green_pin})',
-                hover: {
-                    title: 'SIGNAL Macro',
-                    description: 'Define a 3-aspect signal connected to GPIO pins.',
-                    example: 'SIGNAL(5, 6, 13) // red=GPIO5, amber=GPIO6, green=GPIO13',
-                },
-            },
-        ],
+        completions: [SIGNAL_COMPLETION, SIGNALH_COMPLETION],
     },
 
     'myRoutes.h': {
@@ -727,64 +931,7 @@ export const FILE_CONFIGS: Record<string, FileConfig> = {
 
     'myTurnouts.h': {
         friendlyName: 'Turnouts',
-        completions: [
-            {
-                label: 'SERVO_TURNOUT',
-                detail: 'SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile, "desc")',
-                documentation: 'Define a servo-controlled turnout / point.',
-                insertText: 'SERVO_TURNOUT(${1:id}, ${2:pin}, ${3:400}, ${4:100}, ${5|Instant,Fast,Medium,Slow,Bounce|}, "${6:description}")',
-                hover: {
-                    title: 'SERVO_TURNOUT Macro',
-                    description: 'Define a servo-controlled turnout or point.',
-                    example: 'SERVO_TURNOUT(1, 25, 400, 100, Slow, "Platform 1")',
-                    note: 'Profiles: `Instant` `Fast` `Medium` `Slow` `Bounce`',
-                },
-            },
-            {
-                label: 'TURNOUT',
-                detail: 'TURNOUT(id, addr, subAddr, "desc")',
-                documentation: 'Define a DCC accessory turnout.',
-                insertText: 'TURNOUT(${1:id}, ${2:addr}, ${3:subAddr}, "${4:description}")',
-                hover: {
-                    title: 'TURNOUT Macro',
-                    description: 'Define a DCC accessory decoder-controlled turnout.',
-                    example: 'TURNOUT(1, 100, 0, "Yard Exit")',
-                },
-            },
-            {
-                label: 'TURNOUTL',
-                detail: 'TURNOUTL(id, addr, "desc")',
-                documentation: 'Define a DCC accessory turnout with a single linear address.',
-                insertText: 'TURNOUTL(${1:id}, ${2:addr}, "${3:description}")',
-                hover: {
-                    title: 'TURNOUTL Macro',
-                    description: 'Define a DCC accessory decoder-controlled turnout using one linear address instead of an addr/subAddr pair.',
-                    example: 'TURNOUTL(1, 401, "Yard Exit")',
-                },
-            },
-            {
-                label: 'PIN_TURNOUT',
-                detail: 'PIN_TURNOUT(id, pin, "desc")',
-                documentation: 'Define a GPIO-pin-driven turnout.',
-                insertText: 'PIN_TURNOUT(${1:id}, ${2:pin}, "${3:description}")',
-                hover: {
-                    title: 'PIN_TURNOUT Macro',
-                    description: 'Define a turnout driven directly by a GPIO pin.',
-                    example: 'PIN_TURNOUT(2, 22, "Siding")',
-                },
-            },
-            {
-                label: 'VIRTUAL_TURNOUT',
-                detail: 'VIRTUAL_TURNOUT(id, "desc")',
-                documentation: 'Define a turnout with no hardware, driven by ONCLOSE/ONTHROW handlers.',
-                insertText: 'VIRTUAL_TURNOUT(${1:id}, "${2:description}")',
-                hover: {
-                    title: 'VIRTUAL_TURNOUT Macro',
-                    description: 'Define a virtual turnout with no hardware — simulate it with ONCLOSE/ONTHROW event handlers.',
-                    example: 'VIRTUAL_TURNOUT(3, "Simulated Siding")',
-                },
-            },
-        ],
+        completions: TURNOUT_FAMILY_COMPLETIONS,
     },
 
     'myAutomation.h': {
