@@ -108,3 +108,49 @@ describe('commentInvalidTurnoutLines — TURNOUTL / VIRTUAL_TURNOUT', () => {
         expect(invalidLines).toEqual([])
     })
 })
+
+describe('HIDDEN description literal — bare keyword, not a quoted string', () => {
+    it('parses unquoted HIDDEN on SERVO_TURNOUT', () => {
+        const turnouts = parseTurnoutFromFile('SERVO_TURNOUT(200, 101, 450, 110, Slow, HIDDEN)')
+        expect(turnouts).toEqual([
+            { type: 'SERVO', id: 200, pin: 101, activeAngle: 450, inactiveAngle: 110, profile: 'Slow', description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+        ])
+    })
+
+    it('parses unquoted HIDDEN on TURNOUT, PIN_TURNOUT, TURNOUTL, and VIRTUAL_TURNOUT', () => {
+        const file = [
+            'TURNOUT(1, 100, 0, HIDDEN)',
+            'PIN_TURNOUT(2, 22, HIDDEN)',
+            'TURNOUTL(3, 401, HIDDEN)',
+            'VIRTUAL_TURNOUT(4, HIDDEN)',
+        ].join('\n')
+        const turnouts = parseTurnoutFromFile(file)
+        expect(turnouts).toEqual([
+            { type: 'DCC', id: 1, addr: 100, subAddr: 0, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+            { type: 'PIN', id: 2, pin: 22, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+            { type: 'DCCL', id: 3, addr: 401, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+            { type: 'VIRTUAL', id: 4, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+        ])
+    })
+
+    it('does not flag unquoted HIDDEN as an invalid SERVO_TURNOUT line', () => {
+        const line = 'SERVO_TURNOUT(200, 101, 450, 110, Slow, HIDDEN)'
+        const { processedText, invalidLines } = commentInvalidTurnoutLines(line)
+        expect(processedText).toBe(line)
+        expect(invalidLines).toEqual([])
+    })
+
+    it('serializes description "HIDDEN" as the bare keyword, not a quoted string', () => {
+        const turnouts: Turnout[] = [
+            { type: 'SERVO', id: 200, pin: 101, activeAngle: 450, inactiveAngle: 110, profile: 'Slow', description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+        ]
+        expect(serializeTurnoutToFile(turnouts)).toBe('SERVO_TURNOUT(200, 101, 450, 110, Slow, HIDDEN)')
+    })
+
+    it('round-trips a HIDDEN servo turnout through serialize + parse', () => {
+        const turnouts: Turnout[] = [
+            { type: 'SERVO', id: 200, pin: 101, activeAngle: 450, inactiveAngle: 110, profile: 'Slow', description: 'HIDDEN', comment: '', defaultState: 'CLOSED' },
+        ]
+        expect(parseTurnoutFromFile(serializeTurnoutToFile(turnouts))).toEqual(turnouts)
+    })
+})

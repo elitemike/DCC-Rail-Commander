@@ -1368,11 +1368,13 @@ const VALID_TURNOUT_PROFILES: readonly TurnoutProfile[] = ['Instant', 'Fast', 'M
 export function commentInvalidTurnoutLines(text: string): { processedText: string; invalidLines: string[] } {
     // Valid-pattern regexes — a structurally correct line is left alone;
     // the Monaco validator handles individual argument errors via squiggles.
-    const validServo = /^\s*SERVO_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\w+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
-    const validDcc = /^\s*TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
-    const validDccL = /^\s*TURNOUTL\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
-    const validPin = /^\s*PIN_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
-    const validVirtual = /^\s*VIRTUAL_TURNOUT\s*\(\s*\d+\s*(?:,\s*"[^"]*")?\s*\)(?:\s*\/\/.*)?$/;
+    // Description arg accepts either a quoted string or the bare HIDDEN keyword (DCC-EX's
+    // unquoted literal that hides a turnout from throttles — see isHidden in turnout-editor.ts).
+    const validServo = /^\s*SERVO_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\w+\s*(?:,\s*(?:"[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/.*)?$/;
+    const validDcc = /^\s*TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*(?:"[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/.*)?$/;
+    const validDccL = /^\s*TURNOUTL\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*(?:"[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/.*)?$/;
+    const validPin = /^\s*PIN_TURNOUT\s*\(\s*\d+\s*,\s*\d+\s*(?:,\s*(?:"[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/.*)?$/;
+    const validVirtual = /^\s*VIRTUAL_TURNOUT\s*\(\s*\d+\s*(?:,\s*(?:"[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/.*)?$/;
 
     const invalidLines: string[] = [];
     const processedLines = text.split('\n').map(line => {
@@ -1417,8 +1419,13 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
     const entries: Turnout[] = [];
     let m: RegExpExecArray | null;
 
-    // ── SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile[, "desc"]) ─
-    const servoRe = /SERVO_TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // Description arg is either a quoted string or the bare HIDDEN keyword; unwrap the
+    // quotes when present, otherwise pass the literal (only ever "HIDDEN") through as-is.
+    const readDescription = (raw: string | undefined): string =>
+        raw ? (raw.startsWith('"') ? raw.slice(1, -1) : raw) : '';
+
+    // ── SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile[, "desc"|HIDDEN]) ─
+    const servoRe = /SERVO_TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*(?:,\s*("[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = servoRe.exec(uncommentedContent)) !== null) {
         const profile = m[5] as TurnoutProfile;
         if (!VALID_TURNOUT_PROFILES.includes(profile)) {
@@ -1431,59 +1438,59 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
             activeAngle: parseInt(m[3], 10),
             inactiveAngle: parseInt(m[4], 10),
             profile: VALID_TURNOUT_PROFILES.includes(profile) ? profile : 'Slow',
-            description: m[6] || '',
+            description: readDescription(m[6]),
             comment: m[7] ? m[7].trim() : '',
             defaultState: 'CLOSED',
         });
     }
 
-    // ── TURNOUT(id, addr, subAddr[, "desc"]) — DCC accessory ─────────────────
-    const dccRe = /(?<![A-Za-z_])TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // ── TURNOUT(id, addr, subAddr[, "desc"|HIDDEN]) — DCC accessory ─────────────────
+    const dccRe = /(?<![A-Za-z_])TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*("[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = dccRe.exec(uncommentedContent)) !== null) {
         entries.push({
             type: 'DCC',
             id: parseInt(m[1], 10),
             addr: parseInt(m[2], 10),
             subAddr: parseInt(m[3], 10),
-            description: m[4] || '',
+            description: readDescription(m[4]),
             comment: m[5] ? m[5].trim() : '',
             defaultState: 'CLOSED',
         });
     }
 
-    // ── PIN_TURNOUT(id, pin[, "desc"]) — GPIO ─────────────────────────────────
-    const pinRe = /PIN_TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // ── PIN_TURNOUT(id, pin[, "desc"|HIDDEN]) — GPIO ─────────────────────────────────
+    const pinRe = /PIN_TURNOUT\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*("[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = pinRe.exec(uncommentedContent)) !== null) {
         entries.push({
             type: 'PIN',
             id: parseInt(m[1], 10),
             pin: parseInt(m[2], 10),
-            description: m[3] || '',
+            description: readDescription(m[3]),
             comment: m[4] ? m[4].trim() : '',
             defaultState: 'CLOSED',
         });
     }
 
-    // ── TURNOUTL(id, addr[, "desc"]) — DCC accessory, linear address ──────────
-    const dccLRe = /TURNOUTL\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // ── TURNOUTL(id, addr[, "desc"|HIDDEN]) — DCC accessory, linear address ──────────
+    const dccLRe = /TURNOUTL\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*("[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = dccLRe.exec(uncommentedContent)) !== null) {
         entries.push({
             type: 'DCCL',
             id: parseInt(m[1], 10),
             addr: parseInt(m[2], 10),
-            description: m[3] || '',
+            description: readDescription(m[3]),
             comment: m[4] ? m[4].trim() : '',
             defaultState: 'CLOSED',
         });
     }
 
-    // ── VIRTUAL_TURNOUT(id[, "desc"]) — no hardware ───────────────────────────
-    const virtualRe = /VIRTUAL_TURNOUT\s*\(\s*(\d+)\s*(?:,\s*"([^"]*)")?\s*\)(?:\s*\/\/\s*(.*))?/g;
+    // ── VIRTUAL_TURNOUT(id[, "desc"|HIDDEN]) — no hardware ───────────────────────────
+    const virtualRe = /VIRTUAL_TURNOUT\s*\(\s*(\d+)\s*(?:,\s*("[^"]*"|HIDDEN))?\s*\)(?:\s*\/\/\s*(.*))?/g;
     while ((m = virtualRe.exec(uncommentedContent)) !== null) {
         entries.push({
             type: 'VIRTUAL',
             id: parseInt(m[1], 10),
-            description: m[2] || '',
+            description: readDescription(m[2]),
             comment: m[3] ? m[3].trim() : '',
             defaultState: 'CLOSED',
         });
@@ -1492,31 +1499,27 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
     return entries;
 }
 
+// HIDDEN is DCC-EX's unquoted literal for the description argument, not a string — emitting
+// it as "HIDDEN" would just set a visible description that reads "HIDDEN" instead of hiding
+// the turnout. See isHidden/toggleHidden in turnout-editor.ts.
+const descriptionArg = (description: string): string =>
+    description ? (description === 'HIDDEN' ? ', HIDDEN' : `, "${description}"`) : '';
+
 export function serializeTurnoutToFile(turnouts: Turnout[]): string {
     const lines: string[] = [];
     for (const t of turnouts) {
         let line: string;
         if (t.type === 'DCC') {
-            line = `TURNOUT(${t.id}, ${t.addr}, ${t.subAddr}`;
-            if (t.description) line += `, "${t.description}"`;
-            line += ')';
+            line = `TURNOUT(${t.id}, ${t.addr}, ${t.subAddr}${descriptionArg(t.description)})`;
         } else if (t.type === 'DCCL') {
-            line = `TURNOUTL(${t.id}, ${t.addr}`;
-            if (t.description) line += `, "${t.description}"`;
-            line += ')';
+            line = `TURNOUTL(${t.id}, ${t.addr}${descriptionArg(t.description)})`;
         } else if (t.type === 'PIN') {
-            line = `PIN_TURNOUT(${t.id}, ${t.pin}`;
-            if (t.description) line += `, "${t.description}"`;
-            line += ')';
+            line = `PIN_TURNOUT(${t.id}, ${t.pin}${descriptionArg(t.description)})`;
         } else if (t.type === 'VIRTUAL') {
-            line = `VIRTUAL_TURNOUT(${t.id}`;
-            if (t.description) line += `, "${t.description}"`;
-            line += ')';
+            line = `VIRTUAL_TURNOUT(${t.id}${descriptionArg(t.description)})`;
         } else {
             // SERVO (default)
-            line = `SERVO_TURNOUT(${t.id}, ${t.pin}, ${t.activeAngle}, ${t.inactiveAngle}, ${t.profile}`;
-            if (t.description) line += `, "${t.description}"`;
-            line += ')';
+            line = `SERVO_TURNOUT(${t.id}, ${t.pin}, ${t.activeAngle}, ${t.inactiveAngle}, ${t.profile}${descriptionArg(t.description)})`;
         }
         if (t.comment) line += ` // ${t.comment}`;
         lines.push(line);

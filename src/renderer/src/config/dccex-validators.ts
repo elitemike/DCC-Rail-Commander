@@ -172,6 +172,11 @@ function isQuotedString(s: string): boolean {
     return s.startsWith('"') && s.endsWith('"') && s.length >= 2
 }
 
+/** Turnout description args also accept the bare HIDDEN literal (see isHidden in turnout-editor.ts). */
+function isQuotedStringOrHidden(s: string): boolean {
+    return s === 'HIDDEN' || isQuotedString(s)
+}
+
 function isInt(s: string): boolean {
     return s !== '' && Number.isInteger(Number(s)) && !s.includes('.')
 }
@@ -326,7 +331,7 @@ function validateServoTurnout(text: string, out: monaco.editor.IMarkerData[]): v
         }
 
         const desc = args[5]
-        if (!isQuotedString(desc.value)) {
+        if (!isQuotedStringOrHidden(desc.value)) {
             out.push(makeMarker(text, desc.start, desc.end,
                 `Description must be a double-quoted string, e.g. "Platform 1".`,
             ))
@@ -384,7 +389,7 @@ function validateTurnout(text: string, out: monaco.editor.IMarkerData[]): void {
         }
 
         const desc = args[3]
-        if (!isQuotedString(desc.value)) {
+        if (!isQuotedStringOrHidden(desc.value)) {
             out.push(makeMarker(text, desc.start, desc.end,
                 `Description must be a double-quoted string, e.g. "Yard Exit".`,
             ))
@@ -430,7 +435,7 @@ function validatePinTurnout(text: string, out: monaco.editor.IMarkerData[]): voi
         }
 
         const desc = args[2]
-        if (!isQuotedString(desc.value)) {
+        if (!isQuotedStringOrHidden(desc.value)) {
             out.push(makeMarker(text, desc.start, desc.end,
                 `Description must be a double-quoted string, e.g. "Siding".`,
             ))
@@ -478,7 +483,7 @@ function validateTurnoutL(text: string, out: monaco.editor.IMarkerData[]): void 
         }
 
         const desc = args[2]
-        if (!isQuotedString(desc.value)) {
+        if (!isQuotedStringOrHidden(desc.value)) {
             out.push(makeMarker(text, desc.start, desc.end,
                 `Description must be a double-quoted string, e.g. "Yard Exit".`,
             ))
@@ -510,7 +515,7 @@ function validateVirtualTurnout(text: string, out: monaco.editor.IMarkerData[]):
         }
 
         const desc = args[1]
-        if (!isQuotedString(desc.value)) {
+        if (!isQuotedStringOrHidden(desc.value)) {
             out.push(makeMarker(text, desc.start, desc.end,
                 `Description must be a double-quoted string, e.g. "Siding".`,
             ))

@@ -323,6 +323,29 @@ describe('validateTurnoutIdUniqueness', () => {
     })
 })
 
+describe('turnout description validators — bare HIDDEN keyword', () => {
+    it('does not flag unquoted HIDDEN as a bad description on SERVO_TURNOUT', () => {
+        const markers = _runValidatorsForTest('myTurnouts.h', 'SERVO_TURNOUT(200, 25, 410, 205, Slow, HIDDEN)')
+        expect(markers.filter((m) => m.message.includes('double-quoted string'))).toHaveLength(0)
+    })
+
+    it('does not flag unquoted HIDDEN as a bad description on TURNOUT, PIN_TURNOUT, TURNOUTL, VIRTUAL_TURNOUT', () => {
+        const text = [
+            'TURNOUT(1, 100, 0, HIDDEN)',
+            'PIN_TURNOUT(2, 22, HIDDEN)',
+            'TURNOUTL(3, 401, HIDDEN)',
+            'VIRTUAL_TURNOUT(4, HIDDEN)',
+        ].join('\n')
+        const markers = _runValidatorsForTest('myTurnouts.h', text)
+        expect(markers.filter((m) => m.message.includes('double-quoted string'))).toHaveLength(0)
+    })
+
+    it('still flags an unquoted, non-HIDDEN description', () => {
+        const markers = _runValidatorsForTest('myTurnouts.h', 'SERVO_TURNOUT(200, 25, 410, 205, Slow, Hidden)')
+        expect(markers.filter((m) => m.message.includes('double-quoted string'))).toHaveLength(1)
+    })
+})
+
 // ── ALIAS target-reference validator (myAliases.h) ────────────────────────────
 
 describe('validateAliasTargets', () => {
