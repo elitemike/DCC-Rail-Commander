@@ -205,6 +205,43 @@ export function isExrailCompletionFile(filename: string): boolean {
     return EXRAIL_FILENAMES.has(baseFilename(filename))
 }
 
+/**
+ * Commands whose argument is a bareword EXRAIL constant chosen from a fixed set, rather than a
+ * reference to a configured object (REF_PARAM_KIND_TO_REF_KINDS above) or free text. Keyed by
+ * argument index (0-based) — see exrail-block-registry.ts's SERVO/SERVO_TURNOUT/CONFIGURE_SERVO
+ * entries, whose "profile is a bareword EXRAIL constant" comment is the same fact this mirrors for
+ * the raw Monaco editor, which has no block registry to read a param's `kind` from.
+ */
+const SERVO_PROFILE_CHOICES = ['Instant', 'Fast', 'Medium', 'Slow', 'Bounce']
+const ENUM_ARGUMENT_CHOICES: Record<string, Record<number, string[]>> = {
+    SERVO_TURNOUT: { 4: SERVO_PROFILE_CHOICES },
+    SERVO: { 2: SERVO_PROFILE_CHOICES },
+    CONFIGURE_SERVO: { 3: SERVO_PROFILE_CHOICES },
+}
+
+/**
+ * Bareword-constant completions for the current cursor position, independent of
+ * `isExrailCompletionFile`/live config state — SERVO_TURNOUT lives in myTurnouts.h, which isn't an
+ * EXRAIL body file and has no aliases/roster/etc. to look up, but its profile argument is just as
+ * fixed a choice as any body command's.
+ */
+export function buildExrailEnumSuggestions(linePrefix: string): ExrailSymbolSuggestion[] {
+    const context = getExrailCommandContext(linePrefix)
+    if (!context) return []
+
+    const choices = ENUM_ARGUMENT_CHOICES[context.command]?.[context.argumentIndex]
+    if (!choices) return []
+
+    return choices.map(value => ({
+        label: value,
+        insertText: value,
+        detail: `${context.command} profile`,
+        documentation: `Servo movement profile: ${value}.`,
+        kind: 'id',
+        sortText: `0-${value}`,
+    }))
+}
+
 export function getExrailCommandContext(linePrefix: string): ExrailCommandContext | null {
     const match = linePrefix.match(/([A-Z_]+)\(\s*([^()]*)$/)
     if (!match) return null

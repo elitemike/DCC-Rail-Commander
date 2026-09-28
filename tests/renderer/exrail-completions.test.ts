@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { getCompletions } from '../../src/renderer/src/config/file-configs'
 import {
+    buildExrailEnumSuggestions,
     buildExrailSymbolSuggestions,
     getExrailCommandContext,
     isExrailCompletionFile,
@@ -116,5 +117,21 @@ describe('EXRAIL completion helpers', () => {
     it('returns the same completions for a per-row scoped filename as the unsuffixed file', () => {
         expect(getCompletions('mySequences.h#42')).toEqual(getCompletions('mySequences.h'))
         expect(getCompletions('myRoutes.h#7')).toEqual(getCompletions('myRoutes.h'))
+    })
+
+    it('offers the servo profile barewords for SERVO_TURNOUT\'s 5th argument — not gated on myTurnouts.h being an EXRAIL body file', () => {
+        expect(isExrailCompletionFile('myTurnouts.h')).toBe(false)
+        const suggestions = buildExrailEnumSuggestions('SERVO_TURNOUT(200, 25, 410, 205, ')
+        expect(suggestions.map(s => s.label)).toEqual(['Instant', 'Fast', 'Medium', 'Slow', 'Bounce'])
+    })
+
+    it('offers the same profile choices for SERVO and CONFIGURE_SERVO body commands', () => {
+        expect(buildExrailEnumSuggestions('SERVO(25, 410, ').map(s => s.label)).toContain('Slow')
+        expect(buildExrailEnumSuggestions('CONFIGURE_SERVO(25, 410, 205, ').map(s => s.label)).toContain('Bounce')
+    })
+
+    it('offers no enum suggestions for arguments outside the profile position or unrelated commands', () => {
+        expect(buildExrailEnumSuggestions('SERVO_TURNOUT(200, ')).toEqual([])
+        expect(buildExrailEnumSuggestions('TURNOUT(1, 100, 0, ')).toEqual([])
     })
 })

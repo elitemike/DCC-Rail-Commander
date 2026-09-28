@@ -8,7 +8,7 @@ import * as monaco from 'monaco-editor'
 import { getCompletions } from '../config/file-configs'
 import { registerDiagnosticProviders, revalidateModel } from '../config/dccex-validators'
 import { ConfigEditorState } from '../models/config-editor-state'
-import { buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
+import { buildExrailEnumSuggestions, buildExrailSymbolSuggestions, isExrailCompletionFile } from '../utils/exrail-completions'
 import { definedTracksFor } from './visual-editors/exrail-block-compiler'
 import { getSharedConfigEditorState, setSharedConfigEditorState } from '../utils/exrail-editor-state'
 import { ThemeService } from '../services/theme.service'
@@ -106,15 +106,30 @@ function registerProviders(): void {
                 }
             }
 
+            const linePrefix = model.getValueInRange({
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: 1,
+                endColumn: position.column,
+            })
+
+            // Bareword-constant argument completions (e.g. SERVO_TURNOUT's profile) — not gated
+            // on isExrailCompletionFile/sharedState since these are fixed choices, not lookups
+            // against live config state, and apply to myTurnouts.h too (not an EXRAIL body file).
+            suggestions.push(
+                ...buildExrailEnumSuggestions(linePrefix).map(s => ({
+                    label: s.label,
+                    kind: monaco.languages.CompletionItemKind.EnumMember,
+                    detail: s.detail,
+                    documentation: s.documentation,
+                    insertText: s.insertText,
+                    sortText: s.sortText,
+                    range,
+                })),
+            )
+
             const sharedState = getSharedConfigEditorState()
             if (isExrailCompletionFile(filename) && sharedState) {
-                const linePrefix = model.getValueInRange({
-                    startLineNumber: position.lineNumber,
-                    endLineNumber: position.lineNumber,
-                    startColumn: 1,
-                    endColumn: position.column,
-                })
-
                 const dynamicSuggestions = buildExrailSymbolSuggestions(filename, linePrefix, {
                     aliases: sharedState.aliases,
                     roster: sharedState.roster,
