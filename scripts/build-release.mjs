@@ -10,7 +10,6 @@
  */
 
 import { readFile, readdir } from 'node:fs/promises'
-import { rmSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -50,11 +49,10 @@ function checkNodeVersion(requiredRange) {
 }
 
 /** Finds the artifact(s) electron-builder just produced, so the final message is unambiguous. */
-async function findReleaseArtifacts() {
-    const releaseDir = join(ROOT, 'release')
+async function findReleaseArtifacts(outputDir) {
     let entries
     try {
-        entries = await readdir(releaseDir)
+        entries = await readdir(join(ROOT, outputDir))
     } catch {
         return []
     }
@@ -63,37 +61,44 @@ async function findReleaseArtifacts() {
 }
 
 /**
- * electron-builder packages into the fixed `release/` directory (directories.output in
- * package.json's "build" config) rather than a fresh unique folder per run, so a second
- * release right after a first one has to overwrite the previous run's still-warm
- * win-unpacked\resources\app.asar in place. On Windows that file can briefly be held open
- * by AV/EDR real-time scanning or the search indexer right after being written — nothing to
- * do with a leftover app process (there isn't one) — which turns the overwrite into an EBUSY.
- * Delete the whole directory first instead, with the same retry/delay tests/e2e/fixtures.ts's
- * cleanupDir() uses for this exact class of transient Windows lock.
+ * electron-builder used to package into the fixed `release/` directory (directories.output in
+ * package.json's "build" config), so a second release right after a first one had to overwrite
+ * the previous run's still-warm win-unpacked\resources\app.asar in place. On Windows that file
+ * can briefly be held open by AV/EDR real-time scanning, the search indexer, or (when running
+ * from VS Code) the editor's own file watcher/Explorer view of release/ — nothing to do with a
+ * leftover app process — which turned the overwrite into an EBUSY. Deleting release/ first
+ * (an earlier fix) only narrowed the window: the delete itself could still lose to one of those
+ * same watchers holding a handle open, and a watcher can just as easily re-lock the freshly
+ * written files a moment later. Writing every run into its own timestamped subfolder instead
+ * means a run never touches another run's files at all, so this class of lock can't happen.
  */
-function cleanReleaseDir() {
-    log('Cleaning previous release output...')
-    rmSync(join(ROOT, 'release'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+function timestampedOutputDir() {
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const stamp =
+        `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
+        `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    return join('release', stamp)
 }
 
 async function main() {
     const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf-8'))
     checkNodeVersion(pkg.engines.node)
 
-    cleanReleaseDir()
+    const outputDir = timestampedOutputDir()
+    log(`Packaging into ${outputDir}/ (a fresh folder per run, so this build never has to overwrite a previous run's output)`)
     await run('pnpm', ['install'])
     await run('pnpm', ['build'])
-    await run('pnpm', ['exec', 'electron-builder'])
+    await run('pnpm', ['exec', 'electron-builder', `-c.directories.output=${outputDir}`])
 
-    const artifacts = await findReleaseArtifacts()
+    const artifacts = await findReleaseArtifacts(outputDir)
     if (artifacts.length === 0) {
-        log('electron-builder finished, but no installer file was found under release/ — check the log above.')
+        log(`electron-builder finished, but no installer file was found under ${outputDir}/ — check the log above.`)
         return
     }
     log('Executable ready:')
     for (const name of artifacts) {
-        log(`  ${join('release', name)}`)
+        log(`  ${join(outputDir, name)}`)
     }
 }
 
