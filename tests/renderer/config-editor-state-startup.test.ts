@@ -46,6 +46,8 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
         preservedAutomationContent: '',
         _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         isCustomFile: ConfigEditorState.prototype.isCustomFile,
+        _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
+        reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
     }
     Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
     Object.defineProperty(state, 'automationPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'automationPreview')!)
@@ -249,7 +251,10 @@ describe('ConfigEditorState — myStartup.h', () => {
             },
             generatedTrackManagerContent: '',
             generatedTurnoutDefaultsContent: '',
+            _baseline: new Map([['myAutomation.h', 'preexisting']]),
             _ensureStartupFile: (ConfigEditorState.prototype as unknown as Record<string, unknown>)._ensureStartupFile,
+            reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
+            _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
         }
         Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
 
@@ -286,6 +291,8 @@ describe('ConfigEditorState — myStartup.h', () => {
             generatedTurnoutDefaultsContent: '',
             _ensureAutomationFile: (ConfigEditorState.prototype as unknown as Record<string, unknown>)._ensureAutomationFile,
             _ensureStartupFile: (ConfigEditorState.prototype as unknown as Record<string, unknown>)._ensureStartupFile,
+            reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
+            _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
         }
         Object.defineProperty(state, 'startupPreview', Object.getOwnPropertyDescriptor(ConfigEditorState.prototype, 'startupPreview')!)
 

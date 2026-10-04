@@ -18,6 +18,8 @@ function makeState(configFiles: Array<{ name: string; content: string }>) {
         normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
         normalizeAliasEntry: (ConfigEditorState.prototype as unknown as Record<string, unknown>).normalizeAliasEntry,
         isCustomFile: ConfigEditorState.prototype.isCustomFile,
+        _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
+        reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
         _syncGeneratedTurnoutDefaultsContent: vi.fn(),
     }
 }

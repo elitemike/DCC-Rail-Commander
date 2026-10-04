@@ -35,13 +35,39 @@ function makeConfigEditorState(configFiles: Array<{ name: string; content: strin
         generatedTrackManagerContent: '',
         generatedTurnoutDefaultsContent: '',
     })
+    // Baseline = the files as first loaded, so edits are judged against real content, not a bare flag.
+    ;(state as any)._baseline = (state as any)._snapshotFiles()
     return state
 }
 
 describe('ConfigEditorState.syncAll — dirty tracking', () => {
-    it('marks hasChanges when called', () => {
+    it('does not mark hasChanges when content is unchanged (only the timestamp differs)', () => {
+        const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
+        state.syncAll()
+        state.clearChanges()
+
+        state.syncAll()
+        state.syncAll()
+
+        expect(state.hasChanges).toBe(false)
+    })
+
+    it('marks hasChanges only once content really differs from the baseline, and clears after save', () => {
+        const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
+        state.sensors = [{ id: 30, description: 'Occupancy' }]
+
+        state.syncAll()
+        expect(state.hasChanges).toBe(true)
+
+        state.clearChanges()
+        state.syncAll()
+        expect(state.hasChanges).toBe(false)
+    })
+
+    it('markDirty() stays dirty across a no-op sync', () => {
         const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
 
+        state.markDirty()
         state.syncAll()
 
         expect(state.hasChanges).toBe(true)

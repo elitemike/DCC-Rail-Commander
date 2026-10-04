@@ -61,7 +61,7 @@ export class StartupEditorCustomElement {
         } else {
             this.installerState.configFiles.push({ name: 'myStartup.h', content: val })
         }
-        this.state.hasChanges = true
+        this.state.reconcileChanges()
     }
 
     flush(): void {
