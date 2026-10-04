@@ -460,13 +460,24 @@ export class TurnoutEditorCustomElement {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    getDisplayName(t: Turnout): string {
-        if (t.description === 'HIDDEN') {
+    isEntryHidden(t: Turnout): boolean {
+        return t.description === 'HIDDEN'
+    }
+
+    /** Name without any hidden marker — the sidebar list shows an eye-off icon for that instead. */
+    getListLabel(t: Turnout): string {
+        if (this.isEntryHidden(t)) {
             // A hidden turnout has no description to show, so fall back to its alias if it has one
             const alias = this.state.getPrimaryAliasNameForId(t.id, 'Turnout')
-            return alias ? `${alias} (${t.id}, hidden)` : `Turnout ${t.id} (hidden)`
+            return alias ? `${alias} (${t.id})` : `Turnout ${t.id}`
         }
         return t.description ? `${t.description} (${t.id})` : `Turnout ${t.id}`
+    }
+
+    /** Plain-text name, used in dialogs and error messages where an icon can't be shown. */
+    getDisplayName(t: Turnout): string {
+        const label = this.getListLabel(t)
+        return this.isEntryHidden(t) ? `${label} (hidden)` : label
     }
 
     profileColor(profile: TurnoutProfile): string {
