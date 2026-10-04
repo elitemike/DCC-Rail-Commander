@@ -4,7 +4,6 @@ import { confirmAction } from '../../utils/confirm-action'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { AliasEntry, AliasTargetType } from '../../utils/myAutomationParser'
-import { inferAliasTypes } from '../../utils/myAutomationParser'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
@@ -185,31 +184,11 @@ export class AliasesEditorCustomElement {
     }
 
     getAliasTypeLabel(alias: AliasEntry): string {
-        if (alias.aliasType) return alias.aliasType
-        const types = inferAliasTypes(alias, {
-            roster: this.state.roster,
-            turnouts: this.state.turnouts,
-            sensors: this.state.sensors,
-            routes: this.state.routes,
-            sequences: this.state.sequences,
-        })
-        return types.length > 0 ? types.join(', ') : 'Unmatched'
+        return this.state.getAliasTypeLabel(alias)
     }
 
-    /** Aliases grouped by inferred/declared type, sorted alphabetically by group label, and by name within each group. Each item keeps its index into state.aliases so edit/remove handlers can target it directly. */
+    /** Aliases grouped by type and ordered per the alias sort-order setting — see ConfigEditorState.groupedAliases. Each item keeps its index into state.aliases so edit/remove handlers can target it directly. */
     get groupedAliases(): { label: string; items: { alias: AliasEntry; index: number }[] }[] {
-        const groups = new Map<string, { alias: AliasEntry; index: number }[]>()
-        this.state.aliases.forEach((alias, index) => {
-            const label = this.getAliasTypeLabel(alias)
-            const items = groups.get(label)
-            if (items) items.push({ alias, index })
-            else groups.set(label, [{ alias, index }])
-        })
-        return Array.from(groups.entries())
-            .map(([label, items]) => ({
-                label,
-                items: items.slice().sort((a, b) => a.alias.name.localeCompare(b.alias.name)),
-            }))
-            .sort((a, b) => a.label.localeCompare(b.label))
+        return this.state.groupedAliases
     }
 }

@@ -6,6 +6,7 @@ import { UsbService } from './services/usb.service'
 import { ThemeService } from './services/theme.service'
 import { BlocklySoundsService } from './services/blockly-sounds.service'
 import { EditorDefaultViewService } from './services/editor-default-view.service'
+import { AliasSortOrderService } from './services/alias-sort-order.service'
 
 @route({
     routes: [
@@ -22,6 +23,7 @@ export class App {
     readonly themeService = resolve(ThemeService)
     private readonly blocklySounds = resolve(BlocklySoundsService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
+    private readonly aliasSortOrder = resolve(AliasSortOrderService)
     private _unsubCloseRequested: (() => void) | null = null
 
     bound(): void {
@@ -43,6 +45,7 @@ export class App {
         void this.themeService.init()
         void this.blocklySounds.init()
         void this.editorDefaultView.init()
+        void this.aliasSortOrder.init()
     }
 
     unbinding(): void {
