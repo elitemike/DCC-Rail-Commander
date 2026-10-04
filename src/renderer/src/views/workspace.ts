@@ -327,7 +327,7 @@ export class Workspace {
         await this.refreshConfigFilesFromDisk()
         this.configEditorState.loadFromInstallerState()
         if (this.state.pendingMigrationOnLoad) {
-            this.configEditorState.hasChanges = true
+            this.configEditorState.markDirty()
             this.state.pendingMigrationOnLoad = false
         }
         this.applyPendingWizardSetup()
@@ -414,7 +414,7 @@ export class Workspace {
         // e.g. ConfigEditorState.automations would still hold the stale duplicate entry
         // parsed before this removal, and the next save would resurrect it.
         this.configEditorState.loadFromInstallerState()
-        this.configEditorState.hasChanges = true
+        this.configEditorState.markDirty()
         this.toastService.show({
             title: 'Duplicates Removed',
             content: `Removed ${groups.reduce((n, g) => n + g.occurrences.length - 1, 0)} duplicate block(s). Save to write the change to disk.`,
@@ -477,7 +477,7 @@ export class Workspace {
         // Re-derive structured state from the now-commented-out file content — same reasoning as
         // checkForDuplicateExrailBlocks()'s post-removal reload.
         this.configEditorState.loadFromInstallerState()
-        this.configEditorState.hasChanges = true
+        this.configEditorState.markDirty()
         this.toastService.show({
             title: 'Unrecognized Commands Commented Out',
             content: `Disabled ${ranges.length} block(s) using unrecognized commands. Save to write the change ` +
@@ -1070,17 +1070,13 @@ export class Workspace {
      * Opens a diff of every config file that will change on the next Save —
      * on-disk "before" vs. in-memory "after" content — with a Save action of
      * its own. This is the toolbar Save button's click handler, so it can be
-     * invoked with nothing actually pending; syncAll() unconditionally sets
-     * hasChanges = true as a side effect (it's normally called right before
-     * a real save), which must not stick if the user just opens and closes
-     * the dialog without saving — otherwise the Save button's dirty
-     * indicator would light up on its own.
+     * invoked with nothing actually pending; syncAll() reconciles hasChanges
+     * against the last-saved baseline, so opening and closing the dialog
+     * without saving never lights up the dirty indicator on its own.
      */
     async openChangesDialog(): Promise<void> {
         await this.flushPendingFormEdits()
-        const hadChanges = this.configEditorState.hasChanges
         this.configEditorState.syncAll()
-        if (!hadChanges) this.configEditorState.hasChanges = false
 
         const roots = [
             ...(this.state.sourceFolder ? [this.state.sourceFolder] : []),
@@ -1143,7 +1139,7 @@ export class Workspace {
         // Re-derive structured state from the restored content — same reasoning as
         // checkForDuplicateExrailBlocks()'s post-removal reload.
         this.configEditorState.loadFromInstallerState()
-        this.configEditorState.hasChanges = true
+        this.configEditorState.markDirty()
         this.toastService.show({
             title: 'Version Restored',
             content: `Restored a previous version of ${friendlyName(file.name)}. Save to write it to disk.`,

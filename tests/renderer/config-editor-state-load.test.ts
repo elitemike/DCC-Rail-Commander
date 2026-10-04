@@ -27,6 +27,8 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
             isCustomFile: ConfigEditorState.prototype.isCustomFile,
+            _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
+            reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 
@@ -58,6 +60,8 @@ describe('ConfigEditorState.loadFromInstallerState', () => {
             normalizeAliases: ConfigEditorState.prototype.normalizeAliases,
             normalizeAliasEntry: (ConfigEditorState.prototype as any).normalizeAliasEntry,
             isCustomFile: ConfigEditorState.prototype.isCustomFile,
+            _snapshotFiles: (ConfigEditorState.prototype as any)._snapshotFiles,
+            reconcileChanges: ConfigEditorState.prototype.reconcileChanges,
             _syncGeneratedTurnoutDefaultsContent: vi.fn(),
         }
 

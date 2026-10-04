@@ -830,7 +830,7 @@ describe('Workspace.openLocalHistory', () => {
         const { workspace } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'CURRENT' }] })
         workspace.state.scratchPath = '/scratch'
         workspace.activeFileIndex = 0
-        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), hasChanges: false })
+        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), markDirty: vi.fn(() => { workspace.configEditorState.hasChanges = true }), hasChanges: false })
         return workspace
     }
 
@@ -848,7 +848,7 @@ describe('Workspace.openLocalHistory', () => {
         const { workspace, toastShowFn } = makeWorkspace({ configFiles: [{ name: 'myAutomation.h', content: 'CURRENT' }] })
         workspace.state.scratchPath = '/scratch'
         workspace.activeFileIndex = 0
-        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), hasChanges: false })
+        Object.assign(workspace.configEditorState, { loadFromInstallerState: vi.fn(), markDirty: vi.fn(() => { workspace.configEditorState.hasChanges = true }), hasChanges: false })
         const dialogOpen = vi.fn()
         Object.assign(historyMock(workspace), {
             list: vi.fn().mockRejectedValue(new TypeError("Cannot read properties of undefined (reading 'list')")),
