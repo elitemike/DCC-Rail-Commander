@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { TurnoutEditorCustomElement } from '../../src/renderer/src/components/visual-editors/turnout-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
 
@@ -308,7 +308,7 @@ describe('TurnoutEditorCustomElement hidden-from-throttles', () => {
     })
 })
 
-describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
+describe('TurnoutEditorCustomElement.applyClone', () => {
     function makeCloneEditor(turnouts: unknown[]) {
         const state = {
             turnouts,
@@ -320,18 +320,20 @@ describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
         return { editor, state }
     }
 
-    it('clones a SERVO turnout with a new ID, HIDDEN description, and Instant profile, keeping the same pin', () => {
-        const source = {
-            type: 'SERVO' as const, id: 6, pin: 105, activeAngle: 343, inactiveAngle: 295,
-            profile: 'Slow' as const, description: 'Reverse Loop', comment: 'note', defaultState: 'CLOSED' as const,
-        }
+    const HIDDEN_INSTANT = { id: 7, hidden: true, profile: 'Instant' as const }
+    const SERVO_SOURCE = () => ({
+        type: 'SERVO' as const, id: 6, pin: 105, activeAngle: 343, inactiveAngle: 295,
+        profile: 'Slow' as const, description: 'Reverse Loop', comment: 'note', defaultState: 'CLOSED' as const,
+    })
+
+    it('clones a SERVO turnout with the chosen ID, HIDDEN description and profile, keeping the same pin', () => {
+        const source = SERVO_SOURCE()
         const { editor, state } = makeCloneEditor([source])
 
-        editor.cloneAsHiddenInstant(0)
+        editor.applyClone(0, HIDDEN_INSTANT)
 
         expect(state.addTurnoutEntry).toHaveBeenCalledOnce()
         const [clone] = state.addTurnoutEntry.mock.calls[0]
-        // Matches the real-world pairing this feature is for:
         // SERVO_TURNOUT(6, 105, 343, 295, Slow, "Reverse Loop") + SERVO_TURNOUT(7, 105, 343, 295, Instant, HIDDEN)
         expect(clone).toEqual({
             type: 'SERVO', id: 7, pin: 105, activeAngle: 343, inactiveAngle: 295,
@@ -341,11 +343,29 @@ describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
         expect(source).toMatchObject({ id: 6, pin: 105, description: 'Reverse Loop', profile: 'Slow' })
     })
 
-    it('clones a PIN turnout onto the same pin', () => {
+    it('applies the profile chosen in the dialog to a servo clone', () => {
+        const { editor, state } = makeCloneEditor([SERVO_SOURCE()])
+
+        editor.applyClone(0, { id: 7, hidden: true, profile: 'Bounce' })
+
+        expect(state.addTurnoutEntry.mock.calls[0][0]).toMatchObject({ profile: 'Bounce' })
+    })
+
+    it('keeps the source description when the clone is not hidden', () => {
+        const { editor, state } = makeCloneEditor([SERVO_SOURCE()])
+
+        editor.applyClone(0, { id: 8, hidden: false, profile: 'Fast' })
+
+        expect(state.addTurnoutEntry.mock.calls[0][0]).toMatchObject({
+            id: 8, description: 'Reverse Loop', profile: 'Fast', comment: '',
+        })
+    })
+
+    it('clones a PIN turnout onto the same pin, without adding a profile', () => {
         const source = { type: 'PIN' as const, id: 5, pin: 22, description: 'GPIO Siding', comment: '', defaultState: 'CLOSED' as const }
         const { editor, state } = makeCloneEditor([source])
 
-        editor.cloneAsHiddenInstant(0)
+        editor.applyClone(0, { id: 6, hidden: true, profile: 'Instant' })
 
         const [clone] = state.addTurnoutEntry.mock.calls[0]
         expect(clone).toEqual({ type: 'PIN', id: 6, pin: 22, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' })
@@ -355,28 +375,17 @@ describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
         const source = { type: 'DCC' as const, id: 5, addr: 100, subAddr: 1, description: 'Yard Exit', comment: '', defaultState: 'CLOSED' as const }
         const { editor, state } = makeCloneEditor([source])
 
-        editor.cloneAsHiddenInstant(0)
+        editor.applyClone(0, { id: 6, hidden: true, profile: 'Instant' })
 
         const [clone] = state.addTurnoutEntry.mock.calls[0]
         expect(clone).toEqual({ type: 'DCC', id: 6, addr: 100, subAddr: 1, description: 'HIDDEN', comment: '', defaultState: 'CLOSED' })
-    })
-
-    it('assigns the new ID as one past the highest existing ID, not source.id + 1', () => {
-        const source = { type: 'VIRTUAL' as const, id: 3, description: 'Sim Siding', comment: '', defaultState: 'CLOSED' as const }
-        const other = { type: 'VIRTUAL' as const, id: 50, description: 'Other', comment: '', defaultState: 'CLOSED' as const }
-        const { editor, state } = makeCloneEditor([source, other])
-
-        editor.cloneAsHiddenInstant(0)
-
-        const [clone] = state.addTurnoutEntry.mock.calls[0]
-        expect(clone.id).toBe(51)
     })
 
     it('selects the newly-created clone', () => {
         const source = { type: 'DCCL' as const, id: 5, addr: 401, description: 'Linear', comment: '', defaultState: 'CLOSED' as const }
         const { editor } = makeCloneEditor([source])
 
-        editor.cloneAsHiddenInstant(0)
+        editor.applyClone(0, { id: 6, hidden: true, profile: 'Instant' })
 
         expect(editor.editBufferIndex).toBe(1)
         expect(editor.editBuffer).toMatchObject({ id: 6, description: 'HIDDEN' })
@@ -385,9 +394,141 @@ describe('TurnoutEditorCustomElement.cloneAsHiddenInstant', () => {
     it('does nothing when the index is out of range', () => {
         const { editor, state } = makeCloneEditor([])
 
-        editor.cloneAsHiddenInstant(0)
+        editor.applyClone(0, HIDDEN_INSTANT)
 
         expect(state.addTurnoutEntry).not.toHaveBeenCalled()
+    })
+})
+
+describe('TurnoutEditorCustomElement.cloneEntry', () => {
+    const SOURCE = { type: 'VIRTUAL' as const, id: 3, description: 'Sim Siding', comment: '', defaultState: 'CLOSED' as const }
+    const OTHER = { type: 'VIRTUAL' as const, id: 50, description: 'Other', comment: '', defaultState: 'CLOSED' as const }
+
+    function makeEditorWithDialog(closed: { status: string; value?: unknown }) {
+        const turnouts: unknown[] = [SOURCE, OTHER]
+        const state = {
+            turnouts,
+            addTurnoutEntry: vi.fn((entry: unknown) => { turnouts.push(entry) }),
+            getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+        }
+        const open = vi.fn().mockResolvedValue({ dialog: { closed: Promise.resolve(closed) } })
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, { state, dialogService: { open }, editBuffer: null, editBufferIndex: null })
+        return { editor, state, open }
+    }
+
+    it('opens the dialog suggesting one past the highest ID, not source.id + 1, and passing all taken IDs', async () => {
+        const { editor, open } = makeEditorWithDialog({ status: 'cancel' })
+
+        await editor.cloneEntry(0)
+
+        expect(open).toHaveBeenCalledOnce()
+        expect(open.mock.calls[0][0].model).toEqual({ sourceType: 'VIRTUAL', suggestedId: 51, takenIds: [3, 50] })
+    })
+
+    it('creates the clone from the dialog result', async () => {
+        const { editor, state } = makeEditorWithDialog({ status: 'ok', value: { id: 60, hidden: true, profile: 'Instant' } })
+
+        await editor.cloneEntry(0)
+
+        expect(state.addTurnoutEntry.mock.calls[0][0]).toMatchObject({ id: 60, description: 'HIDDEN' })
+    })
+
+    it('creates nothing when the dialog is cancelled', async () => {
+        const { editor, state } = makeEditorWithDialog({ status: 'cancel' })
+
+        await editor.cloneEntry(0)
+
+        expect(state.addTurnoutEntry).not.toHaveBeenCalled()
+    })
+
+    it('does not open the dialog when the index is out of range', async () => {
+        const { editor, open } = makeEditorWithDialog({ status: 'cancel' })
+
+        await editor.cloneEntry(9)
+
+        expect(open).not.toHaveBeenCalled()
+    })
+})
+
+describe('TurnoutEditorCustomElement row context menu', () => {
+    // vitest runs in node here — openMenu reads window.innerWidth to right-align the popup
+    beforeEach(() => { vi.stubGlobal('window', { innerWidth: 1000 }) })
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    function makeMenuEditor() {
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        const cloneEntry = vi.fn().mockResolvedValue(undefined)
+        const removeEntryByIndex = vi.fn().mockResolvedValue(undefined)
+        Object.assign(editor, { menuIndex: null, menuStyle: '', cloneEntry, removeEntryByIndex })
+        return { editor, cloneEntry, removeEntryByIndex }
+    }
+
+    function clickEvent(rect: { bottom: number; right: number }) {
+        const stopPropagation = vi.fn()
+        return {
+            event: { stopPropagation, currentTarget: { getBoundingClientRect: () => rect } } as unknown as Event,
+            stopPropagation,
+        }
+    }
+
+    it('openMenu opens the menu for that row, anchored under the button, and does not select the row', () => {
+        const { editor } = makeMenuEditor()
+        const { event, stopPropagation } = clickEvent({ bottom: 100, right: 300 })
+
+        editor.openMenu(2, event)
+
+        expect(editor.menuIndex).toBe(2)
+        expect(editor.menuStyle).toBe(`top:102px;right:${Math.round(window.innerWidth - 300)}px`)
+        expect(stopPropagation).toHaveBeenCalled()
+    })
+
+    it('openMenu on the already-open row closes it', () => {
+        const { editor } = makeMenuEditor()
+        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+
+        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+
+        expect(editor.menuIndex).toBeNull()
+    })
+
+    it('openMenu on a different row moves the menu to it', () => {
+        const { editor } = makeMenuEditor()
+        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+
+        editor.openMenu(4, clickEvent({ bottom: 160, right: 300 }).event)
+
+        expect(editor.menuIndex).toBe(4)
+    })
+
+    it('menuClone closes the menu and starts the clone flow for the menu row', () => {
+        const { editor, cloneEntry } = makeMenuEditor()
+        editor.menuIndex = 3
+
+        editor.menuClone()
+
+        expect(editor.menuIndex).toBeNull()
+        expect(cloneEntry).toHaveBeenCalledWith(3)
+    })
+
+    it('menuDelete closes the menu and starts the delete flow for the menu row', () => {
+        const { editor, removeEntryByIndex } = makeMenuEditor()
+        editor.menuIndex = 1
+
+        editor.menuDelete()
+
+        expect(editor.menuIndex).toBeNull()
+        expect(removeEntryByIndex).toHaveBeenCalledWith(1)
+    })
+
+    it('menuClone / menuDelete do nothing when no menu is open', () => {
+        const { editor, cloneEntry, removeEntryByIndex } = makeMenuEditor()
+
+        editor.menuClone()
+        editor.menuDelete()
+
+        expect(cloneEntry).not.toHaveBeenCalled()
+        expect(removeEntryByIndex).not.toHaveBeenCalled()
     })
 })
 

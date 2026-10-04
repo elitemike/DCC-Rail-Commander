@@ -209,14 +209,74 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('startup-editor div.monaco-editor')).not.toContainText('THROW(200)')
     })
 
+    // ── Row ⋯ menu + clone dialog ─────────────────────────────────────────────
+
+    test('row menu offers Clone and Delete, and closes on an outside click', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Yard Entry' })
+
+        await row.locator('button[data-testid="turnout-row-menu"]').click()
+        await expect(page.getByRole('menuitem', { name: /Clone/ })).toBeVisible()
+        await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible()
+
+        // Opening the menu must not have selected the row
+        await expect(page.locator('#turnout-splitter label', { hasText: 'Kind' })).not.toBeVisible()
+
+        await page.mouse.click(5, 5)
+        await expect(page.locator('[data-testid="turnout-row-menu-popup"]')).not.toBeVisible()
+    })
+
+    test('cloning a servo asks for ID, profile and hidden, then adds the twin', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' })
+        await row.locator('button[data-testid="turnout-row-menu"]').click()
+        await page.getByRole('menuitem', { name: /Clone/ }).click()
+
+        const dialog = page.locator('[data-testid="turnout-clone-dialog"]')
+        await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+        // Defaults: next free ID, hidden, Instant
+        await expect(dialog.locator('#turnout-clone-id')).toHaveValue('202')
+        await expect(dialog.locator('#turnout-clone-profile')).toHaveValue('Instant')
+        await expect(dialog.getByRole('checkbox', { name: /Hidden/ })).toBeChecked()
+
+        await dialog.locator('#turnout-clone-id').fill('210')
+        await dialog.locator('#turnout-clone-profile').selectOption('Slow')
+        await dialog.getByRole('button', { name: 'Clone' }).click()
+        await expect(dialog).not.toBeVisible()
+
+        // Hidden clone: eye-off icon in the list, and raw shows the twin on the same pin
+        await expect(page.locator('nav[aria-label="Turnouts"] [data-testid="hidden-turnout-icon"]')).toHaveCount(1)
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('SERVO_TURNOUT(210, 25, 410, 205, Slow, HIDDEN)')
+        await expect(page.locator('div.monaco-editor')).toContainText('Main Line Junction')
+    })
+
+    test('cloning rejects an ID that is already used', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' })
+        await row.locator('button[data-testid="turnout-row-menu"]').click()
+        await page.getByRole('menuitem', { name: /Clone/ }).click()
+
+        const dialog = page.locator('[data-testid="turnout-clone-dialog"]')
+        await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+        await dialog.locator('#turnout-clone-id').fill('201')
+        await dialog.getByRole('button', { name: 'Clone' }).click()
+
+        await expect(dialog.locator('[data-testid="turnout-clone-error"]')).toContainText('201')
+        await expect(dialog).toBeVisible()
+
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog).not.toBeVisible()
+        await expect(page.getByText('2 entries')).toBeVisible()
+    })
+
     test('removing entry via visual disappears from raw tab', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        // Remove "Yard Entry" (second entry) via the × button
+        // Remove "Yard Entry" (second entry) via the row's ⋯ menu
         const entryRow = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Yard Entry' })
-        await entryRow.hover()
-        const removeBtn = entryRow.locator('button[title="Remove"]')
-        await removeBtn.click()
+        await entryRow.locator('button[data-testid="turnout-row-menu"]').click()
+        await page.getByRole('menuitem', { name: 'Delete' }).click()
 
         // Accept any confirmation dialog. isVisible()'s timeout option is ignored
         // (it never polls) — wait for the dialog's async import/render with waitFor() first.

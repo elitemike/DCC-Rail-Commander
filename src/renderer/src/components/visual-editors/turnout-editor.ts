@@ -8,6 +8,7 @@ import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 import type { ServoCalibrationResult } from '../dialogs/servo-calibration-dialog'
+import type { TurnoutCloneResult } from '../dialogs/turnout-clone-dialog'
 
 type ViewTab = 'visual' | 'raw'
 
@@ -422,28 +423,87 @@ export class TurnoutEditorCustomElement {
         return (result.value as { pin: number }).pin
     }
 
+    /** One past the highest existing turnout ID (200 when there are none). */
+    private _nextTurnoutId(): number {
+        const ts = this.state.turnouts
+        return ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
+    }
+
     /**
-     * Clones an entry into a new hidden, instant-throw twin sharing the same VPin/address —
-     * e.g. `SERVO_TURNOUT(6, 105, 343, 295, Slow, "Reverse Loop")` paired with a hidden
-     * `SERVO_TURNOUT(7, 105, 343, 295, Instant, HIDDEN)`. DCC-EX allows any number of
-     * turnout entries on one physical output; this gives EXRAIL automation a second ID
-     * that snaps the same servo/pin/accessory instantly, without it appearing on a
-     * throttle or easing through the original's profile.
+     * Asks how to clone an entry (new ID, hidden or not, servo profile) via a small modal, then
+     * creates the twin. DCC-EX allows any number of turnout entries on one physical output; the
+     * default — hidden, Instant — gives EXRAIL automation a second ID that snaps the same
+     * servo/pin/accessory instantly without appearing on a throttle or easing through the
+     * original's profile.
      */
-    cloneAsHiddenInstant(index: number, event?: Event): void {
-        event?.stopPropagation()
+    async cloneEntry(index: number): Promise<void> {
         if (this.editBuffer !== null) this.commitBuffer()
         const source = this.state.turnouts[index]
         if (!source) return
 
-        const ts = this.state.turnouts
-        const id = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
-        const base = { ...source, id, description: 'HIDDEN', comment: '' }
-        const clone: Turnout = base.type === 'SERVO' ? { ...base, profile: 'Instant' } : base
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../dialogs/turnout-clone-dialog').then(m => m.TurnoutCloneDialog).catch(() => null),
+            model: {
+                sourceType: source.type,
+                suggestedId: this._nextTurnoutId(),
+                takenIds: this.state.turnouts.map(t => t.id),
+            },
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return
+        this.applyClone(index, result.value as TurnoutCloneResult)
+    }
+
+    /**
+     * Appends a copy of `state.turnouts[index]` using the dialog's choices and selects it. A hidden
+     * clone gets the HIDDEN description; a visible one keeps the source's description (rename it
+     * after). Servo clones take the chosen profile; other kinds have no profile.
+     */
+    applyClone(index: number, opts: TurnoutCloneResult): void {
+        const source = this.state.turnouts[index]
+        if (!source) return
+
+        const base = {
+            ...source,
+            id: opts.id,
+            description: opts.hidden ? 'HIDDEN' : source.description,
+            comment: '',
+        }
+        const clone: Turnout = base.type === 'SERVO' ? { ...base, profile: opts.profile } : base
 
         this.state.addTurnoutEntry(clone)
         const idx = this.state.turnouts.length - 1
         this._setBuffer(idx, this.state.turnouts[idx])
+    }
+
+    // ── Row context menu (⋯) ──────────────────────────────────────────────────
+    menuIndex: number | null = null
+    menuStyle = ''
+
+    openMenu(index: number, event: Event): void {
+        event.stopPropagation()
+        if (this.menuIndex === index) { this.closeMenu(); return }
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+        // position: fixed so the nav's overflow-y-auto can't clip the menu; right-aligned to the button.
+        this.menuStyle = `top:${Math.round(rect.bottom + 2)}px;right:${Math.round(window.innerWidth - rect.right)}px`
+        this.menuIndex = index
+    }
+
+    closeMenu(): void {
+        this.menuIndex = null
+    }
+
+    menuClone(): void {
+        const index = this.menuIndex
+        this.closeMenu()
+        if (index !== null) void this.cloneEntry(index)
+    }
+
+    menuDelete(): void {
+        const index = this.menuIndex
+        this.closeMenu()
+        if (index !== null) void this.removeEntryByIndex(index)
     }
 
     async removeEntryByIndex(index: number, event?: Event): Promise<void> {
