@@ -290,9 +290,16 @@ describe('TurnoutEditorCustomElement hidden-from-throttles', () => {
     })
 
     it('getDisplayName shows a "(hidden)" marker instead of the raw HIDDEN literal', () => {
-        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        const { editor, state } = makeEditor()
+        ;(state as unknown as { getPrimaryAliasNameForId: () => string }).getPrimaryAliasNameForId = () => ''
         expect(editor.getDisplayName({ ...TURNOUT, description: 'HIDDEN' })).toBe('Turnout 200 (hidden)')
         expect(editor.getDisplayName({ ...TURNOUT, description: 'Main Line Junction' })).toBe('Main Line Junction (200)')
+    })
+
+    it('getDisplayName shows the alias for a hidden turnout that has one', () => {
+        const { editor, state } = makeEditor()
+        ;(state as unknown as { getPrimaryAliasNameForId: () => string }).getPrimaryAliasNameForId = () => 'Yard_Reverse_Crossover_Hidden'
+        expect(editor.getDisplayName({ ...TURNOUT, description: 'HIDDEN' })).toBe('Yard_Reverse_Crossover_Hidden (200, hidden)')
     })
 })
 

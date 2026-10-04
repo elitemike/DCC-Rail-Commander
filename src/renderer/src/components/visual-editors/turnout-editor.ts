@@ -461,7 +461,11 @@ export class TurnoutEditorCustomElement {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     getDisplayName(t: Turnout): string {
-        if (t.description === 'HIDDEN') return `Turnout ${t.id} (hidden)`
+        if (t.description === 'HIDDEN') {
+            // A hidden turnout has no description to show, so fall back to its alias if it has one
+            const alias = this.state.getPrimaryAliasNameForId(t.id, 'Turnout')
+            return alias ? `${alias} (${t.id}, hidden)` : `Turnout ${t.id} (hidden)`
+        }
         return t.description ? `${t.description} (${t.id})` : `Turnout ${t.id}`
     }
 
