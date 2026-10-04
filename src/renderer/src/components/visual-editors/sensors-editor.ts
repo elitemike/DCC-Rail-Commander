@@ -151,7 +151,11 @@ export class SensorsEditorCustomElement {
         }
         const previousId = this._idBeforeEdit.get(idx)
         this.state.sensors = this.state.sensors.map((v, i) => i === idx ? entry : v)
-        if (previousId !== undefined && previousId !== entry.id) {
+        // Only carry the alias forward if no *other* sensor still uses the old id — a freshly
+        // added sensor can start on an id that another sensor (with its own alias) already holds,
+        // and moving that alias to this row's new id would strip it from the other sensor.
+        const previousIdStillInUse = this.state.sensors.some((v, i) => i !== idx && Number(v.id) === previousId)
+        if (previousId !== undefined && previousId !== entry.id && !previousIdStillInUse) {
             const aliasName = this.state.getPrimaryAliasNameForId(previousId, 'Sensor')
             if (aliasName) this.state.syncAliasForId(previousId, entry.id, aliasName, 'Sensor', aliasName)
         }

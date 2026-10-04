@@ -160,4 +160,32 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(TRACK1, 102)')
         await expect(page.locator('div.monaco-editor')).not.toContainText('ALIAS(TRACK1, 100)')
     })
+
+    // Regression: adding a second sensor and picking the same board makes it momentarily share
+    // channel 1's VPin with the first sensor. The follow-up channel pick must not carry the
+    // first sensor's alias onto the new one (which cleared the first row's alias).
+    test("adding a new sensor and picking a channel does not clear another sensor's alias", async ({ csb1StackedPage }) => {
+        const page = csb1StackedPage
+
+        await openAccessoriesTab(page)
+        await addPca9685(page)
+
+        await openSensorsEditor(page)
+        await addSensor(page)
+        const firstRow = sensorRows(page).first()
+        const firstAlias = firstRow.locator('alias-picker input')
+        await firstAlias.fill('FIRST_ALIAS')
+        await firstAlias.blur()
+        await firstRow.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await expect(firstAlias).toHaveValue('FIRST_ALIAS')
+
+        await addSensor(page)
+        const secondRow = sensorRows(page).nth(1)
+        await secondRow.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await secondRow.locator('[data-field="pin-channel"]').selectOption({ label: 'Ch 5' })
+        await expect(secondRow.getByText('VPin 104', { exact: true })).toBeVisible()
+
+        await expect(firstAlias).toHaveValue('FIRST_ALIAS')
+        await expect(secondRow.locator('alias-picker input')).toHaveValue('')
+    })
 })
