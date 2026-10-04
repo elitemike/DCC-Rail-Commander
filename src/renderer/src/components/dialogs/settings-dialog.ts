@@ -4,6 +4,7 @@ import { CheckBox } from '@syncfusion/ej2-buttons'
 import { ThemeService, type ThemeMode } from '../../services/theme.service'
 import { BlocklySoundsService } from '../../services/blockly-sounds.service'
 import { EditorDefaultViewService, type EditorViewMode } from '../../services/editor-default-view.service'
+import { AliasSortOrderService, type AliasSortOrder } from '../../services/alias-sort-order.service'
 import { InstallerState } from '../../models/installer-state'
 
 export interface SettingsDialogModel {
@@ -34,6 +35,7 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     readonly theme = resolve(ThemeService)
     readonly blocklySounds = resolve(BlocklySoundsService)
     readonly editorDefaultView = resolve(EditorDefaultViewService)
+    readonly aliasSortOrder = resolve(AliasSortOrderService)
     readonly installerState = resolve(InstallerState)
 
     private model!: SettingsDialogModel
@@ -152,6 +154,11 @@ export class SettingsDialog implements IDialogCustomElementViewModel {
     /** Applies (and persists) the default editor view immediately — EditorDefaultViewService is the source of truth, same as theme above. */
     setDefaultEditorView(mode: EditorViewMode): void {
         void this.editorDefaultView.setValue(mode)
+    }
+
+    /** Applies (and persists) the alias sort order immediately — AliasSortOrderService is the source of truth. */
+    setAliasSortOrder(order: AliasSortOrder): void {
+        void this.aliasSortOrder.setValue(order)
     }
 
     close(): void {

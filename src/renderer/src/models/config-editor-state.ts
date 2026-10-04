@@ -1,5 +1,6 @@
 import { observable, resolve } from 'aurelia'
 import { InstallerState } from './installer-state'
+import { AliasSortOrderService } from '../services/alias-sort-order.service'
 import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
 import { normalizeForComparison } from '../utils/config-file-diff'
 import { STACKED_MOTOR_DRIVER } from '../config/commandstation'
@@ -211,6 +212,7 @@ function extractManagedBlockBody(content: string, tag: string): string {
  */
 export class ConfigEditorState {
     private readonly installerState = resolve(InstallerState)
+    private readonly aliasSortOrder = resolve(AliasSortOrderService)
 
     // ── config.h ─────────────────────────────────────────────────────────────
     configHContent = ''
@@ -574,9 +576,51 @@ export class ConfigEditorState {
     // ── myAliases.h ───────────────────────────────────────────────────────
     @observable aliases: AliasEntry[] = []
 
+    getAliasTypeLabel(alias: AliasEntry): string {
+        if (alias.aliasType) return alias.aliasType
+        const types = inferAliasTypes(alias, {
+            roster: this.roster,
+            turnouts: this.turnouts,
+            sensors: this.sensors,
+            routes: this.routes,
+            sequences: this.sequences,
+        })
+        return types.length > 0 ? types.join(', ') : 'Unmatched'
+    }
+
+    /** Aliases grouped by declared/inferred type (groups alphabetical), ordered within each group per AliasSortOrderService. Each item keeps its index into `aliases`. */
+    get groupedAliases(): { label: string; items: { alias: AliasEntry; index: number }[] }[] {
+        const byId = this.aliasSortOrder.value === 'id'
+        const numeric = (a: AliasEntry): number => {
+            const n = parseAliasNumericValue(a.value)
+            return n === null || n === undefined || Number.isNaN(n) ? Number.POSITIVE_INFINITY : n
+        }
+        const groups = new Map<string, { alias: AliasEntry; index: number }[]>()
+        this.aliases.forEach((alias, index) => {
+            const label = this.getAliasTypeLabel(alias)
+            const items = groups.get(label)
+            if (items) items.push({ alias, index })
+            else groups.set(label, [{ alias, index }])
+        })
+        return Array.from(groups.entries())
+            .map(([label, items]) => ({
+                label,
+                items: items.slice().sort((a, b) => {
+                    if (byId) {
+                        const diff = numeric(a.alias) - numeric(b.alias)
+                        if (diff !== 0 && !Number.isNaN(diff)) return diff
+                    }
+                    return a.alias.name.localeCompare(b.alias.name)
+                }),
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label))
+    }
+
     get aliasesRaw(): string {
         const header = buildGeneratorHeader('myAliases.h', this.installerState.appVersion)
-        const serialized = serializeAliasesToFile(this.aliases)
+        const serialized = this.groupedAliases
+            .map(group => `// ${group.label}\n${serializeAliasesToFile(group.items.map(i => i.alias))}`)
+            .join('\n\n')
         return `${header}\n${serialized}`
     }
 
