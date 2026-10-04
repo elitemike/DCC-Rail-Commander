@@ -172,6 +172,21 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
         expect(state.syncAliasForId).toHaveBeenCalledWith(100, 102, 'TRACK1', 'Sensor', 'TRACK1')
     })
 
+    // A freshly added sensor can start on an id another sensor already holds; picking a channel
+    // on it must not steal that other sensor's alias.
+    it('does not move an alias off an id that another sensor still uses', () => {
+        const { editor, state } = makeEditor(
+            [{ id: 116, description: 'Reverse Loop 1' }, { id: 116, description: 'New Sensor' }],
+            [{ name: 'ReverseLoop1', value: '116', aliasType: 'Sensor' }],
+        )
+
+        editor.captureRowBeforeEdit(1)
+        state.sensors[1].id = 126
+        editor.updateSensor(1, state.sensors[1])
+
+        expect(state.syncAliasForId).not.toHaveBeenCalled()
+    })
+
     it('reindexes the pre-edit-id baseline after a row is removed, so the row that slides into its index does not inherit a stale one', async () => {
         const { editor, state } = makeEditor([
             { id: 10, description: 'A' },
