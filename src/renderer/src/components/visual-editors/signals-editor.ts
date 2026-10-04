@@ -1,4 +1,6 @@
 import { resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SignalEntry } from '../../utils/myAutomationParser'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
@@ -7,6 +9,7 @@ type SignalKind = SignalEntry['type']
 
 export class SignalsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     /** Set once the user explicitly clicks Visual/Raw for this file. Until then, attached() re-applies the current default-editor-view preference on every visit — see attached() below. */
@@ -57,7 +60,10 @@ export class SignalsEditorCustomElement {
         this.state.syncAll()
     }
 
-    removeSignal(idx: number) {
+    async removeSignal(idx: number) {
+        const entry = this.state.signals[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${entry.description ? entry.description : `Signal ${idx + 1}`}"?`, 'Are you sure you want to remove this signal?'))) return
         this.state.signals = this.state.signals.filter((_, i) => i !== idx)
         this.state.syncAll()
     }

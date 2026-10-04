@@ -1,4 +1,6 @@
 import { resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { AliasEntry, AliasTargetType } from '../../utils/myAutomationParser'
@@ -16,6 +18,7 @@ const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
 
 export class AliasesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     /** Set once the user explicitly clicks Visual/Raw for this file. Until then, attached() re-applies the current default-editor-view preference on every visit — see attached() below. */
@@ -151,7 +154,10 @@ export class AliasesEditorCustomElement {
         return true
     }
 
-    removeAlias(idx: number) {
+    async removeAlias(idx: number) {
+        const entry = this.state.aliases[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${entry.name}"?`, 'Are you sure you want to remove this alias?'))) return
         this.state.aliases = this.state.aliases.filter((_, i) => i !== idx)
         this.state.syncAll()
         this.errorMessage = ''

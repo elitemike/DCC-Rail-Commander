@@ -1,4 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { EventHandlerEntry } from '../../utils/myAutomationParser'
@@ -32,6 +34,7 @@ export interface AddGroup {
  */
 export class EventHandlersEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
     /** Set once the user explicitly clicks Visual/Raw for this file — see sequences-editor.ts's identical field for why attached() re-applies the default on every visit until then. */
@@ -274,8 +277,11 @@ export class EventHandlersEditorCustomElement {
         this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
-    removeEventHandler(idx: number, event?: Event): void {
+    async removeEventHandler(idx: number, event?: Event): Promise<void> {
         event?.stopPropagation()
+        const entry = this.state.eventHandlers[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${this.getDisplayName(entry)}"?`, 'Are you sure you want to remove this event handler?'))) return
         this.state.eventHandlers = this.state.eventHandlers.filter((_, i) => i !== idx)
         this.state.syncAll()
         if (this.selectedIndex === idx) {

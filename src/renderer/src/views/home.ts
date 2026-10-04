@@ -759,6 +759,11 @@ export class Home {
 
     async deleteConfig(config: SavedConfiguration, event: Event): Promise<void> {
         event.stopPropagation()
+        const confirmed = await this._confirm(
+            'Remove Device',
+            `Are you sure you want to remove "${config.name}"? Its saved configuration entry will be deleted.`,
+        )
+        if (!confirmed) return
         this.state.savedConfigurations = this.state.savedConfigurations.filter((c) => c.id !== config.id)
         await this.preferences.set('savedConfigurations', this.state.savedConfigurations)
     }

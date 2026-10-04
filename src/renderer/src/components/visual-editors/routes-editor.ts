@@ -1,4 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { RouteEntry } from '../../utils/myAutomationParser'
@@ -12,6 +14,7 @@ type RowTab = 'blocks' | 'text'
 
 export class RoutesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
@@ -237,9 +240,12 @@ export class RoutesEditorCustomElement {
         this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
-    removeRoute(idx: number, event?: Event) {
+    async removeRoute(idx: number, event?: Event) {
         event?.stopPropagation()
-        const removedId = this.state.routes[idx]?.id
+        const entry = this.state.routes[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${this.getDisplayName(entry)}"?`, 'Are you sure you want to remove this route?'))) return
+        const removedId = entry.id
         this.state.routes = this.state.routes.filter((_, i) => i !== idx)
         this.state.syncAll()
         if (this.selectedId === removedId) {

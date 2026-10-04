@@ -826,8 +826,9 @@ export class RosterEditorCustomElement {
         this.state.updateDefineFunctions(this.selectedMacroName, this.groupFunctions)
     }
 
-    removeGroupFunction(i: number): void {
+    async removeGroupFunction(i: number): Promise<void> {
         if (!this.selectedMacroName) return
+        if (!(await this._confirmRemoveFunction(this.groupFunctions[i]?.name, i))) return
         this.groupFunctions = this.groupFunctions.filter((_, idx) => idx !== i)
         this.state.updateDefineFunctions(this.selectedMacroName, this.groupFunctions)
     }
@@ -895,7 +896,9 @@ export class RosterEditorCustomElement {
         this.commitBuffer()
     }
 
-    removeFunction(index: number): void {
+    async removeFunction(index: number): Promise<void> {
+        if (!this.editBuffer) return
+        if (!(await this._confirmRemoveFunction(this.editBuffer.functions[index]?.name, index))) return
         if (!this.editBuffer) return
         this.editBuffer.functions = this.editBuffer.functions.filter((_, i) => i !== index)
         this.commitBuffer()
@@ -982,7 +985,8 @@ export class RosterEditorCustomElement {
         queueTask(() => this.commitBuffer())
     }
 
-    removeAppendedFunction(index: number): void {
+    async removeAppendedFunction(index: number): Promise<void> {
+        if (!(await this._confirmRemoveFunction(this.appendedFunctionsList[index]?.name, index))) return
         this.appendedFunctionsList = this.appendedFunctionsList.filter((_, i) => i !== index)
         this.editBuffer!.appendedFunctions = this.appendedFunctionsList.length > 0 ? [...this.appendedFunctionsList] : undefined
         queueTask(() => this.commitBuffer())
@@ -1047,6 +1051,12 @@ export class RosterEditorCustomElement {
 
     get hasEntries(): boolean {
         return this.state.roster.length > 0
+    }
+
+    /** Confirms removing one function-key row; `name` is the row's label, `index` its F-number. */
+    private _confirmRemoveFunction(name: string | undefined, index: number): Promise<boolean> {
+        const label = name ? `F${index} (${name})` : `F${index}`
+        return this._confirm(`Delete "${label}"?`, 'Are you sure you want to remove this function?')
     }
 
     private async _confirm(title: string, message: string): Promise<boolean> {

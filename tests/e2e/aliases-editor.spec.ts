@@ -9,7 +9,7 @@
  * Run: pnpm test:e2e --grep "Aliases Editor"
  */
 
-import { test, expect } from './fixtures'
+import { test, expect, answerConfirmDialog } from './fixtures'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -157,7 +157,13 @@ test.describe('Aliases Editor', () => {
         await expect(groupHeaders(page).first()).toContainText('Roster')
 
         // The Roster group sorts first, so its single row is the first alias row.
+        // Cancelling the confirm dialog must leave both aliases in place.
         await aliasRows(page).first().locator('button[title="Delete"]').click()
+        await answerConfirmDialog(page, 'cancel')
+        await expect(groupHeaders(page)).toHaveCount(2)
+
+        await aliasRows(page).first().locator('button[title="Delete"]').click()
+        await answerConfirmDialog(page, 'confirm')
 
         await expect(groupHeaders(page)).toHaveCount(1)
         await expect(groupHeaders(page).first()).toContainText('Turnout')

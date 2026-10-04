@@ -1,4 +1,6 @@
 import { resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SensorEntry } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
@@ -6,6 +8,7 @@ import { EditorDefaultViewService } from '../../services/editor-default-view.ser
 
 export class SensorsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
@@ -88,7 +91,10 @@ export class SensorsEditorCustomElement {
         this.state.syncAll()
     }
 
-    removeSensor(idx: number) {
+    async removeSensor(idx: number) {
+        const entry = this.state.sensors[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${entry.description ? `${entry.description} (${entry.id})` : `Sensor ${entry.id}`}"?`, 'Are you sure you want to remove this sensor?'))) return
         this.state.sensors = this.state.sensors.filter((_, i) => i !== idx)
         this._reindexEditMapsAfterRemoval(idx)
         this.state.syncAll()

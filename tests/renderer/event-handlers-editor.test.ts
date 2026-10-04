@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { EventHandlersEditorCustomElement } from '../../src/renderer/src/components/visual-editors/event-handlers-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
 import type { EventHandlerEntry } from '../../src/renderer/src/utils/myAutomationParser'
+import { makeDialogService } from './dialog-service-stub'
 
 function makeEditor(eventHandlers: EventHandlerEntry[], turnouts: { id: number; description?: string }[] = []) {
     const editor = Object.create(EventHandlersEditorCustomElement.prototype) as EventHandlersEditorCustomElement
@@ -23,6 +24,7 @@ function makeEditor(eventHandlers: EventHandlerEntry[], turnouts: { id: number; 
 
     Object.assign(editor, {
         state,
+        dialogService: makeDialogService('ok'),
         editorDefaultView: { value: 'visual' as const },
         activeTab: 'visual' as const,
         _userChoseTab: false,
@@ -139,38 +141,38 @@ describe('EventHandlersEditorCustomElement.removeEventHandler', () => {
         { command: 'ONBLOCKENTER', text: 'ONBLOCKENTER(1)\nDONE' },
     ]
 
-    it('re-selects the nearest remaining entry when the selected row is removed', () => {
+    it('re-selects the nearest remaining entry when the selected row is removed', async () => {
         const { editor, state } = makeEditor(handlers())
         editor.selectedIndex = 2
         editor.blockCanvas = { reload: vi.fn(), refreshSize: vi.fn() }
         editor.rowRawEditor = { flush: vi.fn(), switchModel: vi.fn() }
 
-        editor.removeEventHandler(2)
+        await editor.removeEventHandler(2)
 
         expect(state.eventHandlers.length).toBe(2)
         expect(editor.selectedIndex).toBe(1)
     })
 
-    it('decrements selectedIndex when a row before it is removed, keeping the same logical entry selected', () => {
+    it('decrements selectedIndex when a row before it is removed, keeping the same logical entry selected', async () => {
         const { editor, state } = makeEditor(handlers())
         editor.selectedIndex = 2 // ONBLOCKENTER
         editor.blockCanvas = { reload: vi.fn(), refreshSize: vi.fn() }
         editor.rowRawEditor = { flush: vi.fn(), switchModel: vi.fn() }
 
-        editor.removeEventHandler(0) // remove ONRAILSYNCON, before the selection
+        await editor.removeEventHandler(0) // remove ONRAILSYNCON, before the selection
 
         expect(state.eventHandlers).toEqual([handlers()[1], handlers()[2]])
         expect(editor.selectedIndex).toBe(1)
         expect(state.eventHandlers[editor.selectedIndex!]).toEqual(handlers()[2])
     })
 
-    it('clears selectedIndex when removing the last remaining entry', () => {
+    it('clears selectedIndex when removing the last remaining entry', async () => {
         const { editor, state } = makeEditor([handlers()[0]])
         editor.selectedIndex = 0
         editor.blockCanvas = { reload: vi.fn(), refreshSize: vi.fn() }
         editor.rowRawEditor = { flush: vi.fn(), switchModel: vi.fn() }
 
-        editor.removeEventHandler(0)
+        await editor.removeEventHandler(0)
 
         expect(state.eventHandlers).toEqual([])
         expect(editor.selectedIndex).toBeNull()

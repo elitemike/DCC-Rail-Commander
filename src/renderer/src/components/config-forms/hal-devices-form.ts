@@ -1,4 +1,6 @@
 import { resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { HAL_BOARD_CATALOG, getHalBoard, type HalBoardDefinition } from '../../config/hal-boards'
 import { generateHalDevicesBlock, type HalDeviceInstance } from '../../config/hal-devices'
@@ -23,6 +25,7 @@ import { generateHalDevicesBlock, type HalDeviceInstance } from '../../config/ha
  */
 export class HalDevicesFormCustomElement {
     private readonly editorState = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
 
     readonly catalog: HalBoardDefinition[] = HAL_BOARD_CATALOG
     devices: HalDeviceInstance[] = []
@@ -145,8 +148,10 @@ export class HalDevicesFormCustomElement {
         this.onFieldChange()
     }
 
-    removeDevice(index: number): void {
+    async removeDevice(index: number): Promise<void> {
         const removed = this.devices[index]
+        if (!removed) return
+        if (!(await confirmAction(this.dialogService, `Delete "${removed.label || this.board(removed)?.label || 'this board'}"?`, 'Are you sure you want to remove this board?'))) return
         this.devices = this.devices
             .filter((_, i) => i !== index)
             .map(d =>

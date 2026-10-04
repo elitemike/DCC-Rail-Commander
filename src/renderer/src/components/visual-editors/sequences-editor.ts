@@ -1,4 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SequenceEntry } from '../../utils/myAutomationParser'
@@ -12,6 +14,7 @@ type RowTab = 'blocks' | 'text'
 
 export class SequencesEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
@@ -246,9 +249,12 @@ export class SequencesEditorCustomElement {
         this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
-    removeSequence(idx: number, event?: Event) {
+    async removeSequence(idx: number, event?: Event) {
         event?.stopPropagation()
-        const removedId = this.state.sequences[idx]?.id
+        const entry = this.state.sequences[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${this.getDisplayName(entry)}"?`, 'Are you sure you want to remove this sequence?'))) return
+        const removedId = entry.id
         this.state.sequences = this.state.sequences.filter((_, i) => i !== idx)
         this.state.syncAll()
         if (this.selectedId === removedId) {

@@ -13,7 +13,7 @@
  * Run: pnpm test:e2e --grep "Sensors Editor"
  */
 
-import { test, expect } from './fixtures'
+import { test, expect, answerConfirmDialog } from './fixtures'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -133,7 +133,13 @@ test.describe('Sensors Editor', () => {
         await descInput.fill('Removable Sensor')
         await descInput.blur()
 
+        // Cancelling the confirm dialog must keep the sensor.
         await row.locator('button[title="Remove sensor"]').click()
+        await answerConfirmDialog(page, 'cancel')
+        await expect(sensorRows(page)).toHaveCount(1)
+
+        await row.locator('button[title="Remove sensor"]').click()
+        await answerConfirmDialog(page, 'confirm')
 
         await expect(page.getByText('No sensors yet')).toBeVisible()
         await switchToRaw(page)
@@ -274,6 +280,7 @@ test.describe('Sensors Editor', () => {
         await switchToVisual(page)
         await expect(page.locator('aliases-editor').getByText('1 entries')).toBeVisible()
         await page.locator('aliases-editor').getByRole('button', { name: 'Delete' }).first().click()
+        await answerConfirmDialog(page, 'confirm')
         await expect(page.getByText('No aliases')).toBeVisible({ timeout: 3_000 })
 
         await openSensorsEditor(page)

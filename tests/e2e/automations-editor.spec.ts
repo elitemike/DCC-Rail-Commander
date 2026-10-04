@@ -8,7 +8,7 @@
  * Run: pnpm test:e2e --grep "Automations Editor"
  */
 
-import { test, expect } from './fixtures'
+import { test, expect, answerConfirmDialog } from './fixtures'
 
 async function openAutomationsEditor(page: import('@playwright/test').Page) {
     await page.getByText('Automations', { exact: true }).first().click()
@@ -109,7 +109,13 @@ test.describe('Automations Editor', () => {
         await descInput.fill('Removable automation')
         await descInput.blur()
 
+        // Cancelling the confirm dialog must keep the automation.
         await automationListItems(page).first().locator('button[title="Remove"]').click()
+        await answerConfirmDialog(page, 'cancel')
+        await expect(automationListItems(page)).toHaveCount(1)
+
+        await automationListItems(page).first().locator('button[title="Remove"]').click()
+        await answerConfirmDialog(page, 'confirm')
 
         await expect(page.getByText('No automations.').first()).toBeVisible()
         await switchToRaw(page)

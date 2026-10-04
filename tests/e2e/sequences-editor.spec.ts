@@ -13,7 +13,7 @@
  * Run: pnpm test:e2e --grep "Sequences Editor"
  */
 
-import { test, expect } from './fixtures'
+import { test, expect, answerConfirmDialog } from './fixtures'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -201,7 +201,13 @@ test.describe('Sequences Editor', () => {
         await descInput.fill('Removable Sequence')
         await descInput.blur()
 
+        // Cancelling the confirm dialog must keep the sequence.
         await sequenceListItems(page).first().locator('button[title="Remove"]').click()
+        await answerConfirmDialog(page, 'cancel')
+        await expect(sequenceListItems(page)).toHaveCount(1)
+
+        await sequenceListItems(page).first().locator('button[title="Remove"]').click()
+        await answerConfirmDialog(page, 'confirm')
 
         await expect(page.getByText('No sequences.').first()).toBeVisible()
         await switchToRaw(page)
@@ -283,6 +289,7 @@ test.describe('Sequences Editor', () => {
         await switchToVisual(page)
         await expect(page.locator('aliases-editor').getByText('1 entries')).toBeVisible()
         await page.locator('aliases-editor').getByRole('button', { name: 'Delete' }).first().click()
+        await answerConfirmDialog(page, 'confirm')
         await expect(page.getByText('No aliases')).toBeVisible({ timeout: 3_000 })
 
         await openSequencesEditor(page)

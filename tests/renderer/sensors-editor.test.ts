@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SensorsEditorCustomElement } from '../../src/renderer/src/components/visual-editors/sensors-editor'
 import type { ConfigEditorState } from '../../src/renderer/src/models/config-editor-state'
+import { makeDialogService } from './dialog-service-stub'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ function makeEditor(sensors: { id: number; description: string }[], aliases: { n
 
     Object.assign(editor, {
         state,
+        dialogService: makeDialogService('ok'),
         toastService: { show: toastShow },
         editorDefaultView: { value: 'visual' as const },
         activeTab: 'visual' as const,
@@ -170,7 +172,7 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
         expect(state.syncAliasForId).toHaveBeenCalledWith(100, 102, 'TRACK1', 'Sensor', 'TRACK1')
     })
 
-    it('reindexes the pre-edit-id baseline after a row is removed, so the row that slides into its index does not inherit a stale one', () => {
+    it('reindexes the pre-edit-id baseline after a row is removed, so the row that slides into its index does not inherit a stale one', async () => {
         const { editor, state } = makeEditor([
             { id: 10, description: 'A' },
             { id: 20, description: 'B' },
@@ -182,7 +184,7 @@ describe('SensorsEditorCustomElement.updateSensor', () => {
         editor.captureRowBeforeEdit(2)
 
         // Remove row 0 (A) — B and C each shift down one index.
-        editor.removeSensor(0)
+        await editor.removeSensor(0)
 
         const idMap = (editor as unknown as { _idBeforeEdit: Map<number, number> })._idBeforeEdit
         // B's baseline (originally at idx 1) must now live at idx 0, not vanish or collide.

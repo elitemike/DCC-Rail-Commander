@@ -8,7 +8,7 @@
  * Run: pnpm test:e2e --grep "Turnout Editor"
  */
 
-import { test, expect, MOCK_TURNOUTS_H } from './fixtures'
+import { test, expect, MOCK_TURNOUTS_H, answerConfirmDialog } from './fixtures'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -468,6 +468,7 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('aliases-editor').getByText('1 entries')).toBeVisible()
         // Click Delete on the only alias row (we set exactly one)
         await page.locator('aliases-editor').getByRole('button', { name: 'Delete' }).first().click()
+        await answerConfirmDialog(page, 'confirm')
         await expect(page.getByText('No aliases')).toBeVisible({ timeout: 3_000 })
 
         // Return to turnout editor and select the same turnout

@@ -12,7 +12,7 @@
  * Run: pnpm test:e2e --grep "Event Handlers editor"
  */
 
-import { test, expect } from './fixtures'
+import { test, expect, answerConfirmDialog } from './fixtures'
 
 async function openEventHandlersEditor(page: import('@playwright/test').Page) {
     await page.getByText('Event Handlers', { exact: true }).first().click()
@@ -110,7 +110,14 @@ test.describe('Event Handlers editor', () => {
         await addHandler(page, 'ONRAILSYNCON')
         await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
 
-        await page.locator('event-handlers-editor nav[aria-label="Event handlers"] a button[title="Remove"]').click()
+        // Cancelling the confirm dialog must keep the handler.
+        const removeBtn = page.locator('event-handlers-editor nav[aria-label="Event handlers"] a button[title="Remove"]')
+        await removeBtn.click()
+        await answerConfirmDialog(page, 'cancel')
+        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
+
+        await removeBtn.click()
+        await answerConfirmDialog(page, 'confirm')
 
         await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(0)
         await expect(page.getByText('No event handlers.', { exact: false }).first()).toBeVisible()

@@ -23,6 +23,19 @@ import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 
 /**
+ * Answers the shared red confirm dialog that every destructive × / trash button opens.
+ * 'confirm' clicks its Delete button, 'cancel' clicks Cancel. Waits for the dialog first
+ * because it is opened via a dynamic import() and isn't in the DOM the instant the trigger
+ * is clicked.
+ */
+export async function answerConfirmDialog(page: Page, answer: 'confirm' | 'cancel'): Promise<void> {
+    const dialog = page.locator('[data-testid="confirm-dialog"]')
+    await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+    await dialog.getByRole('button', { name: answer === 'confirm' ? /^Delete$/ : /^Cancel$/ }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 5_000 })
+}
+
+/**
  * Windows can briefly hold a file handle open after Electron/PlatformIO subprocess
  * exit (antivirus/EDR real-time scanning, search indexing, delayed file-watch
  * flush), which turns a plain rmSync into an EPERM/EBUSY failure that has nothing

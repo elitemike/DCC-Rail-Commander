@@ -5,6 +5,7 @@ import { SensorsEditorCustomElement } from '../../src/renderer/src/components/vi
 import { SignalsEditorCustomElement } from '../../src/renderer/src/components/visual-editors/signals-editor'
 import { RoutesEditorCustomElement } from '../../src/renderer/src/components/visual-editors/routes-editor'
 import { AutomationEditorCustomElement } from '../../src/renderer/src/components/visual-editors/automation-editor'
+import { makeDialogService } from './dialog-service-stub'
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 // Real ConfigEditorState instance (not a mock) so these tests catch the actual
@@ -62,6 +63,7 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
         const editor = Object.create(SensorsEditorCustomElement.prototype) as SensorsEditorCustomElement
         Object.assign(editor, {
             state,
+            dialogService: makeDialogService('ok'),
             activeTab: 'visual',
             rawEditor: null,
             rawSnapshot: '',
@@ -92,12 +94,12 @@ describe('SensorsEditorCustomElement — visual edits mark dirty', () => {
         expect(state.sensors[0].description).toBe('Renamed')
     })
 
-    it('removeSensor marks the state dirty', () => {
+    it('removeSensor marks the state dirty', async () => {
         const state = makeConfigEditorState([{ name: 'mySensors.h', content: '' }])
         state.sensors = [{ id: 30, description: 'Occupancy' }]
 
         const editor = makeEditor(state)
-        editor.removeSensor(0)
+        await editor.removeSensor(0)
 
         expect(state.hasChanges).toBe(true)
         expect(state.sensors).toHaveLength(0)

@@ -1,4 +1,6 @@
 import { queueTask, resolve } from 'aurelia'
+import { IDialogService } from '@aurelia/dialog'
+import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { AutomationEntry } from '../../utils/myAutomationParser'
@@ -19,6 +21,7 @@ type RowTab = 'blocks' | 'text'
  *  and a shared abstraction would cost more than the duplication it removes. */
 export class AutomationsEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
+    private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)
     private readonly editorDefaultView = resolve(EditorDefaultViewService)
     activeTab: 'visual' | 'raw' = 'visual'
@@ -244,9 +247,12 @@ export class AutomationsEditorCustomElement {
         this.rowRawEditor?.switchModel(this.rowRawFilename, this.rowRawSnapshot)
     }
 
-    removeAutomation(idx: number, event?: Event) {
+    async removeAutomation(idx: number, event?: Event) {
         event?.stopPropagation()
-        const removedId = this.state.automations[idx]?.id
+        const entry = this.state.automations[idx]
+        if (!entry) return
+        if (!(await confirmAction(this.dialogService, `Delete "${this.getDisplayName(entry)}"?`, 'Are you sure you want to remove this automation?'))) return
+        const removedId = entry.id
         this.state.automations = this.state.automations.filter((_, i) => i !== idx)
         this.state.syncAll()
         if (this.selectedId === removedId) {
