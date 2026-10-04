@@ -19,8 +19,25 @@ export class TurnoutsViewCustomElement {
     readonly throttleService = resolve(ThrottleService)
     private readonly configEditorState = resolve(ConfigEditorState)
 
+    /** Turnouts marked HIDDEN (DCC-EX's "hide from throttles" literal) are left out unless this is on. Off by default; not persisted. */
+    showHidden = false
+
     turnoutFor(id: number): Turnout | undefined {
         return this.configEditorState.turnouts.find((t) => t.id === id)
+    }
+
+    isHiddenTurnout(id: number): boolean {
+        return this.turnoutFor(id)?.description === 'HIDDEN'
+    }
+
+    get hiddenCount(): number {
+        return this.configEditorState.turnouts.filter((t) => t.description === 'HIDDEN').length
+    }
+
+    get allHiddenAndCollapsed(): boolean {
+        return !this.showHidden
+            && this.throttleService.turnoutStatuses.length > 0
+            && this.hiddenCount >= this.throttleService.turnoutStatuses.length
     }
 
     /** A turnout is binary — Unknown just means "close it" hasn't been confirmed yet, so toggling from Unknown throws it. */

@@ -3,12 +3,20 @@
         <div if.bind="throttleService.turnoutStatuses.length === 0" class="text-gray-500 text-sm text-center py-12">
             No turnouts configured.
         </div>
+        <label if.bind="hiddenCount > 0" class="flex items-center gap-2 mb-3 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" checked.bind="showHidden" data-testid="turnouts-show-hidden" />
+            Show hidden turnouts (${hiddenCount})
+        </label>
+        <div if.bind="allHiddenAndCollapsed" data-testid="turnouts-all-hidden" class="text-gray-500 text-sm text-center py-12">
+            All turnouts are hidden.
+        </div>
         <div if.bind="throttleService.turnoutStatuses.length > 0" class="flex flex-col gap-2">
-            <div repeat.for="status of throttleService.turnoutStatuses" data-testid="turnout-row"
+            <template repeat.for="status of throttleService.turnoutStatuses">
+            <div if.bind="showHidden || !isHiddenTurnout(status.id)" data-testid="turnout-row"
                 data-turnout-id.bind="status.id" data-state.bind="status.state"
                 class="flex items-center gap-3 px-4 py-3 rounded-lg bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10">
                 <span class="flex-1 min-w-0">
-                    <span class="block text-sm font-medium text-gray-900 dark:text-gray-100 truncate">${turnoutFor(status.id).description}</span>
+                    <span class="block text-sm font-medium text-gray-900 dark:text-gray-100 truncate">${isHiddenTurnout(status.id) ? 'Hidden turnout' : turnoutFor(status.id).description}</span>
                     <span class="block text-xs text-gray-500">#${status.id} &middot; ${turnoutFor(status.id).type}</span>
                 </span>
                 <button type="button" click.trigger="toggle(status)" data-testid="turnout-toggle-button"
@@ -19,6 +27,7 @@
                     ${status.state === 'UNKNOWN' ? 'Unknown' : status.state === 'THROWN' ? 'Thrown' : 'Closed'}
                 </button>
             </div>
+            </template>
         </div>
     </div>
 </template>
