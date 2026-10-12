@@ -850,6 +850,24 @@ export class Workspace {
     }
 
     // ── Custom file management ────────────────────────────────────────────────
+    /** "+" button: pick between a blank raw file and a wizard-driven object. */
+    async startNewItem(): Promise<void> {
+        let kind: 'raw' | 'crossover' | undefined
+        try {
+            const { dialog } = await this.dialogService.open({
+                component: () =>
+                    import('../components/dialogs/new-item-dialog').then(m => m.NewItemDialog).catch(() => null),
+            })
+            const result = await dialog.closed
+            if (result.status === 'ok') kind = (result.value as { kind: 'raw' | 'crossover' } | undefined)?.kind
+        } catch {
+            // Dialog failed to load — fall back to the plain raw-file flow.
+            kind = 'raw'
+        }
+        if (kind === 'raw') this.startNewFile()
+        else if (kind === 'crossover') void this.updateSavedConfig()
+    }
+
     startNewFile(): void {
         this.newFileName = ''
         this.newFileError = ''

@@ -59,6 +59,7 @@ import {
     type VpinAllocation,
 } from '../config/hal-devices'
 import { isExampleConfigFile } from '../utils/product-source-files'
+import { buildCrossover, validateCrossover } from '../utils/new-object-generators/crossover'
 
 /**
  * Open/close tag that delimits the auto-managed #include block at the top of
@@ -450,6 +451,59 @@ export class ConfigEditorState {
         this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
+    }
+
+    /**
+     * "Create new object" wizard: combines existing turnouts under one new virtual turnout whose
+     * ONTHROW/ONCLOSE handlers (appended to myEvents.h) drive every member. Optionally marks the
+     * members HIDDEN so only the combined control shows in the throttle. Validates everything
+     * before mutating, and rolls back the new turnout if its alias is rejected.
+     */
+    createCrossover(input: {
+        masterId: number
+        masterName: string
+        masterAlias: string
+        memberIds: number[]
+        hideMembers: boolean
+    }): { ok: true } | { ok: false; reason: string } {
+        const alias = input.masterAlias.trim()
+        if (alias === '' && this.strictAliases) {
+            return { ok: false, reason: 'An alias is required when Strict aliases is enabled.' }
+        }
+        if (alias !== '') {
+            const aliasCheck = validateAliasName(alias)
+            if (!aliasCheck.ok) return aliasCheck
+        }
+        const members = input.memberIds.map(id => {
+            const aliasName = this.getPrimaryAliasNameForId(id, 'Turnout')
+            return { id, ref: aliasName || id }
+        })
+        const options = {
+            masterId: input.masterId,
+            masterName: input.masterName,
+            masterRef: alias || input.masterId,
+            members,
+        }
+        const error = validateCrossover(options, this.turnouts.map(t => t.id))
+        if (error) return { ok: false, reason: error }
+
+        const { turnout, handlers } = buildCrossover(options)
+        this.addTurnoutEntry(turnout)
+        if (alias !== '') {
+            const aliasResult = this.syncAliasForId(input.masterId, input.masterId, alias, 'Turnout')
+            if (!aliasResult.ok) {
+                this.removeTurnoutEntry(this.turnouts.findIndex(t => t.id === input.masterId))
+                return aliasResult
+            }
+        }
+        if (input.hideMembers) {
+            const memberIds = new Set(input.memberIds)
+            this.turnouts = this.turnouts.map(t => (memberIds.has(t.id) ? { ...t, description: 'HIDDEN' } : t))
+        }
+        this.eventHandlers = [...this.eventHandlers, ...handlers]
+        this.hasChanges = true
+        this._syncToInstallerState()
+        return { ok: true }
     }
 
     // ── mySensors.h ───────────────────────────────────────────────────────
