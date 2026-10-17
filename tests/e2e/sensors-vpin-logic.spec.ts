@@ -113,9 +113,9 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
 
         // Sensors editor's <vpin-picker> is unrestricted by `role`, so a servo-role
         // board (PCA9685) still shows up here — there's only one HAL device configured,
-        // so "the second <option>, after Direct MCU pin" unambiguously selects it without
+        // so "the first <option>" (boards are listed ahead of Direct MCU pin on an EX-CSB1) unambiguously selects it without
         // depending on the exact label text vpin-picker renders for it.
-        await row.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await row.locator('[data-field="pin-source"]').selectOption({ index: 0 })
         await row.locator('[data-field="pin-channel"]').selectOption({ label: 'Ch 3' })
 
         // Channel 3 of a board starting at VPin 100 is VPin 102 (1-based channel numbering).
@@ -147,7 +147,7 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
 
         // Move onto the board (channel 1) — for a board starting at VPin 100 this computes
         // back to the same VPin 100 the sensor already had.
-        await row.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await row.locator('[data-field="pin-source"]').selectOption({ index: 0 })
         await expect(aliasInput).toHaveValue('TRACK1')
 
         // Now change the channel again, without ever leaving/refocusing the row.
@@ -176,12 +176,12 @@ test.describe('Sensors VPin logic — HAL board channel', () => {
         const firstAlias = firstRow.locator('alias-picker input')
         await firstAlias.fill('FIRST_ALIAS')
         await firstAlias.blur()
-        await firstRow.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await firstRow.locator('[data-field="pin-source"]').selectOption({ index: 0 })
         await expect(firstAlias).toHaveValue('FIRST_ALIAS')
 
         await addSensor(page)
         const secondRow = sensorRows(page).nth(1)
-        await secondRow.locator('[data-field="pin-source"]').selectOption({ index: 1 })
+        await secondRow.locator('[data-field="pin-source"]').selectOption({ index: 0 })
         await secondRow.locator('[data-field="pin-channel"]').selectOption({ label: 'Ch 5' })
         await expect(secondRow.getByText('VPin 104', { exact: true })).toBeVisible()
 

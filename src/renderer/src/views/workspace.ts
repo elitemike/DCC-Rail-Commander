@@ -126,7 +126,10 @@ export class Workspace {
     }
 
     /** Cross-file navigation, e.g. the Startup row's "Edit in Turnouts" link. */
-    private navigateFileHandler = (e: Event): void => {
+    /** Lets nested editors (e.g. the turnout editor's "servo board required" prompt) jump to the Accessories pane. */
+    private navigateAccessoriesHandler = (): void => this.selectAccessoriesSection()
+
+    private navigateFileHandler =(e: Event): void => {
         const filename = (e as CustomEvent<{ filename: string }>).detail?.filename
         if (!filename) return
         const idx = this.state.configFiles.findIndex(f => f.name === filename)
@@ -726,6 +729,7 @@ export class Workspace {
 
         try {
             window.addEventListener('exinst:navigate-file', this.navigateFileHandler as EventListener)
+            window.addEventListener('exinst:navigate-accessories', this.navigateAccessoriesHandler)
         } catch {
             // noop in non-browser contexts
         }
@@ -734,6 +738,7 @@ export class Workspace {
     detaching(): void {
         try {
             window.removeEventListener('exinst:navigate-file', this.navigateFileHandler as EventListener)
+            window.removeEventListener('exinst:navigate-accessories', this.navigateAccessoriesHandler)
         } catch {
             // noop
         }
