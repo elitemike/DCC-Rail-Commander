@@ -5,6 +5,7 @@ import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
 import type { Turnout, ServoTurnout, TurnoutType, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
 import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
+import { getBoardSources, isCsb1Project } from '../../utils/vpin-picker-logic'
 import { ToastService } from '../../services/toast.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 import type { ServoCalibrationResult } from '../dialogs/servo-calibration-dialog'
@@ -340,9 +341,10 @@ export class TurnoutEditorCustomElement {
             defaultState: this.editBuffer.defaultState,
         }
         if (type === 'SERVO') {
+            if (!(await this._ensureServoBoard())) return
             const pin = await this._pickPin(this._nextFreeVpin())
             if (pin === null) return
-            this.editBuffer = { ...base, type: 'SERVO', pin, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' }
+            this.editBuffer ={ ...base, type: 'SERVO', pin, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' }
         } else if (type === 'DCC') {
             this.editBuffer = { ...base, type: 'DCC', addr: 0, subAddr: 0 }
         } else if (type === 'DCCL') {
@@ -375,9 +377,10 @@ export class TurnoutEditorCustomElement {
             // PWM-capable HAL board) before creating the entry, rather than
             // silently assigning one and letting the user hunt for the pin
             // field afterwards.
+            if (!(await this._ensureServoBoard())) return
             const pin = await this._pickPin(this._nextFreeVpin())
             if (pin === null) return
-            newEntry = { ...base, type: 'SERVO', pin, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' }
+            newEntry ={ ...base, type: 'SERVO', pin, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' }
         } else if (type === 'DCC') {
             newEntry = { ...base, type: 'DCC', addr: 0, subAddr: 0 }
         } else if (type === 'DCCL') {
@@ -405,6 +408,31 @@ export class TurnoutEditorCustomElement {
         const result = await dialog.closed
         if (result.status !== 'ok' || !result.value) return null
         return (result.value as { type: TurnoutType }).type
+    }
+
+    /**
+     * An EX-CSB1 has no free MCU pins, so a servo turnout needs a PCA9685 (or other servo-role) board
+     * declared on the Accessories tab. When there isn't one, explains that and offers to jump there.
+     * Returns true when a servo board exists and the pin picker can proceed.
+     */
+    private async _ensureServoBoard(): Promise<boolean> {
+        const isCsb1 = isCsb1Project(this.installerState.selectedDevice?.name, this.state.configHContent)
+        if (!isCsb1 || getBoardSources(this.state.halDevices, 'servo').length > 0) return true
+
+        const { dialog } = await this.dialogService.open({
+            component: () =>
+                import('../dialogs/confirm-dialog').then(m => m.ConfirmDialog).catch(() => null),
+            model: {
+                title: 'Servo board required',
+                message: 'The EX-CSB1 has no free pins for a servo, so servo turnouts need a PCA9685 servo module.',
+                detail: 'Add one on the Accessories tab (Device Settings), then come back to add the turnout.',
+                confirmLabel: 'Go to Accessories',
+                confirmClass: 'bg-blue-600 hover:bg-blue-500 text-white',
+            },
+        })
+        const result = await dialog.closed
+        if (result.status === 'ok') window.dispatchEvent(new CustomEvent('exinst:navigate-accessories'))
+        return false
     }
 
     /** Opens the small pin-select popup, pre-filled with `defaultPin`. Returns the chosen pin, or null if cancelled. */

@@ -13,6 +13,16 @@ import type { HalDeviceInstance } from '../config/hal-devices'
 
 export const DIRECT_PIN_SOURCE = 'direct'
 
+/**
+ * True for an EX-CSB1 project: the selected device is named as one, or config.h selects an EXCSB1
+ * motor driver (covers folders loaded without a device name). A CSB1 uses every MCU pin itself, so
+ * its servos/sensors can only ever sit on accessory boards, never a direct pin.
+ */
+export function isCsb1Project(deviceName: string | undefined, configH: string): boolean {
+    return (deviceName ?? '').toUpperCase().includes('CSB1')
+        || /#define\s+MOTOR_SHIELD_TYPE\s+EXCSB1/.test(configH)
+}
+
 export interface VpinSourceChannel {
     source: string
     channel: number
@@ -50,6 +60,17 @@ export function computeVpinForChannel(source: string, channel: number, boardSour
     const board = d ? getHalBoard(d.boardId) : undefined
     if (!d || !board || d.vpinStart == null) return null
     return d.vpinStart + (channel - 1)
+}
+
+/**
+ * Like getChannelOptions, but drops channels whose VPin is already claimed by a turnout/sensor/signal
+ * (`usedVpins`). Used when adding a new entry, so only still-free pins are offered.
+ */
+export function getAvailableChannelOptions(source: string, boardSources: HalDeviceInstance[], usedVpins: Set<number>): number[] {
+    const d = boardSources.find(x => x.instanceId === source)
+    if (!d || d.vpinStart == null) return []
+    const start = d.vpinStart
+    return getChannelOptions(source, boardSources).filter(ch => !usedVpins.has(start + ch - 1))
 }
 
 /** 1-based channel numbers (1..pinCount) for the selected board source — matches the physical silkscreen numbering. */
