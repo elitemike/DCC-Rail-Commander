@@ -10,7 +10,7 @@
                         class.bind="selected === opt.value
                             ? 'border-blue-500 bg-blue-500/10'
                             : 'border-gray-200 dark:border-white/10 hover:bg-gray-900/5 dark:hover:bg-white/5'">
-                        <input type="radio" name="turnout-type" model.bind="opt.value" checked.bind="selected" class="mt-1" />
+                        <input type="radio" name="turnout-type" model.bind="opt.value" checked.bind="selected" class="mt-1 accent-blue-500 outline-none focus:outline-none" />
                         <span class="flex flex-col gap-0.5">
                             <span class="text-sm font-medium text-gray-900 dark:text-white">${opt.label}</span>
                             <span class="text-xs text-gray-500 dark:text-gray-400">${opt.description}</span>
