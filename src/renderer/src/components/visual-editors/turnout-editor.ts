@@ -443,7 +443,7 @@ export class TurnoutEditorCustomElement {
             model: {
                 pin: defaultPin,
                 role: 'servo',
-                message: 'New turnouts use a servo — choose the VPin that drives it.',
+                message: 'New turnouts use a servo — choose the accessory board and channel the servo is wired to.',
             },
         })
         const result = await dialog.closed
