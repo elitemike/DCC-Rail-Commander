@@ -43,6 +43,41 @@ export class FolderTreePanelCustomElement {
     @bindable onRemove!: (path: string) => void
     @bindable onMove!: (index: number, folder: string) => void
 
+    /** localStorage key for the panel width — shared by default so every tree view resizes together (like the turnout editor's sidebar). */
+    @bindable widthKey = 'tree-panel-width'
+    width = 256
+    private static readonly MIN_WIDTH = 200
+    private static readonly MAX_WIDTH = 600
+
+    attached(): void {
+        try {
+            const saved = parseInt(localStorage.getItem(this.widthKey) ?? '', 10)
+            if (Number.isFinite(saved)) this.width = this._clamp(saved)
+        } catch { /* storage unavailable — keep the default */ }
+    }
+
+    private _clamp(w: number): number {
+        return Math.min(FolderTreePanelCustomElement.MAX_WIDTH, Math.max(FolderTreePanelCustomElement.MIN_WIDTH, w))
+    }
+
+    /** Drag handle on the panel's right edge. */
+    startResize(event: PointerEvent): void {
+        const handle = event.currentTarget as HTMLElement
+        const startX = event.clientX
+        const startWidth = this.width
+        handle.setPointerCapture(event.pointerId)
+        const move = (e: PointerEvent): void => { this.width = this._clamp(startWidth + e.clientX - startX) }
+        const up = (): void => {
+            handle.removeEventListener('pointermove', move)
+            handle.removeEventListener('pointerup', up)
+            handle.removeEventListener('pointercancel', up)
+            try { localStorage.setItem(this.widthKey, String(this.width)) } catch { /* ignore */ }
+        }
+        handle.addEventListener('pointermove', move)
+        handle.addEventListener('pointerup', up)
+        handle.addEventListener('pointercancel', up)
+    }
+
     /** Folder paths the user has collapsed (everything starts expanded). */
     collapsed: string[] = []
     private _dragIndex = -1

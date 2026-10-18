@@ -384,4 +384,19 @@ test.describe('Sensors Editor', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('// @tree: Yard')
         await expect(page.locator('div.monaco-editor')).toContainText('// Sensor')
     })
+
+    test('the tree panel can be resized by dragging its edge, within limits', async ({ workspacePage: page }) => {
+        await openSensorsEditor(page)
+        const panel = page.getByTestId('folder-tree-panel')
+        const before = (await panel.boundingBox())!.width
+        const handle = (await page.getByTestId('folder-tree-resize').boundingBox())!
+        const y = handle.y + handle.height / 2
+        await page.mouse.move(handle.x + handle.width / 2, y)
+        await page.mouse.down()
+        await page.mouse.move(handle.x + handle.width / 2 + 100, y, { steps: 5 })
+        await page.mouse.up()
+        const after = (await panel.boundingBox())!.width
+        expect(after).toBeGreaterThan(before + 80)
+        expect(after).toBeLessThanOrEqual(600)
+    })
 })

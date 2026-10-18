@@ -1,6 +1,8 @@
 <template>
-    <div data-testid="folder-tree-panel"
-        class="flex flex-col h-full w-64 shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+    <div data-testid="folder-tree-panel" css="width: ${width}px"
+        class="relative flex flex-col h-full shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+        <div data-testid="folder-tree-resize" pointerdown.trigger="startResize($event)" title="Drag to resize"
+            class="absolute top-0 -right-1 w-2 h-full cursor-col-resize z-10 hover:bg-blue-500/30"></div>
         <div class="flex items-center justify-between gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10">
             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">${label}</span>
             <span class="flex items-center gap-1">
