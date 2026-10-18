@@ -183,6 +183,22 @@ Two singletons (Aurelia DI, resolved via `resolve(...)`) hold nearly all cross-v
   (called by every turnout mutator immediately before `_syncToInstallerState()`) is their only write path; re-deriving
   them from stale file content there would silently undo the mutation that's still in flight.
 
+- **Turnout tree.** `turnout-editor` shows turnouts in a Syncfusion TreeView (like roster). Hierarchy is stored
+  *only* in `// @tree:` comment lines above entries in `myTurnouts.h` — `// @tree: Yard/East` (folder path),
+  `// @tree: #210` (child of VIRTUAL turnout 210), plus `// @tree-folder: X` for empty folders — so the EXRAIL
+  macro lines are never altered. Parsing/serializing is in `myAutomationParser.ts` (`parseTurnoutTreeMeta`,
+  `serializeTurnoutToFile`), pure tree logic in `utils/turnout-tree.ts`, state ops in `ConfigEditorState`
+  (`moveTurnoutTo`, `renameTurnoutFolder`, …). Placement (`folder`/`parentId`) is owned by state, not the editor's
+  edit buffer — `commitBuffer()` deliberately re-reads it from state so renames/drags aren't undone. SF tree nodes
+  have `pointer-events:none` on their text content, so any interactive child (the ⋯ button) needs
+  `pointer-events:auto`; e2e clicks on rows must target `.e-fullrow`. Virtual parents also drive `myEvents.h`:
+  the turnout mutators go through `_setTurnoutsAndSyncEvents()` (`utils/virtual-turnout-events.ts`), which adds/
+  removes `CLOSE(child)`/`THROW(child)` in the parent's `ONCLOSE(parent)`/`ONTHROW(parent)` handlers when a child
+  joins/leaves (or is deleted/renumbered), *creating* either handler if it's missing. It skips blocks whose headers
+  are shared with another trigger, and leaves handlers alone when the parent itself is deleted/renumbered/no longer
+  VIRTUAL. Raw edits of `myTurnouts.h` and hand-tagged files don't trigger it — the virtual turnout's form shows a
+  hint with an "Add missing" button (`syncVirtualParentEvents()`). The throttle's turnouts view
+  (`throttle/turnouts-view`) doesn't use the hierarchy yet.
 - Each config file has a matching visual editor under `components/visual-editors/` (e.g. `roster-editor`,
   `turnout-editor`, `sensors-editor`, `startup-editor`) with a Visual/Raw toggle. The Raw side is a Monaco editor;
   because Monaco debounces `onDidChangeContent` (~300ms) before pushing into Aurelia's two-way binding, any raw

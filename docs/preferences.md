@@ -30,11 +30,14 @@ save separately, so the only button in the dialog is **Done**.
 | Setting | Effect |
 |---|---|
 | Strict aliases | Requires an alias on every turnout, sensor, loco, route, and sequence — makes EXRAIL code read by name instead of by number. |
+| Alias sort order | How aliases are ordered within each type group in the [Aliases](config/aliases.md) editor and `myAliases.h`: by **Name** (alphabetical) or by **ID** (numeric). |
 | Default view | Which tab each config file editor opens on: **Visual** (form controls) or **Raw** (text). |
 
 ## Block Editor
 
 **Play sounds** — plays click, connect, and delete sound effects in the EXRAIL block editor.
+
+The dialog footer also shows the app's version number (it's on the home screen too).
 
 !!! tip "Theme and default view apply everywhere"
     Theme and Default view take effect immediately across the whole app, including editors already open — no

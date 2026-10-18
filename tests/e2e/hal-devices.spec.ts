@@ -178,10 +178,10 @@ test.describe('Accessories — VPin conflicts with consumers', () => {
         // Select a different (seeded, Direct-pin) turnout, then switch back —
         // this reuses the same picker instance (both are SERVO turnouts) and
         // re-derives its source/channel from the newly-bound value.
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await page.locator('#turnout-treeview li.e-list-item').filter({ hasText: 'Main Line Junction' }).first().locator('.e-fullrow').first().click()
         await expect(pinSourceSelect).toHaveValue('Direct MCU pin')
 
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'New Turnout' }).click()
+        await page.locator('#turnout-treeview li.e-list-item').filter({ hasText: 'New Turnout' }).first().locator('.e-fullrow').first().click()
         await expect(pinSourceSelect).not.toHaveValue('Direct MCU pin')
     })
 })

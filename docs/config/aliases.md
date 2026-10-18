@@ -10,8 +10,9 @@ scripts can refer to it by name instead of a raw numeric ID.
 
 Unlike Routes, Sequences, Automations, and Event Handlers, the Aliases editor has no Blocks canvas — the
 **Visual** tab is a form: an **Add Alias** row at the top, and the existing aliases below it, grouped by
-target type (Roster, Turnout, Sensor, Route, Sequence, Automation) and sorted alphabetically by name within
-each group. Each group header shows the group's name and entry count.
+target type (Roster, Turnout, Sensor, Route, Sequence, Automation). Within each group they're sorted
+alphabetically by name by default, or numerically by ID if you change **Alias sort order** in
+[Preferences](../preferences.md). Each group header shows the group's name and entry count.
 
 ## Adding an alias
 
@@ -36,7 +37,7 @@ of adding the alias.
 
 Edit a row's **Name** or **ID** directly and it commits when you leave the field (on blur). An edit that fails
 validation shows an error message and reverts the whole list to its last valid state, so no other row's edit
-is lost in the process. Click **×** on a row to remove that alias.
+is lost in the process. Click **×** on a row to remove that alias (you'll be asked to confirm first).
 
 ## Raw view
 

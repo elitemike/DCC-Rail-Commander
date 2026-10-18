@@ -8,6 +8,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
             aliases: [{ name: 'OLD_TURNOUT', value: '200', aliasType: 'Turnout' }],
             hasChanges: false,
             _syncToInstallerState: vi.fn(),
+            _refreshVirtualEventRefs: vi.fn(),
             validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
             getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
         }
@@ -34,6 +35,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
             ],
             hasChanges: false,
             _syncToInstallerState: vi.fn(),
+            _refreshVirtualEventRefs: vi.fn(),
             validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
             getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
         }
@@ -60,6 +62,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
             ],
             hasChanges: false,
             _syncToInstallerState: vi.fn(),
+            _refreshVirtualEventRefs: vi.fn(),
             validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
             getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
         }
@@ -88,6 +91,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
             aliases: [{ name: 'YARD_TURNOUT', value: '1', aliasType: 'Turnout' }],
             hasChanges: false,
             _syncToInstallerState: vi.fn(),
+            _refreshVirtualEventRefs: vi.fn(),
             validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
             getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Roster' }, { type: 'Turnout' }]),
         }
@@ -116,6 +120,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
             aliases: [] as { name: string; value: string; aliasType?: string }[],
             hasChanges: false,
             _syncToInstallerState: vi.fn(),
+            _refreshVirtualEventRefs: vi.fn(),
             validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
             getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Roster' }, { type: 'Turnout' }]),
         }
@@ -140,6 +145,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
                 hasChanges: false,
                 strictAliases: true,
                 _syncToInstallerState: vi.fn(),
+                _refreshVirtualEventRefs: vi.fn(),
                 validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
                 getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
             }
@@ -159,6 +165,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
                 hasChanges: false,
                 strictAliases: false,
                 _syncToInstallerState: vi.fn(),
+                _refreshVirtualEventRefs: vi.fn(),
                 validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
                 getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
             }
@@ -177,6 +184,7 @@ describe('ConfigEditorState.syncAliasForId', () => {
                 hasChanges: false,
                 strictAliases: true,
                 _syncToInstallerState: vi.fn(),
+                _refreshVirtualEventRefs: vi.fn(),
                 validateAliasTargetId: vi.fn().mockReturnValue({ ok: true }),
                 getObjectIdReferences: vi.fn().mockReturnValue([{ type: 'Turnout' }]),
             }

@@ -82,6 +82,16 @@ function turnoutEntry(page: import('@playwright/test').Page, text: string) {
     return page.locator('nav[aria-label="Turnouts"]').getByText(text)
 }
 
+/** A tree row (the <li>) for the turnout/folder whose label contains `text`. */
+function turnoutRow(page: import('@playwright/test').Page, text: string) {
+    return page.locator('#turnout-treeview li.e-list-item').filter({ hasText: text }).first()
+}
+
+/** Selects a tree row. Syncfusion handles selection on the full-row overlay, not the <li> centre. */
+async function selectTurnout(page: import('@playwright/test').Page, text: string) {
+    await turnoutRow(page, text).locator('.e-fullrow').first().click()
+}
+
 async function getDetailTextInput(page: import('@playwright/test').Page, label: string, index = 0) {
     return page
         .locator(`div:has(> label:has-text("${label}")) input[type="text"]`)
@@ -105,11 +115,11 @@ test.describe('Turnout Editor', () => {
     test('Strict aliases (on by default): each un-aliased turnout shows a warning dot in the visual list, which clears once aliased', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        const rows = page.locator('nav[aria-label="Turnouts"] a')
+        const rows = page.locator('#turnout-treeview li.e-list-item')
         await expect(rows.filter({ hasText: 'Main Line Junction' }).getByTestId('alias-warning-dot')).toBeVisible()
         await expect(rows.filter({ hasText: 'Yard Entry' }).getByTestId('alias-warning-dot')).toBeVisible()
 
-        await rows.filter({ hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await aliasInput.fill('MAIN_JUNCTION')
         await aliasInput.blur()
@@ -170,7 +180,7 @@ test.describe('Turnout Editor', () => {
     test('setting default state to THROWN generates AUTOSTART THROW in myStartup.h', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         // Strict aliases is on by default — this mock turnout has none yet.
         const aliasInput1 = await getDetailTextInput(page, 'Alias')
@@ -192,7 +202,7 @@ test.describe('Turnout Editor', () => {
     test('setting default state back to CLOSED removes THROW from myStartup.h', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
 
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         // Strict aliases is on by default — this mock turnout has none yet.
         const aliasInput2 = await getDetailTextInput(page, 'Alias')
@@ -213,7 +223,7 @@ test.describe('Turnout Editor', () => {
 
     test('row menu offers Clone and Delete, and closes on an outside click', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Yard Entry' })
+        const row = turnoutRow(page, 'Yard Entry')
 
         await row.locator('button[data-testid="turnout-row-menu"]').click()
         await expect(page.getByRole('menuitem', { name: /Clone/ })).toBeVisible()
@@ -223,12 +233,12 @@ test.describe('Turnout Editor', () => {
         await expect(page.locator('#turnout-splitter label', { hasText: 'Kind' })).not.toBeVisible()
 
         await page.mouse.click(5, 5)
-        await expect(page.locator('[data-testid="turnout-row-menu-popup"]')).not.toBeVisible()
+        await expect(page.locator('ul.e-contextmenu')).not.toBeVisible()
     })
 
     test('cloning a servo asks for ID, profile and hidden, then adds the twin', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' })
+        const row = turnoutRow(page, 'Main Line Junction')
         await row.locator('button[data-testid="turnout-row-menu"]').click()
         await page.getByRole('menuitem', { name: /Clone/ }).click()
 
@@ -253,7 +263,7 @@ test.describe('Turnout Editor', () => {
 
     test('cloning rejects an ID that is already used', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        const row = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' })
+        const row = turnoutRow(page, 'Main Line Junction')
         await row.locator('button[data-testid="turnout-row-menu"]').click()
         await page.getByRole('menuitem', { name: /Clone/ }).click()
 
@@ -274,7 +284,7 @@ test.describe('Turnout Editor', () => {
         await openTurnoutEditor(page)
 
         // Remove "Yard Entry" (second entry) via the row's ⋯ menu
-        const entryRow = page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Yard Entry' })
+        const entryRow = turnoutRow(page, 'Yard Entry')
         await entryRow.locator('button[data-testid="turnout-row-menu"]').click()
         await page.getByRole('menuitem', { name: 'Delete' }).click()
 
@@ -359,7 +369,7 @@ test.describe('Turnout Editor', () => {
         await expect(turnoutEntry(page, 'Water Tower')).toBeVisible({ timeout: 5_000 })
 
         // Click on it to edit, change description
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Water Tower' }).click()
+        await selectTurnout(page, 'Water Tower')
 
         // Strict aliases is on by default — this turnout has none yet (it was added via raw text).
         const waterTowerAliasInput = await getDetailTextInput(page, 'Alias')
@@ -384,7 +394,7 @@ test.describe('Turnout Editor', () => {
         await setMonacoContent(page, 'ALIAS(YARD_SWITCH, 200) // type: Turnout')
 
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await expect(aliasInput).toHaveValue('YARD_SWITCH')
@@ -392,7 +402,7 @@ test.describe('Turnout Editor', () => {
 
     test('editing a turnout alias updates myAliases.h with type metadata', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await aliasInput.fill('JUNCTION_MAIN')
@@ -406,7 +416,7 @@ test.describe('Turnout Editor', () => {
 
     test('can create a cross-type turnout ID conflict used by alias validation', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         // Strict aliases is on by default — this mock turnout has none yet.
         const aliasInput = await getDetailTextInput(page, 'Alias')
@@ -419,12 +429,12 @@ test.describe('Turnout Editor', () => {
         await idInput.fill('3')
         await idInput.blur()
 
-        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (3)' })).toBeVisible()
+        await expect(turnoutRow(page, 'Main Line Junction (3)')).toBeVisible()
     })
 
     test('allows alias creation when target ID is shared across object types', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         // Strict aliases is on by default — set an alias before the ID rename below can commit.
         const aliasInput = await getDetailTextInput(page, 'Alias')
@@ -437,7 +447,7 @@ test.describe('Turnout Editor', () => {
             .first()
         await idInput.fill('3')
         await idInput.blur()
-        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (3)' })).toBeVisible()
+        await expect(turnoutRow(page, 'Main Line Junction (3)')).toBeVisible()
 
         // Rename the alias itself — this is the actual "shared ID across object types" case under test.
         await aliasInput.fill('AMBIG_ALIAS')
@@ -457,7 +467,7 @@ test.describe('Turnout Editor', () => {
 
         // Open turnout editor, select the turnout with the alias, verify it shows
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await expect(aliasInput).toHaveValue('YARD_SWITCH')
 
@@ -473,7 +483,7 @@ test.describe('Turnout Editor', () => {
 
         // Return to turnout editor and select the same turnout
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         // Alias field must now be empty — deletion propagated via IObserverLocator
         const refreshedAliasInput = await getDetailTextInput(page, 'Alias')
@@ -488,7 +498,7 @@ test.describe('Turnout Editor', () => {
         await setMonacoContent(page, 'ALIAS(YARD_ENTRY_SW, 201) // type: Turnout')
 
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         const aliasInput = await getDetailTextInput(page, 'Alias')
         await aliasInput.click()
@@ -506,7 +516,7 @@ test.describe('Turnout Editor', () => {
 
     test('rejects committing a turnout ID that collides with another turnout in the visual editor', async ({ workspacePage: page }) => {
         await openTurnoutEditor(page)
-        await page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction' }).click()
+        await selectTurnout(page, 'Main Line Junction')
 
         const idInput = page
             .locator('div:has(> label:has-text("ID")) input[type="number"]')
@@ -516,7 +526,7 @@ test.describe('Turnout Editor', () => {
 
         await expect(page.getByText('Turnout ID 201 is already used by "Yard Entry (201)"')).toBeVisible()
         // The ID field is not persisted — the sidebar entry keeps its original ID.
-        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'Main Line Junction (200)' })).toBeVisible()
+        await expect(turnoutRow(page, 'Main Line Junction (200)')).toBeVisible()
     })
 
     // ── Invalid lines: commenting + toast ────────────────────────────────────
@@ -748,7 +758,7 @@ test('switching to another Configuration section after toggling Raw/Visual leave
     page.on('pageerror', (err) => consoleErrors.push(err.message))
 
     await openTurnoutEditor(page)
-    await page.getByText('Main Line Junction', { exact: false }).click()
+    await selectTurnout(page, 'Main Line Junction')
     await switchToRaw(page)
     await switchToVisual(page)
     await switchToRaw(page)
@@ -777,4 +787,188 @@ test('the Splitter layout still renders after leaving Turnouts and coming back',
 
     await openTurnoutEditor(page)
     await expect(page.locator('#turnout-splitter.e-splitter')).toBeVisible()
+})
+
+// ── Tree view: folders + VIRTUAL turnouts as parents ─────────────────────────
+// Placement is stored as `// @tree:` comments above each entry in myTurnouts.h, so the
+// SERVO_TURNOUT()/VIRTUAL_TURNOUT() macro lines (what EXRAIL actually reads) never change.
+
+test.describe('Turnout Editor — tree (folders and virtual parents)', () => {
+    const tree = (page: import('@playwright/test').Page) => page.locator('#turnout-treeview')
+
+    test('// @tree comments in the raw file build nested folders in the visual tree', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            '// @tree: Yard/East',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+            'SERVO_TURNOUT(201, 26, 410, 205, Fast, "Yard Entry")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]')).toBeVisible({ timeout: 5_000 })
+        const east = tree(page).locator('li[data-uid="folder:Yard/East"]')
+        await expect(east).toBeVisible()
+        await expect(east.getByText('Main Line Junction')).toBeVisible()
+        // The untagged turnout stays at the top level, outside the folder.
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]').getByText('Yard Entry')).toHaveCount(0)
+        await expect(tree(page).getByText('Yard Entry')).toBeVisible()
+    })
+
+    test('creating a folder and moving a turnout into it writes a // @tree comment and leaves the macro line untouched', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+
+        await page.getByTitle('New folder').click()
+        const dialog = page.locator('[data-testid="text-input-dialog"]')
+        await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+        await dialog.getByLabel('Folder name').fill('Yard')
+        await dialog.getByRole('button', { name: 'Create' }).click()
+
+        await expect(page.locator('[data-testid="turnout-folder-panel"]')).toBeVisible()
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]')).toBeVisible()
+
+        // An empty folder is remembered in the file too.
+        await switchToRaw(page)
+        expect(await getMonacoContent(page)).toContain('// @tree-folder: Yard')
+        await switchToVisual(page)
+
+        await selectTurnout(page, 'Main Line Junction')
+        // Strict aliases is on by default — alias first so the location change can commit the entry.
+        const aliasInput = await getDetailTextInput(page, 'Alias')
+        await aliasInput.fill('MAIN_JUNCTION')
+        await aliasInput.blur()
+        await page.getByTestId('turnout-location').selectOption('folder:Yard')
+
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]').getByText('Main Line Junction')).toBeVisible({ timeout: 5_000 })
+
+        await switchToRaw(page)
+        const raw = await getMonacoContent(page)
+        expect(raw).toContain('// @tree: Yard\nSERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")')
+        // Now implied by the turnout, so no separate empty-folder declaration.
+        expect(raw).not.toContain('@tree-folder')
+    })
+
+    test('a VIRTUAL turnout can be a branch; deleting it moves its children up instead of deleting them', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            'VIRTUAL_TURNOUT(300, "Yard Hub")',
+            '// @tree: #300',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        const hub = turnoutRow(page, 'Yard Hub')
+        await expect(hub).toBeVisible({ timeout: 5_000 })
+        await expect(hub.getByText('Main Line Junction')).toBeVisible()
+
+        await hub.locator('button[data-testid="turnout-row-menu"]').first().click()
+        await page.getByRole('menuitem', { name: 'Delete' }).click()
+        await answerConfirmDialog(page, 'confirm')
+
+        await expect(tree(page).getByText('Yard Hub')).toHaveCount(0)
+        await expect(tree(page).getByText('Main Line Junction')).toBeVisible()
+        await switchToRaw(page)
+        const raw = await getMonacoContent(page)
+        expect(raw).toContain('SERVO_TURNOUT(200')
+        expect(raw).not.toContain('@tree')
+    })
+
+    test('a VIRTUAL turnout shows whether its children are in its events, and can add the missing ones', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            'VIRTUAL_TURNOUT(300, "Yard Hub")',
+            '// @tree: #300',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        // Hand-tagged hierarchy: no ONCLOSE/ONTHROW handlers exist yet, so the hint warns.
+        await selectTurnout(page, 'Yard Hub')
+        const hint = page.getByTestId('virtual-events-hint')
+        await expect(hint).toContainText("1 of 1 child turnouts aren't in", { timeout: 5_000 })
+
+        await page.getByTestId('virtual-events-fix').click()
+        await expect(hint).toContainText('Events set up: 1 turnout in ONCLOSE/ONTHROW')
+        await expect(page.getByTestId('virtual-events-fix')).toHaveCount(0)
+    })
+
+    test('deleting a folder keeps its turnouts, moved up a level', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            '// @tree: Yard',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        await tree(page).locator('li[data-uid="folder:Yard"]').locator('button[data-testid="folder-row-menu"]').first().click()
+        await page.getByRole('menuitem', { name: 'Delete Folder' }).click()
+        await answerConfirmDialog(page, 'confirm')
+
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]')).toHaveCount(0)
+        await expect(tree(page).getByText('Main Line Junction')).toBeVisible()
+    })
+
+    test('dragging a turnout onto a folder moves it in', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            '// @tree-folder: Yard',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        const source = turnoutRow(page, 'Main Line Junction').locator('.e-fullrow').first()
+        const target = tree(page).locator('li[data-uid="folder:Yard"] > .e-fullrow').first()
+        await expect(target).toBeVisible({ timeout: 5_000 })
+        const s = (await source.boundingBox())!
+        const t = (await target.boundingBox())!
+        await page.mouse.move(s.x + 40, s.y + s.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(s.x + 40, s.y + s.height / 2 - 8, { steps: 4 })
+        await page.mouse.move(t.x + 40, t.y + t.height / 2, { steps: 10 })
+        await page.mouse.up()
+
+        await expect(tree(page).locator('li[data-uid="folder:Yard"]').getByText('Main Line Junction')).toBeVisible({ timeout: 5_000 })
+        await switchToRaw(page)
+        expect(await getMonacoContent(page)).toContain('// @tree: Yard\nSERVO_TURNOUT(200')
+    })
+
+    test('the drag cursor only shows the "+" over a folder or VIRTUAL turnout, not an ordinary turnout', async ({ workspacePage: page }) => {
+        await openTurnoutEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            '// @tree-folder: Yard',
+            'VIRTUAL_TURNOUT(300, "Yard Hub")',
+            'SERVO_TURNOUT(200, 25, 410, 205, Slow, "Main Line Junction")',
+            'SERVO_TURNOUT(201, 26, 410, 205, Fast, "Yard Entry")',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        const rowBox = async (text: string) => (await turnoutRow(page, text).locator('.e-fullrow').first().boundingBox())!
+        const folderBox = (await tree(page).locator('li[data-uid="folder:Yard"] > .e-fullrow').first().boundingBox())!
+        const s = await rowBox('Main Line Junction')
+        const hover = async (b: { x: number; y: number; height: number }) =>
+            page.mouse.move(b.x + 40, b.y + b.height / 2, { steps: 8 })
+
+        await page.mouse.move(s.x + 40, s.y + s.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(s.x + 40, s.y + s.height / 2 - 8, { steps: 4 })
+
+        const indicator = (cls: string) => page.locator(`.e-drag-item .${cls}`)
+
+        await hover(await rowBox('Yard Entry'))         // ordinary turnout: joins its level
+        await expect(indicator('e-drop-in')).toHaveCount(0)
+        await expect(indicator('e-drop-next')).toHaveCount(1)
+
+        await hover(await rowBox('Yard Hub'))           // VIRTUAL turnout: can nest
+        await expect(indicator('e-drop-in')).toHaveCount(1)
+
+        await hover(folderBox)                          // folder: can nest
+        await expect(indicator('e-drop-in')).toHaveCount(1)
+
+        await page.mouse.up()
+    })
 })

@@ -45,6 +45,11 @@ examples:
 A handler that needs a turnout, sensor, signal, or similar reference is only offered once at least one of that
 kind exists in your project.
 
+!!! tip "Handlers for Virtual turnouts can be generated"
+    When you place turnouts under a Virtual turnout in the [Turnouts](turnouts.md#virtual-turnouts-as-groups) tree,
+    the matching `ONCLOSE` / `ONTHROW` handlers are created and kept up to date for you. You can edit them here
+    like any other handler.
+
 "On sensor active" is only a logical helper: it exists in the dropdown to make the "active" concept easier to
 find and understand, but it compiles to the exact same `ONBUTTON` command as "On button pressed" — there is no
 separate `ONSENSORACTIVE` EXRAIL command. Because the Blocks canvas always re-derives a block's face from the

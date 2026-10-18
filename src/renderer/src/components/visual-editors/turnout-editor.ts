@@ -1,17 +1,42 @@
 import { IObserverLocator, queueTask, resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
+import { TreeView, ContextMenu } from '@syncfusion/ej2-navigations'
+import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs, DragAndDropEventArgs, NodeExpandEventArgs } from '@syncfusion/ej2-navigations'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import { InstallerState } from '../../models/installer-state'
 import type { Turnout, ServoTurnout, TurnoutType, TurnoutProfile, TurnoutDefaultState } from '../../utils/myAutomationParser'
 import { commentInvalidTurnoutLines } from '../../utils/myAutomationParser'
 import { getBoardSources, isCsb1Project } from '../../utils/vpin-picker-logic'
+import { virtualEventStatus, type VirtualEventStatus } from '../../utils/virtual-turnout-events'
+import { allFolderPaths, buildTurnoutTree, isValidFolderName, locationOf, wouldCreateCycle, type TurnoutLocation, type TurnoutTreeNode } from '../../utils/turnout-tree'
 import { ToastService } from '../../services/toast.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 import type { ServoCalibrationResult } from '../dialogs/servo-calibration-dialog'
 import type { TurnoutCloneResult } from '../dialogs/turnout-clone-dialog'
+import type { TextInputResult } from '../dialogs/text-input-dialog'
 
 type ViewTab = 'visual' | 'raw'
+
+// ── Tree node data (Syncfusion TreeView) ─────────────────────────────────────
+// Node ids: `folder:<path>` for organisation-only folders, `t:<index>` for turnouts (index into
+// state.turnouts — the tree is rebuilt whenever that array changes, so ids never go stale).
+
+interface TurnoutTreeData {
+    id: string
+    text: string
+    nodeType: 'folder' | 'turnout'
+    expanded: boolean
+    /** Folder path (folders) — empty for turnouts. */
+    path: string
+    /** Index into state.turnouts (turnouts) — -1 for folders. */
+    index: number
+    childCount: number
+    children?: TurnoutTreeData[]
+}
+
+const FOLDER_PREFIX = 'folder:'
+const TURNOUT_PREFIX = 't:'
 
 export class TurnoutEditorCustomElement {
     readonly state = resolve(ConfigEditorState)
@@ -29,7 +54,13 @@ export class TurnoutEditorCustomElement {
             if (this.editBuffer !== null) {
                 this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')
             }
+            this._syncTree()
         },
+    }
+
+    /** Repaints the tree when turnouts/folders change from anywhere (visual edit, raw edit, aliases). */
+    private readonly _treeSubscriber = {
+        handleChange: () => this._syncTree(),
     }
 
     readonly profiles: TurnoutProfile[] = ['Instant', 'Fast', 'Medium', 'Slow', 'Bounce']
@@ -98,6 +129,8 @@ export class TurnoutEditorCustomElement {
             this.aliasInput = this.state.getPrimaryAliasNameForId(this.editBuffer.id, 'Turnout')
         }
         this.observerLocator.getObserver(this.state, 'aliases').subscribe(this._aliasSubscriber)
+        this.observerLocator.getObserver(this.state, 'turnouts').subscribe(this._treeSubscriber)
+        this.observerLocator.getObserver(this.state, 'turnoutFolders').subscribe(this._treeSubscriber)
         queueTask(() => {
             if (this._detached) return
             if (!document.getElementById('turnout-splitter')) return
@@ -115,12 +148,15 @@ export class TurnoutEditorCustomElement {
                 },
             })
             this.splitterObj.appendTo('#turnout-splitter')
+            this._createTree()
         })
     }
 
     detaching(): void {
         this._detached = true
         this.observerLocator.getObserver(this.state, 'aliases').unsubscribe(this._aliasSubscriber)
+        this.observerLocator.getObserver(this.state, 'turnouts').unsubscribe(this._treeSubscriber)
+        this.observerLocator.getObserver(this.state, 'turnoutFolders').unsubscribe(this._treeSubscriber)
         if (this.activeTab === 'raw') {
             const text = this.rawEditor?.flush() ?? this._rawText
             this._processRawLeave(text)
@@ -131,6 +167,11 @@ export class TurnoutEditorCustomElement {
         // guard above) must not be allowed to throw here — that would abort
         // Aurelia's own teardown of this component mid-sequence and leave its DOM
         // stuck in place instead of being removed.
+        try { this.sfContextMenu?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.sfContextMenu = null
+        try { this.sfTree?.destroy() } catch { /* already broken — nothing to clean up */ }
+        this.sfTree = null
+        this._treeSignature = ''
         try { this.splitterObj?.destroy() } catch { /* already broken — nothing to clean up */ }
         this.splitterObj = null
     }
@@ -194,6 +235,10 @@ export class TurnoutEditorCustomElement {
     editBufferIndex: number | null = null
     aliasInput = ''
     errorMessage = ''
+    /** Path of the folder node selected in the tree (mutually exclusive with editBuffer), or null. */
+    selectedFolder: string | null = null
+    /** Value of the detail panel's Location select for the selected turnout: 'root' | `folder:<path>` | `parent:<id>`. */
+    locationValue = 'root'
 
     get turnouts(): Turnout[] {
         return this.state.turnouts
@@ -202,19 +247,16 @@ export class TurnoutEditorCustomElement {
     private _setBuffer(index: number, entry: Turnout): void {
         this.editBufferIndex = index
         this.editBuffer = { ...entry }
+        this.selectedFolder = null
+        this.locationValue = this._locationKey(entry)
         this.aliasInput = this.state.getPrimaryAliasNameForId(entry.id, 'Turnout')
         this.errorMessage = ''
-    }
-
-    selectEntry(entry: Turnout): void {
-        if (this.editBuffer !== null) this.commitBuffer()
-        const idx = this.state.turnouts.indexOf(entry)
-        if (idx !== -1) this._setBuffer(idx, entry)
     }
 
     clearBuffer(): void {
         this.editBuffer = null
         this.editBufferIndex = null
+        this.locationValue = 'root'
         this.aliasInput = ''
         this.errorMessage = ''
     }
@@ -260,7 +302,11 @@ export class TurnoutEditorCustomElement {
         const existing = this.state.turnouts?.[this.editBufferIndex]
         const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.id, 'Turnout') : ''
         const aliasChanged = !!existing && (existing.id !== this.editBuffer.id || existingAliasName !== this.aliasInput.trim())
-        this.state.updateTurnoutEntry(this.editBufferIndex, { ...this.editBuffer })
+        // Tree placement (folder / parentId) is owned by state, not the edit buffer: folder
+        // renames, drag-and-drop and parent deletion all change it behind the buffer's back, and
+        // writing the buffer's copy back would silently undo them.
+        const { folder: _folder, parentId: _parentId, ...bufferFields } = this.editBuffer
+        this.state.updateTurnoutEntry(this.editBufferIndex, { ...bufferFields, ...(existing ? locationOf(existing) : {}) } as Turnout)
         if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {
             const aliasResult = this.state.syncAliasForId(
                 existing.id,
@@ -358,8 +404,10 @@ export class TurnoutEditorCustomElement {
     }
 
     // ── Add / remove entries ──────────────────────────────────────────────────
-    async addEntry(): Promise<void> {
+    async addEntry(location?: TurnoutLocation): Promise<void> {
         if (this.editBuffer !== null) this.commitBuffer()
+        // New entries land in the selected folder / next to the selected turnout, unless told otherwise.
+        const placement = location ?? this._defaultContainer()
 
         // Ask which kind to create up front, rather than always creating a SERVO
         // and making the user switch kind afterward via the detail panel's Kind
@@ -369,7 +417,7 @@ export class TurnoutEditorCustomElement {
 
         const ts = this.state.turnouts
         const maxId = ts.length > 0 ? Math.max(...ts.map(t => t.id)) + 1 : 200
-        const base = { id: maxId, description: 'New Turnout', comment: '', defaultState: 'CLOSED' as TurnoutDefaultState }
+        const base = { id: maxId, description: 'New Turnout', comment: '', defaultState: 'CLOSED' as TurnoutDefaultState, ...placement }
 
         let newEntry: Turnout
         if (type === 'SERVO') {
@@ -505,35 +553,550 @@ export class TurnoutEditorCustomElement {
         this._setBuffer(idx, this.state.turnouts[idx])
     }
 
-    // ── Row context menu (⋯) ──────────────────────────────────────────────────
-    menuIndex: number | null = null
-    menuStyle = ''
+    // ── Tree view (Syncfusion TreeView + ContextMenu) ─────────────────────────
+    treeEl!: HTMLDivElement
+    contextMenuEl!: HTMLUListElement
+    private sfTree: TreeView | null = null
+    private sfContextMenu: ContextMenu | null = null
+    /** Id of the node last targeted by right-click or the ⋯ button. Cleared on menu close. */
+    private _contextMenuNodeId: string | null = null
+    /** True while we set selectedNodes programmatically, to keep nodeSelected from re-entering. */
+    private _suppressNodeSelected = false
+    /** Nodes the user collapsed; everything else renders expanded (also across rebuilds). */
+    private readonly _collapsed = new Set<string>()
+    /** child node id → parent node id, from the last _buildTreeData(); used to reveal a selection. */
+    private readonly _parentOf = new Map<string, string>()
+    /** Fingerprint of everything the tree displays — rebuild only when it changes (commits that change nothing must not refresh the tree mid-click). */
+    private _treeSignature = ''
 
-    openMenu(index: number, event: Event): void {
-        event.stopPropagation()
-        if (this.menuIndex === index) { this.closeMenu(); return }
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-        // position: fixed so the nav's overflow-y-auto can't clip the menu; right-aligned to the button.
-        this.menuStyle = `top:${Math.round(rect.bottom + 2)}px;right:${Math.round(window.innerWidth - rect.right)}px`
-        this.menuIndex = index
+    private _createTree(): void {
+        if (!this.treeEl) return
+        // drawNode (DOM API) instead of nodeTemplate: SF's template engine uses new Function(),
+        // which Electron's CSP blocks.
+        this.sfTree = new TreeView({
+            fields: {
+                dataSource: this._buildTreeData() as unknown as { [key: string]: Object }[],
+                id: 'id',
+                text: 'text',
+                child: 'children',
+                expanded: 'expanded',
+            },
+            allowEditing: false,
+            allowDragAndDrop: true,
+            drawNode: (args: DrawNodeEventArgs) => this._renderNodeContent(args.node, args.nodeData as unknown as TurnoutTreeData),
+            nodeSelected: (args: NodeSelectEventArgs) => this._onNodeSelected(args),
+            nodeExpanded: (args: NodeExpandEventArgs) => this._collapsed.delete(String((args.nodeData as { id?: string }).id ?? '')),
+            nodeCollapsed: (args: NodeExpandEventArgs) => this._collapsed.add(String((args.nodeData as { id?: string }).id ?? '')),
+            nodeDragging: (args: DragAndDropEventArgs) => this._onNodeDragging(args),
+            nodeDragStop: (args: DragAndDropEventArgs) => {
+                // We apply the move to state ourselves (the tree is rebuilt from it) — letting SF
+                // also move the DOM node would leave the two out of step.
+                args.cancel = true
+                this._onNodeDrop(args)
+            },
+        })
+        this.sfTree.appendTo(this.treeEl)
+        this._treeSignature = this._computeTreeSignature()
+        this._expandBranches(this._buildTreeData())
+        this._restoreSelection()
+
+        this.sfContextMenu = new ContextMenu({
+            target: '#turnout-treeview',
+            items: [
+                { text: 'Add Turnout Here…', id: 'add-here' },
+                { text: 'New Folder…', id: 'new-folder' },
+                { text: 'Rename Folder…', id: 'rename-folder' },
+                { text: 'Delete Folder', id: 'delete-folder' },
+                { text: 'Clone…', id: 'clone' },
+                { text: 'Delete', id: 'delete' },
+            ],
+            beforeOpen: (args: BeforeOpenCloseMenuEventArgs) => {
+                // A real right-click reaches beforeOpen before nodeClicked would run, so derive the
+                // node from the event target; the ⋯ button pre-sets _contextMenuNodeId instead.
+                if (!this._contextMenuNodeId) {
+                    const e = args.event as MouseEvent
+                    const nodeEl = (e?.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
+                    const data = nodeEl && this.sfTree ? this.sfTree.getTreeData(nodeEl.dataset.uid ?? '')?.[0] : undefined
+                    if (!data) { args.cancel = true; return }
+                    this._contextMenuNodeId = (data as { id: string }).id
+                }
+                const id = this._contextMenuNodeId
+                const menu = this.sfContextMenu!
+                if (id.startsWith(FOLDER_PREFIX)) {
+                    menu.showItems(['add-here', 'new-folder', 'rename-folder', 'delete-folder'], true)
+                    menu.hideItems(['clone', 'delete'], true)
+                } else {
+                    const t = this.state.turnouts[this._indexOfNode(id)]
+                    menu.hideItems(['new-folder', 'rename-folder', 'delete-folder'], true)
+                    menu.showItems(['clone', 'delete'], true)
+                    if (t?.type === 'VIRTUAL') menu.showItems(['add-here'], true)
+                    else menu.hideItems(['add-here'], true)
+                }
+            },
+            select: (args: MenuEventArgs) => this._onMenuSelect(args),
+            onClose: () => { this._contextMenuNodeId = null },
+        }, this.contextMenuEl)
     }
 
-    closeMenu(): void {
-        this.menuIndex = null
+    private _indexOfNode(id: string): number {
+        return id.startsWith(TURNOUT_PREFIX) ? parseInt(id.slice(TURNOUT_PREFIX.length), 10) : -1
     }
 
-    menuClone(): void {
-        const index = this.menuIndex
-        this.closeMenu()
-        if (index !== null) void this.cloneEntry(index)
+    private _computeTreeSignature(): string {
+        return JSON.stringify([
+            this.state.turnouts.map(t => [t.id, t.type, t.description, t.folder ?? null, t.parentId ?? null]),
+            this.state.turnoutFolders,
+            [...this.state.turnoutIdsNeedingAlias],
+        ])
     }
 
-    menuDelete(): void {
-        const index = this.menuIndex
-        this.closeMenu()
-        if (index !== null) void this.removeEntryByIndex(index)
+    /** Rebuilds the tree if anything it displays changed. Cheap no-op otherwise. */
+    private _syncTree(): void {
+        if (!this.sfTree || this._detached || this._treeSyncQueued) return
+        // Deferred: state changes notify synchronously, usually from the middle of an action that
+        // is about to change the selection too (e.g. add → select the new entry).
+        this._treeSyncQueued = true
+        queueTask(() => {
+            this._treeSyncQueued = false
+            if (!this.sfTree || this._detached) return
+            const signature = this._computeTreeSignature()
+            if (signature === this._treeSignature) return
+            this._treeSignature = signature
+            this._rebuildTree()
+        })
+    }
+    private _treeSyncQueued = false
+
+    private _buildTreeData(): TurnoutTreeData[] {
+        this._parentOf.clear()
+        const turnouts = this.state.turnouts
+        const convert = (node: TurnoutTreeNode, parentId: string | null): TurnoutTreeData => {
+            const id = node.kind === 'folder' ? `${FOLDER_PREFIX}${node.path}` : `${TURNOUT_PREFIX}${node.index}`
+            if (parentId) this._parentOf.set(id, parentId)
+            const children = node.children.map(c => convert(c, id))
+            return {
+                id,
+                text: node.kind === 'folder' ? node.name : this.getListLabel(turnouts[node.index]),
+                nodeType: node.kind,
+                expanded: !this._collapsed.has(id),
+                path: node.kind === 'folder' ? node.path : '',
+                index: node.kind === 'turnout' ? node.index : -1,
+                childCount: node.kind === 'folder' ? this._countTurnouts(node) : children.length,
+                children: children.length > 0 ? children : undefined,
+            }
+        }
+        return buildTurnoutTree(turnouts, this.state.turnoutFolders).map(n => convert(n, null))
     }
 
+    private _countTurnouts(node: TurnoutTreeNode): number {
+        return node.children.reduce((n, c) => n + (c.kind === 'turnout' ? 1 : 0) + this._countTurnouts(c), 0)
+    }
+
+    private _currentSelectionNodeId(): string | null {
+        if (this.editBufferIndex !== null) return `${TURNOUT_PREFIX}${this.editBufferIndex}`
+        if (this.selectedFolder !== null) return `${FOLDER_PREFIX}${this.selectedFolder}`
+        return null
+    }
+
+    private _rebuildTree(): void {
+        if (!this.sfTree) return
+        let data = this._buildTreeData()
+        // Make sure the selected node is visible: expand its collapsed ancestors, then rebuild once more.
+        const selected = this._currentSelectionNodeId()
+        let revealed = false
+        for (let p = selected ? this._parentOf.get(selected) : undefined; p; p = this._parentOf.get(p)) {
+            if (this._collapsed.delete(p)) revealed = true
+        }
+        if (revealed) data = this._buildTreeData()
+        this.sfTree.fields = {
+            dataSource: data as unknown as { [key: string]: Object }[],
+            id: 'id',
+            text: 'text',
+            child: 'children',
+            expanded: 'expanded',
+        }
+        // SF fires nodeSelected synchronously for the previously-selected node while refresh()
+        // restores selection — keep that from overwriting the edit buffer.
+        this._suppressNodeSelected = true
+        this.sfTree.refresh()
+        this._suppressNodeSelected = false
+        this._expandBranches(data)
+        this._restoreSelection()
+    }
+
+    /** SF's refresh() doesn't reliably honour `expanded` from the data, so expand every branch the user hasn't collapsed explicitly (same workaround as roster-editor). */
+    private _expandBranches(data: TurnoutTreeData[]): void {
+        if (!this.sfTree) return
+        const ids: string[] = []
+        const walk = (nodes: TurnoutTreeData[]) => {
+            for (const n of nodes) {
+                if (!n.children) continue
+                if (n.expanded) ids.push(n.id)
+                walk(n.children)
+            }
+        }
+        walk(data)
+        if (ids.length > 0) this.sfTree.expandAll(ids)
+    }
+
+    private _restoreSelection(): void {
+        const nodeId = this._currentSelectionNodeId()
+        if (!nodeId || !this.sfTree) return
+        this._suppressNodeSelected = true
+        this.sfTree.selectedNodes = [nodeId]
+        this._suppressNodeSelected = false
+    }
+
+    /** Builds a node's content with DOM APIs (no eval; CSP-safe). */
+    private _renderNodeContent(node: HTMLLIElement, data: TurnoutTreeData): void {
+        // SF structure: li > .e-text-content > .e-list-text
+        const textWrap = node.querySelector('.e-text-content') as HTMLElement | null
+        const textSpan = node.querySelector('.e-list-text') as HTMLElement | null
+        if (!textWrap || !textSpan) return
+        // position:relative + z-index:1 lifts content above e-fullrow so the ⋯ button gets pointer events.
+        textWrap.style.cssText = 'display:flex;align-items:center;gap:0.375rem;min-width:0;width:100%;position:relative;z-index:2;'
+        textSpan.style.cssText = 'flex:1;min-width:0;display:flex;align-items:center;gap:0.375rem;'
+        textSpan.textContent = ''
+
+        const span = (className: string, text: string): HTMLSpanElement => {
+            const el = document.createElement('span')
+            el.className = className
+            el.textContent = text
+            return el
+        }
+        const svgIcon = (className: string, paths: string[], testId?: string, title?: string): SVGSVGElement => {
+            const ns = 'http://www.w3.org/2000/svg'
+            const svg = document.createElementNS(ns, 'svg')
+            svg.setAttribute('class', className)
+            svg.setAttribute('viewBox', '0 0 24 24')
+            svg.setAttribute('fill', 'none')
+            svg.setAttribute('stroke', 'currentColor')
+            svg.setAttribute('stroke-width', '2')
+            svg.setAttribute('stroke-linecap', 'round')
+            svg.setAttribute('stroke-linejoin', 'round')
+            if (testId) svg.setAttribute('data-testid', testId)
+            if (title) {
+                const t = document.createElementNS(ns, 'title')
+                t.textContent = title
+                svg.appendChild(t)
+            }
+            for (const d of paths) {
+                const path = document.createElementNS(ns, 'path')
+                path.setAttribute('d', d)
+                svg.appendChild(path)
+            }
+            return svg
+        }
+
+        if (data.nodeType === 'folder') {
+            textSpan.appendChild(svgIcon('w-4 h-4 shrink-0 text-yellow-500', ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z']))
+            textSpan.appendChild(span('text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1', data.text))
+            textSpan.appendChild(span('text-xs text-gray-500 shrink-0', String(data.childCount)))
+        } else {
+            const t = this.state.turnouts[data.index]
+            if (!t) return
+            textSpan.appendChild(span('text-sm text-gray-700 dark:text-gray-300 truncate flex-1', data.text))
+            if (t.type === 'VIRTUAL') textSpan.appendChild(span('text-[10px] font-mono text-purple-500 shrink-0', 'virtual'))
+            if (this.isEntryHidden(t)) {
+                textSpan.appendChild(svgIcon('w-4 h-4 shrink-0 text-gray-500', [
+                    'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24',
+                    'M1 1l22 22',
+                ], 'hidden-turnout-icon', 'Hidden from throttles'))
+            }
+            if (this.state.turnoutIdsNeedingAlias.has(t.id)) {
+                const dot = span('w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0', '')
+                dot.title = 'No alias set (Strict aliases is enabled)'
+                dot.setAttribute('data-testid', 'alias-warning-dot')
+                textSpan.appendChild(dot)
+            }
+        }
+
+        // ⋯ button: opens the same ContextMenu a right-click does, via a synthetic contextmenu event.
+        const menuBtn = document.createElement('button')
+        menuBtn.type = 'button'
+        menuBtn.setAttribute('data-testid', data.nodeType === 'folder' ? 'folder-row-menu' : 'turnout-row-menu')
+        menuBtn.setAttribute('aria-haspopup', 'menu')
+        menuBtn.title = 'More actions'
+        menuBtn.className = 'shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:bg-gray-900/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors'
+        menuBtn.innerHTML = '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>'
+        // Above the text wrapper, which is itself above SF's absolutely-positioned e-fullrow overlay. pointer-events:auto because SF's tree CSS disables them on the text content (clicks are routed through e-fullrow).
+        menuBtn.style.cssText = 'position:relative;z-index:3;pointer-events:auto;'
+        const stop = (e: Event) => e.stopPropagation()
+        menuBtn.addEventListener('mousedown', stop)
+        menuBtn.addEventListener('mouseup', stop)
+        menuBtn.addEventListener('click', (e: MouseEvent) => {
+            e.stopPropagation()
+            this._contextMenuNodeId = data.id
+            const rect = menuBtn.getBoundingClientRect()
+            menuBtn.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true, clientX: Math.round(rect.left), clientY: Math.round(rect.bottom),
+            }))
+        })
+        textWrap.appendChild(menuBtn)
+    }
+
+    private _onNodeSelected(args: NodeSelectEventArgs): void {
+        if (this._suppressNodeSelected) return
+        const id = (args.nodeData as { id?: string }).id ?? ''
+        if (id.startsWith(FOLDER_PREFIX)) {
+            if (this.editBuffer !== null) this.commitBuffer()
+            this.clearBuffer()
+            this.selectedFolder = id.slice(FOLDER_PREFIX.length)
+        } else if (id.startsWith(TURNOUT_PREFIX)) {
+            const idx = this._indexOfNode(id)
+            if (this.editBuffer !== null) this.commitBuffer()
+            const entry = this.state.turnouts[idx]
+            if (entry) this._setBuffer(idx, entry)
+        }
+    }
+
+    private _onMenuSelect(args: MenuEventArgs): void {
+        const action = args.item.id
+        const nodeId = this._contextMenuNodeId ?? ''
+        if (nodeId.startsWith(FOLDER_PREFIX)) {
+            const path = nodeId.slice(FOLDER_PREFIX.length)
+            if (action === 'add-here') void this.addEntry({ folder: path })
+            else if (action === 'new-folder') void this.promptNewFolder(path)
+            else if (action === 'rename-folder') void this.promptRenameFolder(path)
+            else if (action === 'delete-folder') void this.deleteFolder(path)
+            return
+        }
+        const index = this._indexOfNode(nodeId)
+        const t = this.state.turnouts[index]
+        if (!t) return
+        if (action === 'clone') void this.cloneEntry(index)
+        else if (action === 'delete') void this.removeEntryByIndex(index)
+        else if (action === 'add-here' && t.type === 'VIRTUAL') void this.addEntry({ parentId: t.id })
+    }
+
+    /**
+     * Picks the drag cursor icon to match what a drop would do (see _onNodeDrop): the "+" (drop-in)
+     * only over somewhere the node can really nest — a folder or a VIRTUAL turnout. Over an ordinary
+     * turnout the drop just joins that turnout's level, so it gets the sibling marker instead; over
+     * anything the drop would refuse, the no-drop icon.
+     */
+    private _onNodeDragging(args: DragAndDropEventArgs): void {
+        if (!this.sfTree) return
+        const draggedId = String((args.draggedNodeData as { id?: string }).id ?? '')
+        const targetEl = (args.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
+        if (!targetEl) return // blank space: leave SF's own indicator (drop to top level)
+        const targetId = (this.sfTree.getTreeData(targetEl.dataset.uid ?? '')?.[0] as { id?: string } | undefined)?.id
+        if (!targetId) return
+        if (targetId === draggedId) { args.dropIndicator = 'e-no-drop'; return }
+
+        const targetIsFolder = targetId.startsWith(FOLDER_PREFIX)
+        if (draggedId.startsWith(FOLDER_PREFIX)) {
+            const from = draggedId.slice(FOLDER_PREFIX.length)
+            const into = targetIsFolder ? targetId.slice(FOLDER_PREFIX.length) : null
+            // A folder only nests in another folder, never in itself or its own subfolders.
+            args.dropIndicator = into !== null && into !== from && !into.startsWith(`${from}/`) ? 'e-drop-in' : 'e-no-drop'
+            return
+        }
+
+        if (targetIsFolder) { args.dropIndicator = 'e-drop-in'; return }
+        const target = this.state.turnouts[this._indexOfNode(targetId)]
+        const index = this._indexOfNode(draggedId)
+        if (!target || index < 0) { args.dropIndicator = 'e-no-drop'; return }
+        if (target.type !== 'VIRTUAL') { args.dropIndicator = 'e-drop-next'; return }
+        args.dropIndicator = wouldCreateCycle(this.state.turnouts, index, target.id) ? 'e-no-drop' : 'e-drop-in'
+    }
+
+    /** Applies a drag-and-drop: onto a folder / VIRTUAL turnout nests inside it; onto any other turnout joins its level; onto blank space goes to the top. */
+    private _onNodeDrop(args: DragAndDropEventArgs): void {
+        if (!this.sfTree) return
+        const draggedId = String((args.draggedNodeData as { id?: string }).id ?? '')
+        const targetEl = (args.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
+        const targetData = targetEl ? this.sfTree.getTreeData(targetEl.dataset.uid ?? '')?.[0] as { id?: string } | undefined : undefined
+        const targetId = targetData?.id ?? null
+        if (targetId === draggedId) return
+
+        if (draggedId.startsWith(FOLDER_PREFIX)) {
+            const from = draggedId.slice(FOLDER_PREFIX.length)
+            let parent = ''
+            if (targetId?.startsWith(FOLDER_PREFIX)) parent = targetId.slice(FOLDER_PREFIX.length)
+            else if (targetId) return this._toastCannotMove('A folder can only be moved into another folder or to the top level.')
+            const name = from.split('/').pop()!
+            const to = parent ? `${parent}/${name}` : name
+            if (to === from) return
+            this._commitPending()
+            if (!this.state.renameTurnoutFolder(from, to)) return this._toastCannotMove(`A folder named "${name}" already exists there.`)
+            if (this.selectedFolder !== null && (this.selectedFolder === from || this.selectedFolder.startsWith(`${from}/`))) {
+                this.selectedFolder = to + this.selectedFolder.slice(from.length)
+            }
+            this._afterTreeChange()
+            return
+        }
+
+        const index = this._indexOfNode(draggedId)
+        if (index < 0) return
+        let loc: TurnoutLocation = {}
+        if (targetId?.startsWith(FOLDER_PREFIX)) loc = { folder: targetId.slice(FOLDER_PREFIX.length) }
+        else if (targetId) {
+            const target = this.state.turnouts[this._indexOfNode(targetId)]
+            if (!target) return
+            loc = target.type === 'VIRTUAL' ? { parentId: target.id } : locationOf(target)
+        }
+        this._commitPending()
+        if (!this.state.moveTurnoutTo(index, loc)) return this._toastCannotMove('A turnout can only be nested under a Virtual turnout, and not under itself or one of its own children.')
+        this._afterTreeChange()
+    }
+
+    private _toastCannotMove(content: string): void {
+        this.toastService.show({ title: "Can't Move Here", content, cssClass: 'e-toast-warning' })
+    }
+
+    /** Commits any in-progress edit before a structural change (so its values aren't lost or applied late). */
+    private _commitPending(): void {
+        if (this.editBuffer !== null) this.commitBuffer()
+    }
+
+    /** After a move/rename/delete: re-read the selected turnout's placement and repaint the tree. */
+    private _afterTreeChange(): void {
+        if (this.editBufferIndex !== null) {
+            const fresh = this.state.turnouts[this.editBufferIndex]
+            if (fresh) this.locationValue = this._locationKey(fresh)
+        }
+        this._treeSignature = ''
+        this._syncTree()
+    }
+
+    // ── Folders ───────────────────────────────────────────────────────────────
+    private async _promptName(title: string, label: string, value: string, confirmLabel: string, validate: (v: string) => string): Promise<string | null> {
+        const { dialog } = await this.dialogService.open({
+            component: () => import('../dialogs/text-input-dialog').then(m => m.TextInputDialog).catch(() => null),
+            model: { title, label, value, confirmLabel, validate },
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return null
+        return (result.value as TextInputResult).value
+    }
+
+    /** Where "New Folder" / "Add" should put things by default: the selected folder, else the selected turnout's own level. */
+    private _defaultContainer(): TurnoutLocation {
+        if (this.selectedFolder !== null) return { folder: this.selectedFolder }
+        if (this.editBufferIndex !== null) {
+            const t = this.state.turnouts[this.editBufferIndex]
+            if (t?.type === 'VIRTUAL') return { parentId: t.id }
+            if (t) return locationOf(t)
+        }
+        return {}
+    }
+
+    /** Creates a folder inside `parentPath` (default: the selected folder, or the selected turnout's folder). */
+    async promptNewFolder(parentPath?: string): Promise<void> {
+        const parent = parentPath ?? this._defaultContainer().folder ?? ''
+        const existing = new Set(allFolderPaths(this.state.turnouts, this.state.turnoutFolders))
+        const name = await this._promptName(
+            parent ? `New folder in "${parent}"` : 'New folder',
+            'Folder name',
+            '',
+            'Create',
+            v => (!isValidFolderName(v) ? 'Enter a name (it can’t contain “/”).' : existing.has(parent ? `${parent}/${v}` : v) ? 'A folder with that name already exists here.' : ''),
+        )
+        if (name === null) return
+        const path = parent ? `${parent}/${name}` : name
+        this._commitPending()
+        if (!this.state.addTurnoutFolder(path)) return
+        this.clearBuffer()
+        this.selectedFolder = path
+        this._treeSignature = ''
+        this._syncTree()
+    }
+
+    async promptRenameFolder(path: string): Promise<void> {
+        const parent = path.split('/').slice(0, -1).join('/')
+        const current = path.split('/').pop()!
+        const existing = new Set(allFolderPaths(this.state.turnouts, this.state.turnoutFolders))
+        const name = await this._promptName(
+            'Rename folder',
+            'Folder name',
+            current,
+            'Rename',
+            v => (!isValidFolderName(v) ? 'Enter a name (it can’t contain “/”).' : v !== current && existing.has(parent ? `${parent}/${v}` : v) ? 'A folder with that name already exists here.' : ''),
+        )
+        if (name === null || name === current) return
+        const to = parent ? `${parent}/${name}` : name
+        this._commitPending()
+        if (!this.state.renameTurnoutFolder(path, to)) return
+        if (this.selectedFolder !== null && (this.selectedFolder === path || this.selectedFolder.startsWith(`${path}/`))) {
+            this.selectedFolder = to + this.selectedFolder.slice(path.length)
+        }
+        this._afterTreeChange()
+    }
+
+    /** Deletes a folder after confirmation; its turnouts and subfolders move up one level (nothing else is deleted). */
+    async deleteFolder(path: string): Promise<void> {
+        const confirmed = await this._confirm(`Delete folder "${path.split('/').pop()}"?`, 'Its turnouts and subfolders will move up one level — no turnouts are deleted.')
+        if (!confirmed) return
+        this._commitPending()
+        this.state.deleteTurnoutFolder(path)
+        if (this.selectedFolder !== null && (this.selectedFolder === path || this.selectedFolder.startsWith(`${path}/`))) {
+            this.selectedFolder = null
+        }
+        this._afterTreeChange()
+    }
+
+    // ── Location select (detail panel) ────────────────────────────────────────
+    private _locationKey(t: Turnout): string {
+        if (t.parentId !== undefined) return `parent:${t.parentId}`
+        if (t.folder) return `folder:${t.folder}`
+        return 'root'
+    }
+
+    /** Everywhere the selected turnout could live: top level, any folder, any other VIRTUAL turnout that isn't below it. */
+    get locationOptions(): { value: string; label: string }[] {
+        const options = [{ value: 'root', label: 'Top level' }]
+        for (const path of allFolderPaths(this.state.turnouts, this.state.turnoutFolders)) {
+            options.push({ value: `folder:${path}`, label: `Folder: ${path.split('/').join(' / ')}` })
+        }
+        const selfIndex = this.editBufferIndex
+        this.state.turnouts.forEach((t, i) => {
+            if (t.type !== 'VIRTUAL' || i === selfIndex) return
+            if (selfIndex !== null && wouldCreateCycle(this.state.turnouts, selfIndex, t.id)) return
+            options.push({ value: `parent:${t.id}`, label: `Under: ${this.getListLabel(t)}` })
+        })
+        return options
+    }
+
+    onLocationChange(): void {
+        if (this.editBuffer === null || this.editBufferIndex === null) return
+        const key = this.locationValue
+        const loc: TurnoutLocation = key.startsWith('folder:') ? { folder: key.slice(7) } : key.startsWith('parent:') ? { parentId: Number(key.slice(7)) } : {}
+        this.commitBuffer()
+        if (this.errorMessage) {
+            this.locationValue = this._locationKey(this.state.turnouts[this.editBufferIndex])
+            return
+        }
+        if (!this.state.moveTurnoutTo(this.editBufferIndex, loc)) {
+            this.locationValue = this._locationKey(this.state.turnouts[this.editBufferIndex])
+            return
+        }
+        this._afterTreeChange()
+    }
+
+    /** Event coverage of the VIRTUAL turnout being edited (null for any other kind) — drives the hint in the form. */
+    get virtualEvents(): (VirtualEventStatus & { childCount: number }) | null {
+        if (this.editBuffer?.type !== 'VIRTUAL') return null
+        const id = this.editBuffer.id
+        const children = this.state.turnouts.filter(t => t.parentId === id).map(t => t.id)
+        return { ...virtualEventStatus(this.state.eventHandlers, id, children, id => this.state.turnoutAliasName(id)), childCount: children.length }
+    }
+
+    addMissingVirtualEvents(): void {
+        if (this.editBuffer?.type === 'VIRTUAL') this.state.syncVirtualParentEvents(this.editBuffer.id)
+    }
+
+    get selectedFolderName(): string {
+        return this.selectedFolder?.split('/').pop() ?? ''
+    }
+
+    get selectedFolderItemCount(): number {
+        const path = this.selectedFolder
+        if (path === null) return 0
+        return this.state.turnouts.filter(t => t.folder === path || t.folder?.startsWith(`${path}/`)).length
+    }
+
+    // ── Row actions ───────────────────────────────────────────────────────────
     async removeEntryByIndex(index: number, event?: Event): Promise<void> {
         event?.stopPropagation()
         const entry = this.state.turnouts[index]
