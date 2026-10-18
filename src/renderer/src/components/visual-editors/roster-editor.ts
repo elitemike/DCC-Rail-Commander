@@ -1,9 +1,12 @@
 import { IObserverLocator, queueTask, resolve } from 'aurelia'
+import { loadTreeWidth, saveTreeWidth } from '../../utils/tree-width'
 import { IDialogService } from '@aurelia/dialog'
 import { TreeView, ContextMenu } from '@syncfusion/ej2-navigations'
-import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs } from '@syncfusion/ej2-navigations'
+import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs, DragAndDropEventArgs } from '@syncfusion/ej2-navigations'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
+import { allFolderPaths, buildFolderTree, isValidFolderName, itemIndicesUnder, type FolderTreeNode } from '../../utils/folder-tree'
+import type { TextInputResult } from '../dialogs/text-input-dialog'
 import type { Roster, RosterFunction, DefineGroup } from '../../utils/myAutomationParser'
 import {
     getRealFunctions,
@@ -29,8 +32,22 @@ interface TreeNodeData {
     nodeType: string
     macroName: string
     rosterIdx: string
+    /** Folder path (folders), or the folder a #define group sits in ('' = top level). */
+    folderPath?: string
     expanded?: boolean
     children?: TreeNodeData[]
+}
+
+const FOLDER_PREFIX = 'folder:'
+
+/** Node id of a #define group: unique per folder, since one macro can appear under several folders. */
+const groupNodeId = (macroName: string, folderPath: string): string => (folderPath ? `group:${macroName}@${folderPath}` : `group:${macroName}`)
+
+/** Splits a `group:` node id back into the macro name and the folder it sits in. */
+function parseGroupNodeId(id: string): { macroName: string; folderPath: string } {
+    const body = id.slice('group:'.length)
+    const at = body.indexOf('@')
+    return at < 0 ? { macroName: body, folderPath: '' } : { macroName: body.slice(0, at), folderPath: body.slice(at + 1) }
 }
 
 // ── Node content renderer (CSP-safe, no eval) ────────────────────────────────
@@ -138,8 +155,21 @@ export class RosterEditorCustomElement {
                     expanded: 'expanded',
                 },
                 allowEditing: false,
+                allowDragAndDrop: true,
                 drawNode: (args: DrawNodeEventArgs) => {
                     this._renderNodeContent(args.node, args.nodeData as unknown as TreeNodeData)
+                },
+                // Only locos and folders can be dragged (a #define group follows its locos).
+                nodeDragStart: (args: DragAndDropEventArgs) => {
+                    const id = String((args.draggedNodeData as { id?: string }).id ?? '')
+                    if (!id.startsWith('loco:') && !id.startsWith(FOLDER_PREFIX)) args.cancel = true
+                },
+                nodeDragging: (args: DragAndDropEventArgs) => this._onNodeDragging(args),
+                nodeDragStop: (args: DragAndDropEventArgs) => {
+                    // The move is applied to state and the tree rebuilt from it - letting SF also
+                    // move the DOM node would leave the two out of step.
+                    args.cancel = true
+                    this._onNodeDrop(args)
                 },
                 nodeSelected: (args: NodeSelectEventArgs) => this._onNodeSelected(args),
                 // Select the right-clicked node so _contextMenuNodeId is populated
@@ -167,6 +197,9 @@ export class RosterEditorCustomElement {
                     { text: 'Clone', id: 'clone' },
                     { text: 'Delete', id: 'delete' },
                     { text: 'Rename Group', id: 'rename-group' },
+                    { text: 'New Folder\u2026', id: 'new-folder' },
+                    { text: 'Rename Folder\u2026', id: 'rename-folder' },
+                    { text: 'Delete Folder', id: 'delete-folder' },
                 ],
                 beforeOpen: (args: BeforeOpenCloseMenuEventArgs) => {
                     // If _contextMenuNodeId was not pre-set (real right-click path —
@@ -182,14 +215,13 @@ export class RosterEditorCustomElement {
                         if (!nodeData?.[0]) { args.cancel = true; return }
                         this._contextMenuNodeId = (nodeData[0] as { id: string }).id
                     }
-                    const isGroup = this._contextMenuNodeId.startsWith('group:')
-                    if (isGroup) {
-                        this.sfContextMenu!.hideItems(['clone', 'delete'], true)
-                        this.sfContextMenu!.showItems(['rename-group'], true)
-                    } else {
-                        this.sfContextMenu!.showItems(['clone', 'delete'], true)
-                        this.sfContextMenu!.hideItems(['rename-group'], true)
-                    }
+                    const all = ['clone', 'delete', 'rename-group', 'new-folder', 'rename-folder', 'delete-folder']
+                    const id = this._contextMenuNodeId
+                    const show = id.startsWith(FOLDER_PREFIX) ? ['new-folder', 'rename-folder', 'delete-folder']
+                        : id.startsWith('group:') ? ['rename-group']
+                            : ['clone', 'delete']
+                    this.sfContextMenu!.hideItems(all.filter(i => !show.includes(i)), true)
+                    this.sfContextMenu!.showItems(show, true)
                 },
                 select: (args: MenuEventArgs) => this._onMenuSelect(args),
                 onClose: () => { this._contextMenuNodeId = null },
@@ -244,10 +276,10 @@ export class RosterEditorCustomElement {
     }
 
     private _loadSidebarWidth(): string {
-        try { return localStorage.getItem('roster-editor-sidebar-width') ?? '256px' } catch { return '256px' }
+        return `${loadTreeWidth()}px`
     }
     private _saveSidebarWidth(size: string): void {
-        try { localStorage.setItem('roster-editor-sidebar-width', size) } catch { /* ignore */ }
+        saveTreeWidth(parseInt(size, 10))
     }
 
     // ── Raw snapshot for Monaco ───────────────────────────────────────────────
@@ -275,46 +307,19 @@ export class RosterEditorCustomElement {
     /** True while we are programmatically setting selectedNodes to avoid re-entrant nodeSelected → rebuild loops. */
     private _suppressNodeSelected = false
 
+    /**
+     * Tree layers, outermost first: user folders (`// @tree:` comments) -> #define groups -> locos.
+     * A #define group is *not* a top-level node: it appears inside whichever folder holds its locos
+     * (so one macro can show up under several folders, or at the top level), and locos with no
+     * #define sit directly in their folder. The macros and ROSTER lines themselves never change.
+     */
     private _buildTreeData(): TreeNodeData[] {
-        const { groups, ungrouped } = deriveDefineGroups(this.state.roster)
-        const nodes: TreeNodeData[] = []
+        const roster = this.state.roster
+        const plural = (n: number): string => (n === 1 ? '1 loco' : `${n} locos`)
 
-        for (const group of groups) {
-            const locoCount = group.rosterIndices.length
-            const childCount = locoCount === 1 ? '1 loco' : `${locoCount} locos`
-            const displayText = group.friendlyName || group.macroName
-            nodes.push({
-                id: `group:${group.macroName}`,
-                text: displayText,
-                displayText,
-                dccAddress: '',
-                fnCount: '',
-                childCount,
-                nodeType: 'group',
-                macroName: group.macroName,
-                rosterIdx: '',
-                expanded: true,
-                children: group.rosterIndices.map(i => {
-                    const entry = this.state.roster[i]
-                    return {
-                        id: `loco:${i}`,
-                        text: entry.name,
-                        displayText: entry.name,
-                        dccAddress: String(entry.dccAddress),
-                        fnCount: String(getRealFunctions(entry).length),
-                        childCount: '',
-                        nodeType: 'loco',
-                        macroName: group.macroName,
-                        rosterIdx: String(i),
-                        expanded: false,
-                    }
-                }),
-            })
-        }
-
-        for (const i of ungrouped) {
-            const entry = this.state.roster[i]
-            nodes.push({
+        const locoNode = (i: number, macroName: string): TreeNodeData => {
+            const entry = roster[i]
+            return {
                 id: `loco:${i}`,
                 text: entry.name,
                 displayText: entry.name,
@@ -322,13 +327,77 @@ export class RosterEditorCustomElement {
                 fnCount: String(getRealFunctions(entry).length),
                 childCount: '',
                 nodeType: 'loco',
-                macroName: '',
+                macroName,
                 rosterIdx: String(i),
                 expanded: false,
-            })
+            }
         }
 
-        return nodes
+        /** The #define groups and loose locos among `indices`, all of which live directly in `folderPath`. */
+        const levelNodes = (indices: number[], folderPath: string): TreeNodeData[] => {
+            const byMacro = new Map<string, number[]>()
+            const loose: number[] = []
+            for (const i of indices) {
+                const macro = roster[i].functionMacro
+                if (!macro) { loose.push(i); continue }
+                const list = byMacro.get(macro)
+                if (list) list.push(i)
+                else byMacro.set(macro, [i])
+            }
+            const nodes: TreeNodeData[] = []
+            for (const [macroName, idxs] of byMacro) {
+                const displayText = roster[idxs[0]].defineFriendlyName || macroName
+                nodes.push({
+                    id: groupNodeId(macroName, folderPath),
+                    text: displayText,
+                    displayText,
+                    dccAddress: '',
+                    fnCount: '',
+                    childCount: plural(idxs.length),
+                    nodeType: 'group',
+                    macroName,
+                    rosterIdx: '',
+                    folderPath,
+                    expanded: true,
+                    children: idxs.map(i => locoNode(i, macroName)),
+                })
+            }
+            for (const i of loose) nodes.push(locoNode(i, ''))
+            return nodes
+        }
+
+        const convert = (nodes: FolderTreeNode[], path: string): TreeNodeData[] => {
+            const folders: TreeNodeData[] = []
+            const indices: number[] = []
+            for (const n of nodes) {
+                if (n.kind === 'folder') {
+                    folders.push({
+                        id: `${FOLDER_PREFIX}${n.path}`,
+                        text: n.name,
+                        displayText: n.name,
+                        dccAddress: '',
+                        fnCount: '',
+                        childCount: plural(itemIndicesUnder(roster, n.path).length),
+                        nodeType: 'folder',
+                        macroName: '',
+                        rosterIdx: '',
+                        folderPath: n.path,
+                        expanded: true,
+                        children: convert(n.children, n.path),
+                    })
+                } else {
+                    indices.push(n.index)
+                }
+            }
+            return [...folders, ...levelNodes(indices, path)]
+        }
+
+        return convert(buildFolderTree(roster, this.state.rosterFolders), '')
+    }
+
+    /** Ids of every folder/group node at any depth - all start expanded. */
+    private _expandableIds(nodes: TreeNodeData[]): string[] {
+        return nodes.flatMap(n => (n.children ? [n.id, ...this._expandableIds(n.children)] : []))
     }
 
     private _rebuildTree(): void {
@@ -352,9 +421,7 @@ export class RosterEditorCustomElement {
         // Expand all group nodes and restore selection
         // SF refresh() may not auto-apply expanded:true from data for new group nodes;
         // explicitly expand all group nodes so child locos are visible.
-        const groupIds = this._buildTreeData()
-            .filter(n => n.id.startsWith('group:'))
-            .map(n => n.id)
+        const groupIds = this._expandableIds(this._buildTreeData())
         if (groupIds.length > 0) {
             this.sfTree.expandAll(groupIds)
         }
@@ -382,7 +449,23 @@ export class RosterEditorCustomElement {
         textSpan.style.cssText = 'flex:1;min-width:0;display:flex;align-items:center;gap:0.375rem;'
         textSpan.textContent = ''
 
-        if (data.nodeType === 'group') {
+        if (data.nodeType === 'folder') {
+            const icon = document.createElement('span')
+            icon.className = 'shrink-0 text-sm'
+            icon.textContent = '\u{1F4C1}'
+
+            const nameSpan = document.createElement('span')
+            nameSpan.className = 'text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1'
+            nameSpan.textContent = data.displayText
+
+            const countSpan = document.createElement('span')
+            countSpan.className = 'text-xs text-gray-500 shrink-0'
+            countSpan.textContent = data.childCount
+
+            textSpan.appendChild(icon)
+            textSpan.appendChild(nameSpan)
+            textSpan.appendChild(countSpan)
+        } else if (data.nodeType === 'group') {
             const chip = document.createElement('span')
             chip.className = 'text-xs font-mono text-yellow-400 shrink-0'
             chip.textContent = '#define'
@@ -431,7 +514,10 @@ export class RosterEditorCustomElement {
             return `loco:${this.editBufferIndex}`
         }
         if (this.selectedNodeType === 'group' && this.selectedMacroName) {
-            return `group:${this.selectedMacroName}`
+            return groupNodeId(this.selectedMacroName, this.selectedGroupFolder)
+        }
+        if (this.selectedNodeType === 'folder' && this.selectedFolder !== null) {
+            return `${FOLDER_PREFIX}${this.selectedFolder}`
         }
         return null
     }
@@ -441,10 +527,20 @@ export class RosterEditorCustomElement {
         const id = (args.nodeData as { id?: string }).id ?? ''
         if (!id) return
 
-        if (id.startsWith('group:')) {
-            const macroName = id.slice('group:'.length)
+        if (id.startsWith(FOLDER_PREFIX)) {
+            if (this.editBuffer !== null) this.commitBuffer()
+            this.selectedNodeType = 'folder'
+            this.selectedFolder = id.slice(FOLDER_PREFIX.length)
+            this.selectedMacroName = null
+            this.groupFunctions = []
+            this.groupFriendlyName = ''
+            this.clearBuffer()
+        } else if (id.startsWith('group:')) {
+            const { macroName, folderPath } = parseGroupNodeId(id)
             this.selectedNodeType = 'group'
             this.selectedMacroName = macroName
+            this.selectedGroupFolder = folderPath
+            this.selectedFolder = null
             this.clearBuffer()
             const { groups } = deriveDefineGroups(this.state.roster)
             const group = groups.find(g => g.macroName === macroName)
@@ -455,6 +551,7 @@ export class RosterEditorCustomElement {
         } else if (id.startsWith('loco:')) {
             const idx = parseInt(id.slice('loco:'.length), 10)
             this.selectedNodeType = 'loco'
+            this.selectedFolder = null
             this.selectedMacroName = null
             this.groupFunctions = []
             this.groupFriendlyName = ''
@@ -478,14 +575,23 @@ export class RosterEditorCustomElement {
             const idx = parseInt(nodeId.slice(5), 10)
             if (!isNaN(idx)) this.removeEntryByIndex(idx)
         } else if (action === 'rename-group' && nodeId.startsWith('group:')) {
-            const macroName = nodeId.slice(6)
-            this.promptRenameGroup(macroName)
+            this.promptRenameGroup(parseGroupNodeId(nodeId).macroName)
+        } else if (action === 'new-folder' && nodeId.startsWith(FOLDER_PREFIX)) {
+            void this.promptNewFolder(nodeId.slice(FOLDER_PREFIX.length))
+        } else if (action === 'rename-folder' && nodeId.startsWith(FOLDER_PREFIX)) {
+            void this.promptRenameFolder(nodeId.slice(FOLDER_PREFIX.length))
+        } else if (action === 'delete-folder' && nodeId.startsWith(FOLDER_PREFIX)) {
+            void this.deleteFolder(nodeId.slice(FOLDER_PREFIX.length))
         }
     }
 
     // ── Selection state ───────────────────────────────────────────────────────
-    selectedNodeType: 'loco' | 'group' | null = null
+    selectedNodeType: 'loco' | 'group' | 'folder' | null = null
     selectedMacroName: string | null = null
+    /** Folder a selected #define group sits in ('' = top level) - the same macro can appear under several folders. */
+    selectedGroupFolder = ''
+    /** Path of the folder node selected in the tree (mutually exclusive with a loco/group selection), or null. */
+    selectedFolder: string | null = null
 
     get selectedEntry(): Roster | null {
         if (this.editBufferIndex === null) return null
@@ -541,10 +647,13 @@ export class RosterEditorCustomElement {
             return
         }
         const existing = this.state.roster[this.editBufferIndex]
-        const changed = !existing || JSON.stringify(existing) !== JSON.stringify(this.editBuffer)
+        // Folder placement is owned by state, not the edit buffer, so a drag/move made while the
+        // loco is selected isn't undone by a later commit of stale buffer fields.
+        const { folder: _existingFolder, ...existingFields } = existing ?? ({} as Roster)
+        const changed = !existing || JSON.stringify(existingFields) !== JSON.stringify(this.editBuffer)
         const existingAliasName = existing ? this.state.getPrimaryAliasNameForId(existing.dccAddress, 'Roster') : ''
         const aliasChanged = !!existing && (existing.dccAddress !== this.editBuffer.dccAddress || existingAliasName !== this.aliasInput.trim())
-        this.state.updateRosterEntry(this.editBufferIndex, { ...this.editBuffer })
+        this.state.updateRosterEntry(this.editBufferIndex, { ...this.editBuffer, ...(existing?.folder ? { folder: existing.folder } : {}) })
         if (existing && (aliasChanged || this.aliasInput.trim() !== '')) {
             const aliasResult = this.state.syncAliasForId(
                 existing.dccAddress,
@@ -601,12 +710,183 @@ export class RosterEditorCustomElement {
         }
     }
 
+    // ── Folders (the layer above the #define groups; organizing only) ───────────
+    /** Where a new loco / folder goes by default: the selected folder, else beside the selected loco or group. */
+    private _defaultFolder(): string {
+        if (this.selectedNodeType === 'folder') return this.selectedFolder ?? ''
+        if (this.selectedNodeType === 'group') return this.selectedGroupFolder
+        if (this.editBufferIndex !== null) return this.state.roster[this.editBufferIndex]?.folder ?? ''
+        return ''
+    }
+
+    get folderPaths(): string[] {
+        return allFolderPaths(this.state.roster, this.state.rosterFolders)
+    }
+
+    get selectedFolderName(): string {
+        return this.selectedFolder?.split('/').pop() ?? ''
+    }
+
+    get selectedFolderCount(): number {
+        return this.selectedFolder ? itemIndicesUnder(this.state.roster, this.selectedFolder).length : 0
+    }
+
+    /** The folder select in a loco's detail pane (value '' = top level). */
+    get locoFolder(): string {
+        return this.editBufferIndex !== null ? this.state.roster[this.editBufferIndex]?.folder ?? '' : ''
+    }
+
+    onLocoFolderChange(folder: string): void {
+        if (this.editBufferIndex === null) return
+        this.moveLocoToFolder(this.editBufferIndex, folder)
+    }
+
+    moveLocoToFolder(index: number, folder: string): void {
+        if (this.editBuffer !== null) this.commitBuffer()
+        this.state.moveToFolder('roster', index, folder)
+        this._rebuildTree()
+    }
+
+    private async _promptName(title: string, label: string, value: string, confirmLabel: string, validate: (v: string) => string): Promise<string | null> {
+        const { dialog } = await this.dialogService.open({
+            component: () => import('../dialogs/text-input-dialog').then(m => m.TextInputDialog).catch(() => null),
+            model: { title, label, value, confirmLabel, validate },
+        })
+        const result = await dialog.closed
+        if (result.status !== 'ok' || !result.value) return null
+        return (result.value as TextInputResult).value
+    }
+
+    /** Creates a folder inside `parentPath` (default: the selected folder, or beside the selected loco/group). */
+    async promptNewFolder(parentPath?: string): Promise<void> {
+        const parent = parentPath ?? this._defaultFolder()
+        const existing = new Set(this.folderPaths)
+        const name = await this._promptName(
+            parent ? `New folder in "${parent}"` : 'New folder',
+            'Folder name',
+            '',
+            'Create',
+            v => (!isValidFolderName(v) ? 'Enter a name (it can\u2019t contain \u201c/\u201d).' : existing.has(parent ? `${parent}/${v}` : v) ? 'A folder with that name already exists here.' : ''),
+        )
+        if (name === null) return
+        const path = parent ? `${parent}/${name}` : name
+        if (this.editBuffer !== null) this.commitBuffer()
+        if (!this.state.addFolderTo('roster', path)) return
+        this.clearBuffer()
+        this.selectedNodeType = 'folder'
+        this.selectedFolder = path
+        this.selectedMacroName = null
+        this._rebuildTree()
+    }
+
+    async promptRenameFolder(path: string): Promise<void> {
+        const current = path.split('/').pop() ?? path
+        const parent = path.split('/').slice(0, -1).join('/')
+        const existing = new Set(this.folderPaths)
+        const name = await this._promptName(
+            'Rename folder',
+            'Folder name',
+            current,
+            'Rename',
+            v => (!isValidFolderName(v) ? 'Enter a name (it can\u2019t contain \u201c/\u201d).' : v !== current && existing.has(parent ? `${parent}/${v}` : v) ? 'A folder with that name already exists here.' : ''),
+        )
+        if (name === null || name === current) return
+        const to = parent ? `${parent}/${name}` : name
+        if (this.editBuffer !== null) this.commitBuffer()
+        if (!this.state.renameFolderIn('roster', path, to)) return
+        this._followFolder(path, to)
+        this._rebuildTree()
+    }
+
+    /** Deletes a folder after confirmation; its locos and subfolders move up one level (nothing else is deleted). */
+    async deleteFolder(path: string): Promise<void> {
+        const confirmed = await this._confirm(`Delete folder "${path.split('/').pop()}"?`, 'Its locos and subfolders will move up one level \u2014 no locos are deleted.')
+        if (!confirmed) return
+        if (this.editBuffer !== null) this.commitBuffer()
+        this.state.deleteFolderFrom('roster', path)
+        const parent = path.split('/').slice(0, -1).join('/')
+        this._followFolder(path, parent, true)
+        this._rebuildTree()
+    }
+
+    /** Keeps the selection pointing at the same thing after folder `from` was renamed to `to` (or deleted, `to` being its parent). */
+    private _followFolder(from: string, to: string, deleted = false): void {
+        const inside = (p: string | null): boolean => p !== null && (p === from || p.startsWith(`${from}/`))
+        const remap = (p: string): string => (p === from && deleted ? to : to + p.slice(from.length)).replace(/^\//, '')
+        if (this.selectedNodeType === 'folder' && inside(this.selectedFolder)) {
+            if (deleted && this.selectedFolder === from) { this.selectedNodeType = null; this.selectedFolder = null }
+            else this.selectedFolder = remap(this.selectedFolder!)
+        }
+        if (this.selectedNodeType === 'group' && inside(this.selectedGroupFolder)) this.selectedGroupFolder = remap(this.selectedGroupFolder)
+    }
+
+    /** The folder a tree node lives in (a folder node is its own container) - the drop target for a dragged loco. */
+    private _containerOfNode(id: string): string | null {
+        if (id.startsWith(FOLDER_PREFIX)) return id.slice(FOLDER_PREFIX.length)
+        if (id.startsWith('group:')) return parseGroupNodeId(id).folderPath
+        if (id.startsWith('loco:')) return this.state.roster[parseInt(id.slice('loco:'.length), 10)]?.folder ?? ''
+        return null
+    }
+
+    /** Picks the drag cursor icon to match what a drop would do (see _onNodeDrop). */
+    private _onNodeDragging(args: DragAndDropEventArgs): void {
+        if (!this.sfTree) return
+        const draggedId = String((args.draggedNodeData as { id?: string }).id ?? '')
+        const targetEl = (args.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
+        if (!targetEl) return // blank space: leave SF's own indicator (drop to top level)
+        const targetId = (this.sfTree.getTreeData(targetEl.dataset.uid ?? '')?.[0] as { id?: string } | undefined)?.id
+        if (!targetId) return
+        if (targetId === draggedId) { args.dropIndicator = 'e-no-drop'; return }
+        if (draggedId.startsWith(FOLDER_PREFIX)) {
+            const from = draggedId.slice(FOLDER_PREFIX.length)
+            const into = targetId.startsWith(FOLDER_PREFIX) ? targetId.slice(FOLDER_PREFIX.length) : null
+            args.dropIndicator = into !== null && into !== from && !into.startsWith(`${from}/`) ? 'e-drop-in' : 'e-no-drop'
+            return
+        }
+        args.dropIndicator = targetId.startsWith(FOLDER_PREFIX) ? 'e-drop-in' : 'e-drop-next'
+    }
+
+    /** Applies a drag-and-drop: onto a folder nests inside it; onto a loco/group joins that level; onto blank space goes to the top. */
+    private _onNodeDrop(args: DragAndDropEventArgs): void {
+        if (!this.sfTree) return
+        const draggedId = String((args.draggedNodeData as { id?: string }).id ?? '')
+        const targetEl = (args.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
+        const targetId = targetEl ? (this.sfTree.getTreeData(targetEl.dataset.uid ?? '')?.[0] as { id?: string } | undefined)?.id ?? null : null
+        if (targetId === draggedId) return
+        const container = targetId ? this._containerOfNode(targetId) : ''
+        if (container === null) return
+
+        if (draggedId.startsWith(FOLDER_PREFIX)) {
+            const from = draggedId.slice(FOLDER_PREFIX.length)
+            if (targetId && !targetId.startsWith(FOLDER_PREFIX)) {
+                this.toastService.show({ title: "Can't Move Here", content: 'A folder can only be moved into another folder or to the top level.', cssClass: 'e-toast-warning' })
+                return
+            }
+            const name = from.split('/').pop()!
+            const to = container ? `${container}/${name}` : name
+            if (to === from) return
+            if (this.editBuffer !== null) this.commitBuffer()
+            if (!this.state.renameFolderIn('roster', from, to)) {
+                this.toastService.show({ title: "Can't Move Here", content: `A folder named "${name}" already exists there.`, cssClass: 'e-toast-warning' })
+                return
+            }
+            this._followFolder(from, to)
+            this._rebuildTree()
+            return
+        }
+
+        const index = parseInt(draggedId.slice('loco:'.length), 10)
+        if (isNaN(index)) return
+        this.moveLocoToFolder(index, container)
+    }
+
     // ── Add / remove loco entries ─────────────────────────────────────────────
     addEntry(): void {
         if (this.editBuffer !== null) this.commitBuffer()
         const maxAddr =
             this.state.roster.length > 0 ? Math.max(...this.state.roster.map(r => r.dccAddress)) + 1 : 1
-        const newEntry: Roster = { dccAddress: maxAddr, name: `New Loco ${maxAddr}`, functions: [], comment: '' }
+        const folder = this._defaultFolder()
+        const newEntry: Roster = { dccAddress: maxAddr, name: `New Loco ${maxAddr}`, functions: [], comment: '', ...(folder ? { folder } : {}) }
         this.state.addRosterEntry(newEntry)
         const idx = this.state.roster.length - 1
         this.selectedNodeType = 'loco'
@@ -644,6 +924,7 @@ export class RosterEditorCustomElement {
             comment: entry.comment,
             functionMacro: entry.functionMacro,
             defineFriendlyName: entry.defineFriendlyName,
+            ...(entry.folder ? { folder: entry.folder } : {}),
         }
 
         if (!entry.functionMacro) {
@@ -664,6 +945,8 @@ export class RosterEditorCustomElement {
             // Select the new group
             this.selectedNodeType = 'group'
             this.selectedMacroName = macroName
+            this.selectedGroupFolder = entry.folder ?? ''
+            this.selectedFolder = null
             this.editBuffer = null
             this.editBufferIndex = null
             this.groupFunctions = funcsCopy.map(f => ({ ...f }))
@@ -688,10 +971,13 @@ export class RosterEditorCustomElement {
     editFunctionList(): void {
         if (!this.editBuffer?.functionMacro) return
         const macroName = this.editBuffer.functionMacro
+        const folderOfLoco = this.editBufferIndex !== null ? this.state.roster[this.editBufferIndex]?.folder ?? '' : ''
         this.commitBuffer()
 
         this.selectedNodeType = 'group'
         this.selectedMacroName = macroName
+        this.selectedGroupFolder = folderOfLoco
+        this.selectedFolder = null
         this.editBuffer = null
         this.editBufferIndex = null
 
@@ -704,7 +990,7 @@ export class RosterEditorCustomElement {
 
         if (this.sfTree) {
             this._suppressNodeSelected = true
-            this.sfTree.selectedNodes = [`group:${macroName}`]
+            this.sfTree.selectedNodes = [groupNodeId(macroName, folderOfLoco)]
             this._suppressNodeSelected = false
         }
     }

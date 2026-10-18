@@ -1,4 +1,5 @@
 import { queueTask, resolve } from 'aurelia'
+import { loadTreeWidth, saveTreeWidth } from '../../utils/tree-width'
 import { IDialogService } from '@aurelia/dialog'
 import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
@@ -233,10 +234,10 @@ export class SequencesEditorCustomElement {
     }
 
     private _loadSidebarWidth(): string {
-        try { return localStorage.getItem('sequences-editor-sidebar-width') ?? '256px' } catch { return '256px' }
+        return `${loadTreeWidth()}px`
     }
     private _saveSidebarWidth(size: string): void {
-        try { localStorage.setItem('sequences-editor-sidebar-width', size) } catch { /* ignore */ }
+        saveTreeWidth(parseInt(size, 10))
     }
 
     setTab(t: 'visual' | 'raw') {

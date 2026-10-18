@@ -25,7 +25,7 @@
                 <!-- Sidebar -->
                 <div class="flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
                     <div class="flex flex-col gap-1.5 px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Event Handlers</span>
+                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Add event handler</span>
                         <div class="flex items-center gap-1.5">
                             <select value.bind="addSelection" aria-label="Event handler to add"
                                 data-testid="add-handler-select"
@@ -41,21 +41,11 @@
                         </div>
                     </div>
 
-                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Event handlers">
-                        <a repeat.for="h of state.eventHandlers" click.trigger="selectEntry($index)"
-                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
-                            class.bind="selectedIndex === $index
-                            ? 'bg-blue-900/60 text-white font-medium'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
-                            <span class="flex-1 min-w-0 truncate" title.bind="getDisplayName(h)">${getDisplayName(h)}</span>
-                            <button
-                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                                click.trigger="removeEventHandler($index, $event)" title="Remove">×</button>
-                        </a>
-                    </nav>
-
-                    <div if.bind="state.eventHandlers.length === 0" class="flex-1 flex items-center justify-center p-4">
-                        <p class="text-gray-600 text-xs text-center">No event handlers.<br>Pick one above and click + to add it.</p>
+                    <div class="flex-1 min-h-0 overflow-hidden">
+                        <folder-tree-panel embedded.bind="true" items.bind="state.eventHandlers" folders.bind="state.eventHandlerFolders"
+                            selected-folder.two-way="selectedFolder" selected-index.to-view="selectedTreeIndex" label="Event Handlers"
+                            item-label.bind="itemLabel" on-remove-item.bind="removeFromTree" on-select-item.bind="selectFromTree"
+                            on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder" on-move.bind="moveToFolder"></folder-tree-panel>
                     </div>
                 </div>
 

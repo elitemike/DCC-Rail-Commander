@@ -30,9 +30,9 @@ export interface ItemNode {
 export type FolderTreeNode = FolderNode | ItemNode
 
 /** The config lists that support folder grouping; each has a `<singular>Folders` field in ConfigEditorState. */
-export type FolderKind = 'sensors' | 'signals' | 'routes' | 'sequences' | 'automations'
+export type FolderKind = 'sensors' | 'signals' | 'routes' | 'sequences' | 'automations' | 'eventHandlers' | 'aliases' | 'roster'
 
-export const folderField = (kind: FolderKind): string => `${kind.slice(0, -1)}Folders`
+export const folderField = (kind: FolderKind): string => `${kind === 'aliases' ? 'alias' : kind === 'roster' ? 'roster' : kind.slice(0, -1)}Folders`
 
 export interface FolderEdit<T extends FolderItem> {
     items: T[]

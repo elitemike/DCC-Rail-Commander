@@ -8,7 +8,7 @@ import { ConfigEditorState } from '../../src/renderer/src/models/config-editor-s
 // leaves a non-writable placeholder on the prototype that Object.create alone doesn't upgrade.
 function makeConfigEditorState(configFiles: Array<{ name: string; content: string }>): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'signalFolders', 'routeFolders', 'sequenceFolders', 'automationFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'eventHandlerFolders', 'aliasFolders', 'rosterFolders', 'signalFolders', 'routeFolders', 'sequenceFolders', 'automationFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {
@@ -31,7 +31,7 @@ describe('ConfigEditorState — myEvents.h wiring', () => {
             { name: 'myEvents.h', content: 'ONSENSOR(200)\nTHROW(201)\nDONE\n' },
         ])
         state.loadFromInstallerState()
-        expect(state.eventHandlers).toEqual([{ command: 'ONSENSOR', text: 'ONSENSOR(200)\nTHROW(201)\nDONE' }])
+        expect(state.eventHandlers).toMatchObject([{ command: 'ONSENSOR', text: 'ONSENSOR(200)\nTHROW(201)\nDONE' }])
     })
 
     it('force-creates an empty myEvents.h entry when missing, so the Configuration list row is reachable', () => {
@@ -50,7 +50,7 @@ describe('ConfigEditorState — myEvents.h wiring', () => {
     it('setEventHandlersFromRaw parses and marks dirty', () => {
         const state = makeConfigEditorState([{ name: 'myEvents.h', content: '' }])
         state.setEventHandlersFromRaw('ONACTIVATE(100, 4)\nCLOSE(202)\nDONE')
-        expect(state.eventHandlers).toEqual([{ command: 'ONACTIVATE', text: 'ONACTIVATE(100, 4)\nCLOSE(202)\nDONE' }])
+        expect(state.eventHandlers).toMatchObject([{ command: 'ONACTIVATE', text: 'ONACTIVATE(100, 4)\nCLOSE(202)\nDONE' }])
         expect(state.hasChanges).toBe(true)
         expect(state.installerState.configFiles.find(f => f.name === 'myEvents.h')?.content).toContain('ONACTIVATE(100, 4)')
     })

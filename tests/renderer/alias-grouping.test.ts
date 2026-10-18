@@ -6,7 +6,7 @@ function makeState(order: 'name' | 'id', aliases: AliasEntry[]): ConfigEditorSta
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
     // `aliases` is an @observable accessor on the prototype, so plain assignment fails on a bare instance.
     const fields: Record<string, unknown> = {
-        aliases,
+        aliases, aliasFolders: [],
         aliasSortOrder: { value: order },
         installerState: { appVersion: '0.0.0' },
         roster: [], turnouts: [], sensors: [], routes: [], sequences: [],

@@ -100,7 +100,7 @@ describe('EventHandlersEditorCustomElement.addEventHandler', () => {
 
         editor.addEventHandler()
 
-        expect(state.eventHandlers).toEqual([{ command: 'ONRAILSYNCON', text: 'ONRAILSYNCON\nDONE' }])
+        expect(state.eventHandlers).toMatchObject([{ command: 'ONRAILSYNCON', text: 'ONRAILSYNCON\nDONE' }])
         expect(state.syncAll).toHaveBeenCalled()
         expect(editor.selectedIndex).toBe(0)
         expect(editor.blockCanvas.reload).toHaveBeenCalledWith('ONRAILSYNCON\nDONE')
@@ -114,7 +114,7 @@ describe('EventHandlersEditorCustomElement.addEventHandler', () => {
 
         editor.addEventHandler()
 
-        expect(state.eventHandlers).toEqual([{ command: 'ONBLOCKENTER', text: 'ONBLOCKENTER(0)\nDONE' }])
+        expect(state.eventHandlers).toMatchObject([{ command: 'ONBLOCKENTER', text: 'ONBLOCKENTER(0)\nDONE' }])
     })
 
     it('attaches ONSENSORACTIVE.seedComment as a trailing comment on the seed DONE line, sensors gated on', () => {

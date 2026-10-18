@@ -20,6 +20,9 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
+            <folder-tree-panel items.bind="state.aliases" folders.bind="state.aliasFolders"
+                selected-folder.two-way="selectedFolder" selected-index.two-way="selectedIndex" label="Aliases" item-label.bind="itemLabel"
+                on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder" on-move.bind="moveToFolder"></folder-tree-panel>
             <div class="flex-1 overflow-y-auto p-4">
                 <p class="text-xs text-gray-500 mb-3">Friendly names for the ID of a Roster, Turnout, Sensor,
                     Route, or Sequence entry defined elsewhere in your configuration.</p>
@@ -69,31 +72,37 @@
                     <p class="text-sm">No aliases yet. Enter a name and an ID above, then click "Add Alias".</p>
                 </div>
 
-                <div if.bind="state.aliases.length > 0" class="flex flex-col gap-4">
-                    <div repeat.for="group of groupedAliases" class="flex flex-col gap-2">
-                        <h3 data-testid="alias-group-header"
-                            class="px-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                            ${group.label} <span class="font-normal normal-case text-gray-400 dark:text-gray-500">(${group.items.length})</span>
-                        </h3>
-                        <div repeat.for="item of group.items" data-testid="alias-row"
-                            class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
-                            <div class="flex flex-col gap-1 flex-1">
-                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
-                                <input type="text" value.two-way="item.alias.name" blur.trigger="commitAlias(item.index)"
-                                    placeholder="NAME"
-                                    class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                            </div>
-                            <div class="flex flex-col gap-1">
-                                <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">ID</label>
-                                <input type="text" value.two-way="item.alias.value" blur.trigger="commitAlias(item.index)"
-                                    placeholder="ID"
-                                    class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
-                            </div>
-                            <span
-                                class="mb-0.5 px-2 py-1.5 rounded-md text-xs bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 whitespace-nowrap">${getAliasTypeLabel(item.alias)}</span>
-                            <button click.trigger="removeAlias(item.index)" aria-label="Delete" title="Delete"
-                                class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
+                <div if.bind="state.aliases.length > 0 && selectedIndices.length === 0" data-testid="alias-select-hint" class="text-sm text-gray-500 py-8 text-center">
+                    Select an alias in the tree to edit it.
+                </div>
+
+                <div if.bind="selectedIndices.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="idx of selectedIndices" data-testid="alias-row"
+                        class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
+                        <div class="flex flex-col gap-1 flex-1">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+                            <input type="text" value.two-way="state.aliases[idx].name" blur.trigger="commitAlias(idx)"
+                                placeholder="NAME"
+                                class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                         </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">ID</label>
+                            <input type="text" value.two-way="state.aliases[idx].value" blur.trigger="commitAlias(idx)"
+                                placeholder="ID"
+                                class="w-20 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm font-mono placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
+                        </div>
+                        <span
+                            class="mb-0.5 px-2 py-1.5 rounded-md text-xs bg-gray-900/5 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 whitespace-nowrap">${getAliasTypeLabel(state.aliases[idx])}</span>
+                        <div if.bind="folderPaths.length > 0" class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Folder</label>
+                            <select data-testid="alias-folder" value.bind="state.aliases[idx].folder || ''" change.trigger="moveToFolder(idx, $event.target.value)"
+                                class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500">
+                                <option value="">(none)</option>
+                                <option repeat.for="f of folderPaths" value.bind="f">${f}</option>
+                            </select>
+                        </div>
+                        <button click.trigger="removeAlias(idx)" aria-label="Delete" title="Delete"
+                            class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">&times;</button>
                     </div>
                 </div>
             </div>

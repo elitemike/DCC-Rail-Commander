@@ -754,7 +754,7 @@ test.describe('Roster Editor — Visual TreeView', () => {
         const thomasRow = workspacePage.locator('#roster-treeview li').filter({ hasText: 'Thomas' }).first()
         await thomasRow.locator('.e-fullrow').click({ button: 'right' })
         await expect(workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Clone' })).toBeVisible()
-        await expect(workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Delete' })).toBeVisible()
+        await expect(workspacePage.locator('.e-contextmenu li').filter({ hasText: /^Delete$/ })).toBeVisible()
         await expect(workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Rename Group' })).not.toBeVisible()
     })
 
@@ -776,7 +776,7 @@ test.describe('Roster Editor — Visual TreeView', () => {
         const percyRow = workspacePage.locator('#roster-treeview li').filter({ hasText: 'Percy' }).first()
         await percyRow.locator('.e-fullrow').click({ button: 'right' })
         await workspacePage.waitForTimeout(300)
-        await workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Delete' }).click()
+        await workspacePage.locator('.e-contextmenu li').filter({ hasText: /^Delete$/ }).click()
         // Handle Aurelia confirm dialog (fixture dialog auto-accept may not handle Aurelia dialogs).
         // isVisible()'s timeout option is ignored (it never polls) — wait for the
         // dialog's async import/render with waitFor() first.
@@ -802,7 +802,7 @@ test.describe('Roster Editor — Visual TreeView', () => {
         const percyRow = workspacePage.locator('#roster-treeview li').filter({ hasText: 'Percy' }).first()
         await percyRow.locator('.e-fullrow').click({ button: 'right' })
         await workspacePage.waitForTimeout(300)
-        await workspacePage.locator('.e-contextmenu li').filter({ hasText: 'Delete' }).click()
+        await workspacePage.locator('.e-contextmenu li').filter({ hasText: /^Delete$/ }).click()
         // Handle Aurelia confirm dialog. isVisible()'s timeout option is ignored
         // (it never polls) — wait for the dialog's async import/render with waitFor() first.
         const deleteBtn = workspacePage.getByRole('button', { name: 'Delete' })
@@ -859,7 +859,7 @@ test.describe('Roster Editor — TreeView grouping (pre-grouped roster)', () => 
         await rosterGroupedPage.waitForTimeout(300)
         await expect(rosterGroupedPage.locator('.e-contextmenu li').filter({ hasText: 'Rename Group' })).toBeVisible()
         await expect(rosterGroupedPage.locator('.e-contextmenu li').filter({ hasText: 'Clone' })).not.toBeVisible()
-        await expect(rosterGroupedPage.locator('.e-contextmenu li').filter({ hasText: 'Delete' })).not.toBeVisible()
+        await expect(rosterGroupedPage.locator('.e-contextmenu li').filter({ hasText: /^Delete$/ })).not.toBeVisible()
     })
 
     test('clicking a grouped loco shows shared-function info card', async ({ rosterGroupedPage }) => {

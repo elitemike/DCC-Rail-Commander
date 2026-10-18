@@ -35,7 +35,12 @@ import {
     parseTurnoutFromFile,
     buildGeneratorHeader,
     parseSensorsFromFile,
+    serializeFolderDecls,
     parseSensorFolders,
+    parseRosterFolders,
+    parseEventHandlerFolders,
+    parseAliasFolders,
+    newEventHandlerUid,
     parseSignalFolders,
     parseRouteFolders,
     parseSequenceFolders,
@@ -310,6 +315,8 @@ export class ConfigEditorState {
 
     // ── myRoster.h ───────────────────────────────────────────────────────────
     @observable roster: Roster[] = []
+    /** Folders declared with `// @tree-folder:` - only needed for folders holding no locos. */
+    @observable rosterFolders: string[] = []
 
     /**
      * Lines that were detected as invalid ROSTER calls and have been commented
@@ -319,7 +326,7 @@ export class ConfigEditorState {
 
     get rosterRaw(): string {
         const header = buildGeneratorHeader('myRoster.h', this.installerState.appVersion)
-        const serialized = serializeRosterToFile(this.roster)
+        const serialized = serializeRosterToFile(this.roster, this.rosterFolders)
         const body = this.rosterPreservedComments
             ? `${this.rosterPreservedComments}\n${serialized}`
             : serialized
@@ -329,6 +336,7 @@ export class ConfigEditorState {
     setRosterFromRaw(text: string): void {
         try {
             this.roster = parseRosterFromFile(text)
+            this.rosterFolders = parseRosterFolders(text)
             this.hasChanges = true
         } catch {
             // keep existing roster if parse fails
@@ -758,16 +766,30 @@ ${body}`
 
     // ── myEvents.h ────────────────────────────────────────────────────────
     @observable eventHandlers: EventHandlerEntry[] = []
+    /** Folders declared with `// @tree-folder:` - only needed for folders holding no handlers. */
+    @observable eventHandlerFolders: string[] = []
+
+    /** Gives every handler a unique `uid` (kept if already present and unique) - written as `// @id:` on save. */
+    private _withEventUids(handlers: EventHandlerEntry[]): EventHandlerEntry[] {
+        const taken = new Set<string>()
+        return handlers.map(h => {
+            if (h.uid && !taken.has(h.uid)) { taken.add(h.uid); return h }
+            const uid = newEventHandlerUid(taken)
+            taken.add(uid)
+            return { ...h, uid }
+        })
+    }
 
     get eventHandlersRaw(): string {
         const header = buildGeneratorHeader('myEvents.h', this.installerState.appVersion)
-        const serialized = serializeEventHandlersToFile(this.eventHandlers)
+        const serialized = serializeEventHandlersToFile(this.eventHandlers, this.eventHandlerFolders)
         return `${header}\n${serialized}`
     }
 
     setEventHandlersFromRaw(text: string): void {
         try {
-            this.eventHandlers = parseEventHandlersFromFile(text)
+            this.eventHandlers = this._withEventUids(parseEventHandlersFromFile(text))
+            this.eventHandlerFolders = parseEventHandlerFolders(text)
             this.hasChanges = true
         } catch {
             // keep existing event handlers if parse fails
@@ -777,6 +799,8 @@ ${body}`
 
     // ── myAliases.h ───────────────────────────────────────────────────────
     @observable aliases: AliasEntry[] = []
+    /** Folders declared with `// @tree-folder:` - only needed for folders holding no aliases. */
+    @observable aliasFolders: string[] = []
 
     getAliasTypeLabel(alias: AliasEntry): string {
         if (alias.aliasType) return alias.aliasType
@@ -820,10 +844,11 @@ ${body}`
 
     get aliasesRaw(): string {
         const header = buildGeneratorHeader('myAliases.h', this.installerState.appVersion)
+        const decls = serializeFolderDecls(this.aliases, this.aliasFolders)
         const serialized = this.groupedAliases
             .map(group => `// ${group.label}\n${serializeAliasesToFile(group.items.map(i => i.alias))}`)
             .join('\n\n')
-        return `${header}\n${serialized}`
+        return `${header}\n${decls.length ? `${decls.join('\n')}\n\n` : ''}${serialized}`
     }
 
     setAliasesFromRaw(text: string): { ok: true } | { ok: false; reason: string } {
@@ -833,6 +858,7 @@ ${body}`
             if (!normalized.ok) return normalized
             const previousAliases = this.aliases
             this.aliases = normalized.aliases
+            this.aliasFolders = parseAliasFolders(text)
             this._refreshVirtualEventRefs(previousAliases)
             this.hasChanges = true
         } catch {
@@ -1326,6 +1352,7 @@ ${body}`
         // values from a previously loaded configuration.
         this.configHContent = ''
         this.roster = []
+        this.rosterFolders = []
         this.turnouts = []
         this.turnoutFolders = []
         this.sensors = []
@@ -1339,7 +1366,9 @@ ${body}`
         this.sequences = []
         this.sequenceFolders = []
         this.eventHandlers = []
+        this.eventHandlerFolders = []
         this.aliases = []
+        this.aliasFolders = []
         this.preservedAutomationContent = ''
         this.generatedHalDevicesContent = ''
         this.generatedTrackManagerContent = ''
@@ -1353,6 +1382,7 @@ ${body}`
                 this.configHContent = f.content
             } else if (f.name === 'myRoster.h') {
                 this.roster = parseRosterFromFile(f.content)
+                this.rosterFolders = parseRosterFolders(f.content)
             } else if (f.name === 'myTurnouts.h') {
                 this.turnouts = parseTurnoutFromFile(f.content)
                 this.turnoutFolders = parseTurnoutFolders(f.content)
@@ -1372,7 +1402,8 @@ ${body}`
                 this.sequences = parseSequencesFromFile(f.content)
                 this.sequenceFolders = parseSequenceFolders(f.content)
             } else if (f.name === 'myEvents.h') {
-                this.eventHandlers = parseEventHandlersFromFile(f.content)
+                this.eventHandlers = this._withEventUids(parseEventHandlersFromFile(f.content))
+                this.eventHandlerFolders = parseEventHandlerFolders(f.content)
             } else if (f.name === 'myAliases.h') {
                 // Deferred until every other file has been parsed (see below) — alias
                 // target validation needs the fully-populated roster/turnouts/etc.
@@ -1399,6 +1430,7 @@ ${body}`
 
         if (aliasesContent !== null) {
             this.aliases = this.normalizeAliasesLenient(parseAliasesFromFile(aliasesContent))
+            this.aliasFolders = parseAliasFolders(aliasesContent)
         }
 
         // ── Legacy migration: myAutomation.h still has TrackManager/Turnout-

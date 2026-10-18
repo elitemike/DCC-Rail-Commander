@@ -110,3 +110,74 @@ describe('folder metadata for signals, routes, sequences, automations', () => {
         expect(parsed[0].folder).toBe('Shows')
     })
 })
+
+import {
+    parseEventHandlersFromFile, parseEventHandlerFolders, serializeEventHandlersToFile,
+    parseAliasesFromFile, parseAliasFolders, serializeAliasesToFile,
+    parseRosterFromFile, parseRosterFolders, serializeRosterToFile,
+} from '../../src/renderer/src/utils/myAutomationParser'
+
+describe('folder metadata for event handlers, aliases and the roster', () => {
+    it('event handlers keep a unique @id and a folder in comments, and the handler lines are unchanged', () => {
+        const text = [
+            '// @tree-folder: Empty',
+            '',
+            '// @tree: Yard/East',
+            '// @id: abc123',
+            'ONSENSOR(200)',
+            'THROW(201)',
+            'DONE',
+            '',
+            '// @id: def456',
+            'ONSENSOR(201)',
+            'CLOSE(201)',
+            'DONE',
+        ].join('\n')
+        const hs = parseEventHandlersFromFile(text)
+        expect(hs.map(h => [h.uid, h.folder, h.text.split('\n')[0]])).toEqual([
+            ['abc123', 'Yard/East', 'ONSENSOR(200)'],
+            ['def456', undefined, 'ONSENSOR(201)'],
+        ])
+        expect(hs[0].comment).toBeUndefined()
+        const out = serializeEventHandlersToFile(hs, parseEventHandlerFolders(text))
+        expect(out).toBe(text)
+    })
+
+    it('event handler tags are not lost when the previous body has no terminator, and stacked headers share one tag', () => {
+        const text = ['ONSENSOR(1)', 'THROW(5)', '// @tree: A', '// @id: x1', 'ONSENSOR(2)', 'ONSENSOR(3)', 'CLOSE(5)', 'DONE'].join('\n')
+        const hs = parseEventHandlersFromFile(text)
+        expect(hs).toHaveLength(2)
+        expect(hs[0].uid).toBeUndefined()
+        expect(hs[1]).toMatchObject({ uid: 'x1', folder: 'A' })
+        expect(hs[1].text.split('\n')).toEqual(['ONSENSOR(2)', 'ONSENSOR(3)', 'CLOSE(5)', 'DONE'])
+        expect(serializeEventHandlersToFile(hs)).not.toContain('// @tree: A\n// @tree: A')
+    })
+
+    it('aliases round-trip folders keyed by name', () => {
+        const aliases = [
+            { name: 'MAIN', value: '3', aliasType: 'Roster' as const, folder: 'Yard' },
+            { name: 'SPUR', value: '4' },
+        ]
+        const text = ['// @tree-folder: Spare', serializeAliasesToFile(aliases)].join('\n')
+        const back = parseAliasesFromFile(text)
+        expect(back.map(a => [a.name, a.folder])).toEqual([['MAIN', 'Yard'], ['SPUR', undefined]])
+        expect(parseAliasFolders(text)).toEqual(['Spare'])
+        expect(serializeAliasesToFile(aliases)).toContain('// @tree: Yard\nALIAS(MAIN, 3) // type: Roster')
+    })
+
+    it('roster folders sit above the ROSTER lines and leave #define groups and macros alone', () => {
+        const roster = [
+            { dccAddress: 3, name: 'A', functions: [{ name: 'Light', isMomentary: false, noFunction: false }], comment: '', functionMacro: 'LIGHT_F', folder: 'Steam' },
+            { dccAddress: 5, name: 'B', functions: [{ name: 'Light', isMomentary: false, noFunction: false }], comment: '', functionMacro: 'LIGHT_F', folder: 'Steam/Big' },
+            { dccAddress: 7, name: 'C', functions: [], comment: '' },
+        ]
+        const text = serializeRosterToFile(roster, ['Diesel'])
+        expect(text).toContain('#define LIGHT_F "Light"')
+        expect(text).toContain('// @tree: Steam\nROSTER(3, "A", LIGHT_F)')
+        expect(text).toContain('// @tree: Steam/Big\nROSTER(5, "B", LIGHT_F)')
+        expect(text).toContain('// @tree-folder: Diesel')
+        const back = parseRosterFromFile(text)
+        expect(back.map(r => [r.dccAddress, r.folder, r.functionMacro])).toEqual([[3, 'Steam', 'LIGHT_F'], [5, 'Steam/Big', 'LIGHT_F'], [7, undefined, undefined]])
+        expect(parseRosterFolders(text)).toEqual(['Diesel'])
+    })
+})

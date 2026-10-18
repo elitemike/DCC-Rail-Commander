@@ -4,6 +4,7 @@ import { confirmAction } from '../../utils/confirm-action'
 import { DropDownList } from '@syncfusion/ej2-dropdowns'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { AliasEntry, AliasTargetType } from '../../utils/myAutomationParser'
+import { allFolderPaths } from '../../utils/folder-tree'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 const ALIAS_TYPE_OPTIONS: { text: string; value: AliasTargetType }[] = [
@@ -44,6 +45,7 @@ export class AliasesEditorCustomElement {
         // file's editor already existed still takes effect, as long as the user
         // hasn't manually picked a tab for it this session (_userChoseTab).
         this._applyDefaultViewIfUnset()
+        this._ensureSelection()
         try { console.debug('AliasesEditor attached') } catch { /* ignore */ }
         this.lastValidAliases = this.cloneAliases(this.state.aliases)
 
@@ -100,6 +102,7 @@ export class AliasesEditorCustomElement {
     private _applyTab(t: 'visual' | 'raw') {
         if (t === 'raw') this.rawSnapshot = this.state.aliasesRaw
         this.activeTab = t
+        if (t === 'visual') this._ensureSelection()
         if (t === 'raw') setTimeout(() => { try { this.rawEditor?.editor?.layout?.() } catch { } }, 50)
     }
 
@@ -130,7 +133,8 @@ export class AliasesEditorCustomElement {
             this.newAliasError = `Select a ${this.newAliasType} ID to alias.`
             return
         }
-        const candidate: AliasEntry = { name: this.newAliasName.trim(), value: String(this.newAliasId), aliasType: this.newAliasType }
+        const folder = this.selectedIndex >= 0 ? this.state.aliases[this.selectedIndex]?.folder ?? '' : this.selectedFolder
+        const candidate: AliasEntry = { name: this.newAliasName.trim(), value: String(this.newAliasId), aliasType: this.newAliasType, ...(folder ? { folder } : {}) }
         const normalized = this.state.normalizeAliases([...this.state.aliases, candidate])
         if (!normalized.ok) {
             this.newAliasError = normalized.reason
@@ -140,6 +144,8 @@ export class AliasesEditorCustomElement {
         this.state.aliases = normalized.aliases
         this.state.syncAll()
         this.lastValidAliases = this.cloneAliases(this.state.aliases)
+        this.selectedFolder = ''
+        this.selectedIndex = this.state.aliases.findIndex(a => a.name === candidate.name)
         this.newAliasName = ''
         this.newAliasId = null
         if (this.sfNewAliasId) {
@@ -160,6 +166,7 @@ export class AliasesEditorCustomElement {
         this.state.aliases = this.state.aliases.filter((_, i) => i !== idx)
         this.state.syncAll()
         this.errorMessage = ''
+        this._ensureSelection()
         this.lastValidAliases = this.cloneAliases(this.state.aliases)
     }
 
@@ -185,6 +192,34 @@ export class AliasesEditorCustomElement {
 
     getAliasTypeLabel(alias: AliasEntry): string {
         return this.state.getAliasTypeLabel(alias)
+    }
+
+    // -- Folders (organizing only: never changes the ALIAS lines, their values or the sort-order setting) --
+    /** Folder selected in the tree ('' = none); new aliases are created inside it. */
+    selectedFolder = ''
+    /** Index into state.aliases of the alias being edited, or -1. The right pane shows only this one. */
+    selectedIndex = -1
+
+    get selectedIndices(): number[] {
+        return this.selectedIndex >= 0 && this.selectedIndex < this.state.aliases.length ? [this.selectedIndex] : []
+    }
+
+    get folderPaths(): string[] {
+        return allFolderPaths(this.state.aliases, this.state.aliasFolders)
+    }
+
+    itemLabel = (item: AliasEntry): string => item.name
+    addFolder = (path: string): boolean => this.state.addFolderTo('aliases', path)
+    renameFolder = (from: string, to: string): boolean => this.state.renameFolderIn('aliases', from, to)
+    removeFolder = (path: string): void => this.state.deleteFolderFrom('aliases', path)
+    moveToFolder = (idx: number, folder: string): void => this.state.moveToFolder('aliases', idx, folder)
+
+    /** Keeps the right pane useful: pick the first alias when nothing valid is selected. */
+    private _ensureSelection(): void {
+        if (this.selectedFolder) return
+        if (this.selectedIndex < 0 || this.selectedIndex >= this.state.aliases.length) {
+            this.selectedIndex = this.state.aliases.length > 0 ? 0 : -1
+        }
     }
 
     /** Aliases grouped by type and ordered per the alias sort-order setting — see ConfigEditorState.groupedAliases. Each item keeps its index into state.aliases so edit/remove handlers can target it directly. */

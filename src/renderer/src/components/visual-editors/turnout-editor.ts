@@ -1,4 +1,5 @@
 import { IObserverLocator, queueTask, resolve } from 'aurelia'
+import { loadTreeWidth, saveTreeWidth } from '../../utils/tree-width'
 import { IDialogService } from '@aurelia/dialog'
 import { TreeView, ContextMenu } from '@syncfusion/ej2-navigations'
 import type { BeforeOpenCloseMenuEventArgs, MenuEventArgs, NodeSelectEventArgs, DrawNodeEventArgs, DragAndDropEventArgs, NodeExpandEventArgs } from '@syncfusion/ej2-navigations'
@@ -207,10 +208,10 @@ export class TurnoutEditorCustomElement {
     }
 
     private _loadSidebarWidth(): string {
-        try { return localStorage.getItem('turnout-editor-sidebar-width') ?? '256px' } catch { return '256px' }
+        return `${loadTreeWidth()}px`
     }
     private _saveSidebarWidth(size: string): void {
-        try { localStorage.setItem('turnout-editor-sidebar-width', size) } catch { /* ignore */ }
+        saveTreeWidth(parseInt(size, 10))
     }
 
     // ── Raw snapshot for Monaco ───────────────────────────────────────────────

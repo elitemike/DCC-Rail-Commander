@@ -74,4 +74,20 @@ test.describe('Tree grouping', () => {
         expect(raw).toContain('// @tree: Yard')
         expect(raw).toContain('SIGNAL(')
     })
+    test('Event handlers: a folder holds new handlers, and each gets a unique // @id: comment', async ({ workspacePage: page }) => {
+        await openEditor(page, 'Event Handlers')
+        await createFolder(page, 'Safety')
+
+        await page.getByTestId('add-handler-select').selectOption('ONRAILSYNCON')
+        await page.getByTestId('add-handler-button').click()
+        await page.getByTestId('add-handler-button').click()
+        await expect(page.getByTestId('folder-row').filter({ hasText: 'Safety' })).toContainText('2')
+
+        const raw = await rawText(page)
+        expect(raw).toContain('// @tree: Safety')
+        expect(raw).toContain('ONRAILSYNCON')
+        const ids = [...raw.matchAll(/\/\/ @id: (\S+)/g)].map(m => m[1])
+        expect(ids).toHaveLength(2)
+        expect(new Set(ids).size).toBe(2)
+    })
 })

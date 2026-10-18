@@ -1,9 +1,10 @@
 import { queueTask, resolve } from 'aurelia'
+import { loadTreeWidth, saveTreeWidth } from '../../utils/tree-width'
 import { IDialogService } from '@aurelia/dialog'
 import { confirmAction } from '../../utils/confirm-action'
 import { Splitter } from '@syncfusion/ej2-layouts'
 import { ConfigEditorState } from '../../models/config-editor-state'
-import type { EventHandlerEntry } from '../../utils/myAutomationParser'
+import { newEventHandlerUid, type EventHandlerEntry } from '../../utils/myAutomationParser'
 import { definedTracksFor, parseEventHandlerBlock } from './exrail-block-compiler'
 import type { BlockTypeDef, DefinedObjects } from './exrail-block-compiler'
 import { BLOCK_REGISTRY } from './exrail-block-registry'
@@ -52,6 +53,27 @@ export class EventHandlersEditorCustomElement {
     private rowTab: Record<number, RowTab> = {}
 
     selectedIndex: number | null = null
+
+    // ── Folders (logical grouping only — see folder-tree.ts) ──────────────────
+    /** Folder selected in the tree ('' = none); new handlers are created inside it. */
+    selectedFolder = ''
+
+    /** The tree highlights this leaf; -1 when nothing is selected. */
+    get selectedTreeIndex(): number { return this.selectedIndex ?? -1 }
+
+    itemLabel = (item: EventHandlerEntry): string => this.getDisplayName(item)
+    removeFromTree = (index: number, event: Event): void => { void this.removeEventHandler(index, event) }
+    selectFromTree = (index: number): void => { this.selectEntry(index); this.selectedFolder = '' }
+    addFolder = (path: string): boolean => this.state.addFolderTo('eventHandlers', path)
+    renameFolder = (from: string, to: string): boolean => this.state.renameFolderIn('eventHandlers', from, to)
+    removeFolder = (path: string): void => this.state.deleteFolderFrom('eventHandlers', path)
+    moveToFolder = (index: number, folder: string): void => this.state.moveToFolder('eventHandlers', index, folder)
+
+    /** Folder a newly added handler lands in: the selected folder, else beside the selected handler. */
+    private _newEntryFolder(): string {
+        if (this.selectedFolder) return this.selectedFolder
+        return this.selectedHandler?.folder ?? ''
+    }
     /** Which param-flavored hat the Add control currently has picked, e.g. 'ONSENSOR' — seeded to the first available choice in attached(). */
     addSelection = ''
 
@@ -216,10 +238,10 @@ export class EventHandlersEditorCustomElement {
     }
 
     private _loadSidebarWidth(): string {
-        try { return localStorage.getItem('event-handlers-editor-sidebar-width') ?? '256px' } catch { return '256px' }
+        return `${loadTreeWidth()}px`
     }
     private _saveSidebarWidth(size: string): void {
-        try { localStorage.setItem('event-handlers-editor-sidebar-width', size) } catch { /* ignore */ }
+        saveTreeWidth(parseInt(size, 10))
     }
 
     setTab(t: 'visual' | 'raw') {
@@ -268,7 +290,9 @@ export class EventHandlersEditorCustomElement {
         }
         const doneLine = def.seedComment ? `DONE // ${def.seedComment}` : 'DONE'
         const text = `${def.emit(fullParamValues)}\n${doneLine}`
-        this.state.eventHandlers = [...this.state.eventHandlers, { command: def.id, text }]
+        const folder = this._newEntryFolder()
+        const uid = newEventHandlerUid(new Set(this.state.eventHandlers.flatMap(h => (h.uid ? [h.uid] : []))))
+        this.state.eventHandlers = [...this.state.eventHandlers, { command: def.id, text, uid, ...(folder ? { folder } : {}) }]
         this.state.syncAll()
         const newIndex = this.state.eventHandlers.length - 1
         this.selectedIndex = newIndex

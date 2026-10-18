@@ -1,4 +1,5 @@
 import { bindable, resolve } from 'aurelia'
+import { loadTreeWidth, saveTreeWidth } from '../utils/tree-width'
 import { IDialogService } from '@aurelia/dialog'
 import { buildFolderTree, isValidFolderName, itemIndicesUnder, type FolderItem, type FolderTreeNode } from '../utils/folder-tree'
 import { confirmAction } from '../utils/confirm-action'
@@ -54,16 +55,13 @@ export class FolderTreePanelCustomElement {
     @bindable onRemove!: (path: string) => void
     @bindable onMove!: (index: number, folder: string) => void
 
-    /** localStorage key for the panel width — shared by default so every tree view resizes together (like the turnout editor's sidebar). */
-    @bindable widthKey = 'tree-panel-width'
     width = 256
     private static readonly MIN_WIDTH = 200
     private static readonly MAX_WIDTH = 600
 
     attached(): void {
         try {
-            const saved = parseInt(localStorage.getItem(this.widthKey) ?? '', 10)
-            if (Number.isFinite(saved)) this.width = this._clamp(saved)
+            this.width = this._clamp(loadTreeWidth())
         } catch { /* storage unavailable — keep the default */ }
     }
 
@@ -82,7 +80,7 @@ export class FolderTreePanelCustomElement {
             handle.removeEventListener('pointermove', move)
             handle.removeEventListener('pointerup', up)
             handle.removeEventListener('pointercancel', up)
-            try { localStorage.setItem(this.widthKey, String(this.width)) } catch { /* ignore */ }
+            saveTreeWidth(this.width)
         }
         handle.addEventListener('pointermove', move)
         handle.addEventListener('pointerup', up)

@@ -41,8 +41,8 @@ async function setMonacoContent(page: import('@playwright/test').Page, text: str
     await page.waitForTimeout(500)
 }
 
-function groupHeaders(page: import('@playwright/test').Page) {
-    return page.locator('aliases-editor [data-testid="alias-group-header"]')
+function treeItems(page: import('@playwright/test').Page) {
+    return page.locator('aliases-editor [data-testid="tree-item"]')
 }
 
 function aliasRows(page: import('@playwright/test').Page) {
@@ -76,7 +76,7 @@ async function addAlias(page: import('@playwright/test').Page, name: string, typ
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test.describe('Aliases Editor', () => {
-    test('groups aliases by type and sorts within each group by name', async ({ workspacePage: page }) => {
+    test('lists every alias as a tree leaf and the right pane edits only the selected one', async ({ workspacePage: page }) => {
         await openAliasesEditor(page)
         await switchToRaw(page)
         await setMonacoContent(page, [
@@ -87,25 +87,22 @@ test.describe('Aliases Editor', () => {
         await switchToVisual(page)
 
         await expect(page.getByText('3 entries')).toBeVisible()
+        await expect(treeItems(page)).toHaveCount(3)
+        // One card at a time: the first alias is auto-selected.
+        await expect(aliasRows(page)).toHaveCount(1)
 
-        // Alphabetical by group label: "Roster" sorts before "Turnout".
-        const headers = groupHeaders(page)
-        await expect(headers).toHaveCount(2)
-        await expect(headers.nth(0)).toContainText('Roster')
-        await expect(headers.nth(0)).toContainText('(1)')
-        await expect(headers.nth(1)).toContainText('Turnout')
-        await expect(headers.nth(1)).toContainText('(2)')
+        await treeItems(page).filter({ hasText: 'APPLE_TURNOUT' }).click()
+        await expect(aliasRows(page)).toHaveCount(1)
+        await expect(nameInputs(page).first()).toHaveValue('APPLE_TURNOUT')
+        await expect(aliasRows(page).first()).toContainText('Turnout')
 
-        // Within the Turnout group, entries are sorted alphabetically by name:
-        // APPLE_TURNOUT before ZEBRA_TURNOUT.
-        const names = nameInputs(page)
-        await expect(names).toHaveCount(3)
-        await expect(names.nth(0)).toHaveValue('LOCO_ALIAS')
-        await expect(names.nth(1)).toHaveValue('APPLE_TURNOUT')
-        await expect(names.nth(2)).toHaveValue('ZEBRA_TURNOUT')
+        await treeItems(page).filter({ hasText: 'LOCO_ALIAS' }).click()
+        await expect(nameInputs(page).first()).toHaveValue('LOCO_ALIAS')
+        // No declared type: inferred from the roster loco the value matches.
+        await expect(aliasRows(page).first()).toContainText('Roster')
     })
 
-    test('editing an alias name to reorder it within its group re-sorts on the next visual render', async ({ workspacePage: page }) => {
+    test('renaming an alias updates its tree label', async ({ workspacePage: page }) => {
         await openAliasesEditor(page)
         await switchToRaw(page)
         await setMonacoContent(page, [
@@ -114,37 +111,15 @@ test.describe('Aliases Editor', () => {
         ].join('\n'))
         await switchToVisual(page)
 
-        let names = nameInputs(page)
-        await expect(names.nth(0)).toHaveValue('ALPHA')
-        await expect(names.nth(1)).toHaveValue('MIDDLE')
+        await treeItems(page).filter({ hasText: 'ALPHA' }).click()
+        await nameInputs(page).first().fill('ZULU')
+        await nameInputs(page).first().blur()
 
-        // Rename ALPHA to ZULU so it should now sort after MIDDLE.
-        await names.nth(0).fill('ZULU')
-        await names.nth(0).blur()
-
-        names = nameInputs(page)
-        await expect(names.nth(0)).toHaveValue('MIDDLE')
-        await expect(names.nth(1)).toHaveValue('ZULU')
+        await expect(treeItems(page).filter({ hasText: 'ZULU' })).toHaveCount(1)
+        await expect(treeItems(page).filter({ hasText: 'ALPHA' })).toHaveCount(0)
     })
 
-    test('aliases with no declared type are grouped by their inferred object type', async ({ workspacePage: page }) => {
-        // No `// type:` comment, so the group label is inferred from which seeded
-        // object (roster loco 3, turnout 200) the numeric value matches.
-        await openAliasesEditor(page)
-        await switchToRaw(page)
-        await setMonacoContent(page, [
-            'ALIAS(LOCO_ALIAS, 3)',
-            'ALIAS(TURNOUT_ALIAS, 200)',
-        ].join('\n'))
-        await switchToVisual(page)
-
-        const headers = groupHeaders(page)
-        await expect(headers).toHaveCount(2)
-        await expect(headers.nth(0)).toContainText('Roster')
-        await expect(headers.nth(1)).toContainText('Turnout')
-    })
-
-    test('removing the last alias in a group removes that group heading', async ({ workspacePage: page }) => {
+    test('removing the selected alias drops it from the tree', async ({ workspacePage: page }) => {
         await openAliasesEditor(page)
         await switchToRaw(page)
         await setMonacoContent(page, [
@@ -152,21 +127,45 @@ test.describe('Aliases Editor', () => {
             'ALIAS(ONLY_ROSTER, 3)',
         ].join('\n'))
         await switchToVisual(page)
+        await expect(treeItems(page)).toHaveCount(2)
 
-        await expect(groupHeaders(page)).toHaveCount(2)
-        await expect(groupHeaders(page).first()).toContainText('Roster')
-
-        // The Roster group sorts first, so its single row is the first alias row.
+        await treeItems(page).filter({ hasText: 'ONLY_ROSTER' }).click()
         // Cancelling the confirm dialog must leave both aliases in place.
         await aliasRows(page).first().locator('button[title="Delete"]').click()
         await answerConfirmDialog(page, 'cancel')
-        await expect(groupHeaders(page)).toHaveCount(2)
+        await expect(treeItems(page)).toHaveCount(2)
 
         await aliasRows(page).first().locator('button[title="Delete"]').click()
         await answerConfirmDialog(page, 'confirm')
+        await expect(treeItems(page)).toHaveCount(1)
+        await expect(treeItems(page).first()).toContainText('ONLY_TURNOUT')
+    })
 
-        await expect(groupHeaders(page)).toHaveCount(1)
-        await expect(groupHeaders(page).first()).toContainText('Turnout')
+    // ── Folders: organizing only, stored as // @tree: comments ────────────────
+
+    test('moving an alias into a folder is written as // @tree: above its ALIAS line and survives a raw round-trip', async ({ workspacePage: page }) => {
+        await openAliasesEditor(page)
+        await switchToRaw(page)
+        await setMonacoContent(page, [
+            '// @tree-folder: Spare',
+            '// @tree: Yard',
+            'ALIAS(YARD_SW, 200) // type: Turnout',
+            'ALIAS(MAIN_SW, 201) // type: Turnout',
+        ].join('\n'))
+        await switchToVisual(page)
+
+        // The folder from the file shows up in the tree with its alias inside.
+        await expect(page.locator('aliases-editor [data-testid="folder-row"]', { hasText: 'Yard' })).toBeVisible()
+        await expect(page.locator('aliases-editor [data-testid="folder-row"]', { hasText: 'Spare' })).toBeVisible()
+
+        // Move MAIN_SW into Spare with the card's Folder dropdown.
+        await treeItems(page).filter({ hasText: 'MAIN_SW' }).click()
+        await page.locator('aliases-editor [data-testid="alias-folder"]').selectOption('Spare')
+
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('@tree: Spare')
+        await expect(page.locator('div.monaco-editor')).toContainText('@tree: Yard')
+        await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(MAIN_SW, 201)')
     })
 
     // ── Type -> ID dropdown: only real object IDs are offered, one alias per ID ─

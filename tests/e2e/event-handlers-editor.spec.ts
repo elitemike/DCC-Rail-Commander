@@ -51,8 +51,8 @@ test.describe('Event Handlers editor', () => {
         await openEventHandlersEditor(page)
         await addHandler(page, 'ONRAILSYNCON')
 
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a').first()).toContainText('On rail sync signal valid')
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]')).toHaveCount(1)
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]').first()).toContainText('On rail sync signal valid')
 
         await expect(page.locator('.blocklySvg').first()).toBeVisible({ timeout: 10_000 })
         const outputText = await getOutputPaneText(page)
@@ -90,7 +90,7 @@ test.describe('Event Handlers editor', () => {
     test('typing a friendly name and blurring updates both the sidebar row and the header label', async ({ workspacePage: page }) => {
         await openEventHandlersEditor(page)
         await addHandler(page, 'ONRAILSYNCON')
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]')).toHaveCount(1)
 
         const nameInput = page.getByPlaceholder('Friendly name')
         await nameInput.fill('Auto Reverse turnout')
@@ -101,25 +101,25 @@ test.describe('Event Handlers editor', () => {
         // reference-identical item at that index and skipped re-rendering it — the name landed in
         // the saved file correctly, but the sidebar and header label silently kept showing the old
         // derived label until something else forced a re-render.
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a').first()).toContainText('Auto Reverse turnout')
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]').first()).toContainText('Auto Reverse turnout')
         await expect(page.getByTestId('selected-handler-name')).toHaveText('Auto Reverse turnout')
     })
 
     test('removing the only entry returns to the empty state', async ({ workspacePage: page }) => {
         await openEventHandlersEditor(page)
         await addHandler(page, 'ONRAILSYNCON')
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]')).toHaveCount(1)
 
         // Cancelling the confirm dialog must keep the handler.
-        const removeBtn = page.locator('event-handlers-editor nav[aria-label="Event handlers"] a button[title="Remove"]')
+        const removeBtn = page.locator('event-handlers-editor [data-testid="tree-item"] button[title="Remove"]')
         await removeBtn.click()
         await answerConfirmDialog(page, 'cancel')
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(1)
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]')).toHaveCount(1)
 
         await removeBtn.click()
         await answerConfirmDialog(page, 'confirm')
 
-        await expect(page.locator('event-handlers-editor nav[aria-label="Event handlers"] a')).toHaveCount(0)
+        await expect(page.locator('event-handlers-editor [data-testid="tree-item"]')).toHaveCount(0)
         await expect(page.getByText('No event handlers.', { exact: false }).first()).toBeVisible()
     })
 
