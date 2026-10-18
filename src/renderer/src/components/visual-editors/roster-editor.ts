@@ -400,7 +400,42 @@ export class RosterEditorCustomElement {
             return [...folders, ...levelNodes(indices, path)]
         }
 
-        return convert(buildFolderTree(roster, this.state.rosterFolders), '')
+        const full = convert(buildFolderTree(roster, this.state.rosterFolders), '')
+        const q = this.searchQuery.trim().toLowerCase()
+        if (!q) return full
+
+        const matches = (i: number): boolean => {
+            const e = roster[i]
+            return e.name.toLowerCase().includes(q)
+                || (e.comment ?? '').toLowerCase().includes(q)
+                || String(e.dccAddress).includes(q)
+        }
+        // Keep matching locos only; drop groups/folders left empty.
+        const prune = (nodes: TreeNodeData[]): TreeNodeData[] => {
+            const out: TreeNodeData[] = []
+            for (const n of nodes) {
+                if (n.nodeType === 'loco') {
+                    if (matches(Number(n.rosterIdx))) out.push(n)
+                    continue
+                }
+                const children = prune(n.children ?? [])
+                if (children.length === 0) continue
+                out.push({ ...n, children, expanded: true })
+            }
+            return out
+        }
+        return prune(full)
+    }
+
+    searchQuery = ''
+
+    onSearchInput(): void {
+        this._rebuildTree()
+    }
+
+    clearSearch(): void {
+        this.searchQuery = ''
+        this._rebuildTree()
     }
 
     /** Ids of every folder/group node at any depth - all start expanded. */

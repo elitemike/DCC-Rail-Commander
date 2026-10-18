@@ -36,6 +36,14 @@
                             title="Add new roster entry">+</button>
                     </div>
 
+                    <div class="flex items-center gap-1 px-2 py-1.5 border-b border-gray-200 dark:border-white/10 shrink-0">
+                        <input type="text" data-testid="roster-search" value.bind="searchQuery" input.trigger="onSearchInput()"
+                            placeholder="Search name, comment or DCC ID"
+                            class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-xs outline-none focus:border-blue-500" />
+                        <button if.bind="searchQuery" click.trigger="clearSearch()" title="Clear search"
+                            class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-gray-900 dark:hover:text-white">×</button>
+                    </div>
+
                     <div ref="treeEl" id="roster-treeview" class="flex-1 overflow-auto min-h-0"></div>
 
                     <div if.bind="roster.length === 0" class="flex-1 flex items-center justify-center p-4">
