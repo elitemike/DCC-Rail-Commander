@@ -1,31 +1,34 @@
 <template>
     <div data-testid="folder-tree-panel"
-        class="flex flex-col h-full w-56 shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
+        class="flex flex-col h-full w-64 shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
         <div class="flex items-center justify-between gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10">
-            <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Folders</span>
+            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">${label}</span>
             <span class="flex items-center gap-1">
-                <button if.bind="selected" click.trigger="promptRename()" data-testid="rename-folder" title="Rename folder"
+                <button if.bind="selectedFolder && selectedIndex < 0" click.trigger="promptRename()" data-testid="rename-folder" title="Rename folder"
                     class="px-1.5 py-0.5 text-xs rounded text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Rename</button>
-                <button if.bind="selected" click.trigger="confirmDelete()" data-testid="delete-folder" title="Delete folder"
+                <button if.bind="selectedFolder && selectedIndex < 0" click.trigger="confirmDelete()" data-testid="delete-folder" title="Delete folder"
                     class="px-1.5 py-0.5 text-xs rounded text-red-500 hover:bg-red-500/10 transition-colors">Delete</button>
                 <button click.trigger="promptNewFolder()" data-testid="new-folder" title="New folder"
-                    class="w-6 h-6 flex items-center justify-center rounded text-base font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">+</button>
+                    class="w-6 h-6 flex items-center justify-center rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-base font-bold transition-colors">+</button>
             </span>
         </div>
-        <div class="flex-1 overflow-y-auto py-1" role="tree">
-            <button click.trigger="select('')" data-testid="folder-all" role="treeitem"
-                class="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left transition-colors"
-                class.bind="selected === '' ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
-                <span>All ${label}</span>
-                <span class="text-xs text-gray-500">${total}</span>
-            </button>
-            <button repeat.for="row of rows" click.trigger="select(row.path)" data-testid="folder-row" role="treeitem"
-                css="padding-left: ${12 + row.depth * 14}px"
-                class="w-full flex items-center justify-between gap-2 pr-3 py-1.5 text-sm text-left transition-colors"
-                class.bind="selected === row.path ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
-                <span class="truncate">&#128193; ${row.name}</span>
-                <span class="text-xs text-gray-500">${row.count}</span>
-            </button>
+        <div class="flex-1 overflow-y-auto py-1" role="tree" dragover.trigger="dragOver($event)" drop.trigger="drop($event, '')">
+            <div if.bind="rows.length === 0" class="px-3 py-6 text-xs text-gray-500 text-center">Nothing here yet.</div>
+            <div repeat.for="row of rows" key.bind="row.key" role="treeitem"
+                data-testid.bind="row.kind === 'folder' ? 'folder-row' : 'tree-item'"
+                draggable.bind="row.kind === 'item'"
+                dragstart.trigger="dragStart($event, row)"
+                dragover.trigger="dragOver($event)"
+                drop.trigger="drop($event, row.path)"
+                click.trigger="row.kind === 'folder' ? selectFolder(row.path) : selectItem(row.index)"
+                css="padding-left: ${8 + row.depth * 14}px"
+                class="flex items-center gap-1.5 pr-3 py-1.5 text-sm cursor-pointer select-none transition-colors"
+                class.bind="isSelected(row) ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
+                <span if.bind="row.kind === 'folder'" click.trigger="toggle(row.path) & self" class="w-4 text-center text-xs text-gray-500">${row.open ? '▾' : '▸'}</span>
+                <span if.bind="row.kind === 'item'" class="w-4"></span>
+                <span class="truncate flex-1">${row.label}</span>
+                <span if.bind="row.kind === 'folder'" class="text-xs text-gray-500">${row.count}</span>
+            </div>
         </div>
     </div>
 </template>

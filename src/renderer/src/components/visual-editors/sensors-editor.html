@@ -20,8 +20,9 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
-            <folder-tree-panel items.bind="state.sensors" folders.bind="state.sensorFolders" selected.two-way="selectedFolder"
-                label="sensors" on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder"></folder-tree-panel>
+            <folder-tree-panel items.bind="state.sensors" folders.bind="state.sensorFolders"
+                selected-folder.two-way="selectedFolder" selected-index.two-way="selectedIndex" label="Sensors" item-label.bind="itemLabel"
+                on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder" on-move.bind="moveToFolder"></folder-tree-panel>
             <div class="flex-1 overflow-y-auto p-4">
                 <div class="flex items-center justify-between gap-3 mb-4">
                     <p class="text-xs text-gray-500">Digital or analog sensors that EX-RAIL and JMRI can read the
@@ -41,12 +42,12 @@
                     <p class="text-sm">No sensors yet. Click "Add Sensor" to create one.</p>
                 </div>
 
-                <div if.bind="state.sensors.length > 0 && visibleIndices.length === 0" class="text-sm text-gray-500 py-8 text-center">
-                    No sensors in this folder.
+                <div if.bind="state.sensors.length > 0 && selectedIndices.length === 0" data-testid="sensor-select-hint" class="text-sm text-gray-500 py-8 text-center">
+                    Select a sensor in the tree to edit it.
                 </div>
 
-                <div if.bind="visibleIndices.length > 0" class="flex flex-col gap-2">
-                    <div repeat.for="idx of visibleIndices" focusin.trigger="captureRowBeforeEdit(idx)" data-testid="sensor-row"
+                <div if.bind="selectedIndices.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="idx of selectedIndices" focusin.trigger="captureRowBeforeEdit(idx)" data-testid="sensor-row"
                         class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
                         <div class="flex flex-col gap-1">
                             <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Pin</label>

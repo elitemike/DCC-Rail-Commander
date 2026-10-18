@@ -2,7 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
-import { allFolderPaths, itemIndicesUnder } from '../../utils/folder-tree'
+import { allFolderPaths } from '../../utils/folder-tree'
 import type { SensorEntry } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
@@ -57,6 +57,7 @@ export class SensorsEditorCustomElement {
         // file's editor already existed still takes effect, as long as the user
         // hasn't manually picked a tab for it this session (_userChoseTab).
         this._applyDefaultViewIfUnset()
+        this._ensureSelection()
         try { console.debug('SensorsEditor attached') } catch { /* ignore */ }
     }
 
@@ -76,30 +77,42 @@ export class SensorsEditorCustomElement {
             this.rawSnapshot = this.state.sensorsRaw
         }
         this.activeTab = t
+        if (t === 'visual') this._ensureSelection()
         // Ensure Monaco lays out once visible
         if (t === 'raw') setTimeout(() => { try { this.rawEditor?.editor?.layout?.() } catch { } }, 50)
     }
 
     rawSnapshot = ''
 
-    // ── Folders (logical grouping only — see folder-tree.ts) ─────────────────
-    /** Folder whose subtree is listed; '' shows every sensor. */
-    selectedFolder = ''
+    /** Keeps the right pane useful: pick the first sensor when nothing valid is selected. */
+    private _ensureSelection(): void {
+        if (this.selectedFolder) return
+        if (this.selectedIndex < 0 || this.selectedIndex >= this.state.sensors.length) {
+            this.selectedIndex = this.state.sensors.length > 0 ? 0 : -1
+        }
+    }
 
-    /** Indices into state.sensors of the rows to show for the selected folder. */
-    get visibleIndices(): number[] {
-        return itemIndicesUnder(this.state.sensors, this.selectedFolder)
+    // ── Folders (logical grouping only — see folder-tree.ts) ─────────────────
+    /** Folder selected in the tree ('' = none); new sensors are created inside it. */
+    selectedFolder = ''
+    /** Index into state.sensors of the sensor being edited, or -1. The right pane shows only this one. */
+    selectedIndex = -1
+
+    get selectedIndices(): number[] {
+        return this.selectedIndex >= 0 && this.selectedIndex < this.state.sensors.length ? [this.selectedIndex] : []
     }
 
     get folderPaths(): string[] {
         return allFolderPaths(this.state.sensors, this.state.sensorFolders)
     }
 
+    itemLabel = (item: SensorEntry): string => (item.description ? `${item.description} (${item.id})` : `Sensor ${item.id}`)
+
     addFolder = (path: string): boolean => this.state.addSensorFolder(path)
     renameFolder = (from: string, to: string): boolean => this.state.renameSensorFolder(from, to)
     removeFolder = (path: string): void => this.state.deleteSensorFolder(path)
 
-    moveToFolder(idx: number, folder: string): void {
+    moveToFolder = (idx: number, folder: string): void => {
         this.state.moveSensorToFolder(idx, folder)
     }
 
@@ -109,7 +122,10 @@ export class SensorsEditorCustomElement {
     }
 
     addSensor() {
-        this.state.sensors = [...this.state.sensors, { id: this.state.nextFreeVpin, description: 'New Sensor', ...(this.selectedFolder ? { folder: this.selectedFolder } : {}) }]
+        const folder = this.selectedIndex >= 0 ? this.state.sensors[this.selectedIndex]?.folder ?? '' : this.selectedFolder
+        this.state.sensors = [...this.state.sensors, { id: this.state.nextFreeVpin, description: 'New Sensor', ...(folder ? { folder } : {}) }]
+        this.selectedFolder = ''
+        this.selectedIndex = this.state.sensors.length - 1
         this.state.syncAll()
     }
 
@@ -119,6 +135,7 @@ export class SensorsEditorCustomElement {
         if (!(await confirmAction(this.dialogService, `Delete "${entry.description ? `${entry.description} (${entry.id})` : `Sensor ${entry.id}`}"?`, 'Are you sure you want to remove this sensor?'))) return
         this.state.sensors = this.state.sensors.filter((_, i) => i !== idx)
         this._reindexEditMapsAfterRemoval(idx)
+        this.selectedIndex = -1
         this.state.syncAll()
     }
 

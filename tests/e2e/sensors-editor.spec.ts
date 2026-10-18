@@ -55,6 +55,12 @@ function sensorRows(page: import('@playwright/test').Page) {
     return page.locator('sensors-editor .flex.items-end.gap-3')
 }
 
+// The tree is the nav and the right pane shows only the selected sensor, so `sensorRows` is
+// always zero or one row — pick which sensor it shows by clicking its tree leaf.
+async function selectSensor(page: import('@playwright/test').Page, n: number) {
+    await page.getByTestId('tree-item').nth(n).click()
+}
+
 async function addSensor(page: import('@playwright/test').Page) {
     await page.getByRole('button', { name: 'Add Sensor' }).click()
 }
@@ -160,9 +166,11 @@ test.describe('Sensors Editor', () => {
         await switchToVisual(page)
 
         await expect(page.getByText('2 entries')).toBeVisible()
-        const rows = sensorRows(page)
-        await expectRowDescription(rows.nth(0), 'Occupancy A')
-        await expectRowDescription(rows.nth(1), 'Occupancy B')
+        await expect(page.getByTestId('tree-item')).toHaveCount(2)
+        await selectSensor(page, 0)
+        await expectRowDescription(sensorRows(page), 'Occupancy A')
+        await selectSensor(page, 1)
+        await expectRowDescription(sensorRows(page), 'Occupancy B')
     })
 
     // ── Backward compatibility: a real hand-rolled project's JMRI_SENSOR declarations ──
@@ -351,7 +359,7 @@ test.describe('Sensors Editor', () => {
         await expect(page.locator('div.monaco-editor')).not.toContainText('type: Sensor')
     })
 
-    test('folders group sensors logically: new sensors land in the selected folder and the comment is written to the raw file', async ({ workspacePage: page }) => {
+    test('the tree is the nav: folders hold sensors as leaves, the right pane shows just the selected one, and the comment is written to the raw file', async ({ workspacePage: page }) => {
         await openSensorsEditor(page)
 
         await page.getByTestId('new-folder').click()
@@ -361,13 +369,15 @@ test.describe('Sensors Editor', () => {
         await dialog.getByRole('button', { name: 'Create' }).click()
         await expect(page.getByTestId('folder-row')).toHaveCount(1)
 
-        // With the folder selected, a new sensor is created inside it.
+        // With the folder selected, a new sensor is created inside it and appears as its leaf.
         await addSensor(page)
-        await expect(sensorRows(page)).toHaveCount(1)
+        await expect(page.getByTestId('tree-item')).toHaveCount(1)
         await expect(page.getByTestId('folder-row')).toContainText('1')
+        await expect(sensorRows(page)).toHaveCount(1)
 
-        // Back at "All" the sensor is still listed; an empty sibling view shows the placeholder.
-        await page.getByTestId('folder-all').click()
+        // A second, top-level sensor: the right pane switches to it alone.
+        await page.getByTestId('folder-row').click()
+        await page.getByTestId('tree-item').first().click()
         await expect(sensorRows(page)).toHaveCount(1)
 
         await switchToRaw(page)
