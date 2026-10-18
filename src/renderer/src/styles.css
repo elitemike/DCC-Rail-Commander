@@ -402,3 +402,18 @@ body {
 .blocklyFlyout {
     filter: drop-shadow(3px 0 10px rgba(0, 0, 0, 0.35));
 }
+
+/*
+ * Roster tree drag-and-drop: the folder (or the whole tree, for the top level) a drop would land in
+ * is outlined while dragging, so a valid drop point is obvious. See roster-editor.ts _onNodeDragging.
+ */
+#roster-treeview li.drop-target > .e-text-content,
+#roster-treeview li.drop-target > .e-fullrow {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+    background: rgba(59, 130, 246, 0.18);
+}
+#roster-treeview.drop-target-root {
+    outline: 2px dashed #3b82f6;
+    outline-offset: -3px;
+}

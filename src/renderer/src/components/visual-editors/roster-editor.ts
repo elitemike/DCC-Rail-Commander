@@ -159,17 +159,25 @@ export class RosterEditorCustomElement {
                 drawNode: (args: DrawNodeEventArgs) => {
                     this._renderNodeContent(args.node, args.nodeData as unknown as TreeNodeData)
                 },
-                // Only locos and folders can be dragged (a #define group follows its locos).
+                // Locos, #define groups (moves all of the group's locos) and folders can be dragged.
                 nodeDragStart: (args: DragAndDropEventArgs) => {
                     const id = String((args.draggedNodeData as { id?: string }).id ?? '')
-                    if (!id.startsWith('loco:') && !id.startsWith(FOLDER_PREFIX)) args.cancel = true
+                    if (!id.startsWith('loco:') && !id.startsWith('group:') && !id.startsWith(FOLDER_PREFIX)) args.cancel = true
                 },
                 nodeDragging: (args: DragAndDropEventArgs) => this._onNodeDragging(args),
                 nodeDragStop: (args: DragAndDropEventArgs) => {
                     // The move is applied to state and the tree rebuilt from it - letting SF also
                     // move the DOM node would leave the two out of step.
                     args.cancel = true
-                    this._onNodeDrop(args)
+                    this._clearDropHighlight()
+                    // State changes now, but the tree is rebuilt only after SF has finished its own drop
+                    // handling: refreshing it from inside this callback leaves the next drag dead
+                    // (no drag handle). SF can also still nest the dragged node under a loco target in
+                    // the DOM despite `cancel`; the tree is derived from state, so always rebuild
+                    // afterwards, including for rejected/no-op drops.
+                    this._inDrop = true
+                    try { this._onNodeDrop(args) } finally { this._inDrop = false }
+                    setTimeout(() => this._rebuildTree(), 100)
                 },
                 nodeSelected: (args: NodeSelectEventArgs) => this._onNodeSelected(args),
                 // Select the right-clicked node so _contextMenuNodeId is populated
@@ -400,8 +408,10 @@ export class RosterEditorCustomElement {
         return nodes.flatMap(n => (n.children ? [n.id, ...this._expandableIds(n.children)] : []))
     }
 
+    private _inDrop = false
+
     private _rebuildTree(): void {
-        if (!this.sfTree) return
+        if (!this.sfTree || this._inDrop) return
         const data = this._buildTreeData()
         this.sfTree.fields = {
             dataSource: data as any,
@@ -828,21 +838,47 @@ export class RosterEditorCustomElement {
         return null
     }
 
-    /** Picks the drag cursor icon to match what a drop would do (see _onNodeDrop). */
+    /** Removes the drop-target outline set by _onNodeDragging. */
+    private _clearDropHighlight(): void {
+        this.treeEl?.classList.remove('drop-target-root')
+        this.treeEl?.querySelectorAll('li.drop-target').forEach(el => el.classList.remove('drop-target'))
+    }
+
+    /** Outlines where a drop would land: the destination folder, or the whole tree for the top level. */
+    private _highlightDrop(folderPath: string | null): void {
+        this._clearDropHighlight()
+        if (folderPath === null) return
+        if (folderPath === '') { this.treeEl.classList.add('drop-target-root'); return }
+        const li = [...this.treeEl.querySelectorAll<HTMLElement>('li[data-uid]')]
+            .find(el => (this.sfTree?.getTreeData(el.dataset.uid ?? '')?.[0] as { id?: string } | undefined)?.id === `${FOLDER_PREFIX}${folderPath}`)
+        li?.classList.add('drop-target')
+    }
+
+    /** Picks the drag cursor icon and outlines the destination so a valid drop point is obvious (see _onNodeDrop). */
     private _onNodeDragging(args: DragAndDropEventArgs): void {
         if (!this.sfTree) return
         const draggedId = String((args.draggedNodeData as { id?: string }).id ?? '')
         const targetEl = (args.target as Element | null)?.closest('li[data-uid]') as HTMLElement | null
-        if (!targetEl) return // blank space: leave SF's own indicator (drop to top level)
+        if (!targetEl) {
+            // Blank space inside the tree drops to the top level; outside it nothing happens.
+            const inside = !!(args.target as Element | null)?.closest('#roster-treeview')
+            this._highlightDrop(inside ? '' : null)
+            if (!inside) args.dropIndicator = 'e-no-drop'
+            return
+        }
         const targetId = (this.sfTree.getTreeData(targetEl.dataset.uid ?? '')?.[0] as { id?: string } | undefined)?.id
         if (!targetId) return
-        if (targetId === draggedId) { args.dropIndicator = 'e-no-drop'; return }
+        if (targetId === draggedId) { this._highlightDrop(null); args.dropIndicator = 'e-no-drop'; return }
         if (draggedId.startsWith(FOLDER_PREFIX)) {
             const from = draggedId.slice(FOLDER_PREFIX.length)
             const into = targetId.startsWith(FOLDER_PREFIX) ? targetId.slice(FOLDER_PREFIX.length) : null
-            args.dropIndicator = into !== null && into !== from && !into.startsWith(`${from}/`) ? 'e-drop-in' : 'e-no-drop'
+            const ok = into !== null && into !== from && !into.startsWith(`${from}/`)
+            this._highlightDrop(ok ? into : null)
+            args.dropIndicator = ok ? 'e-drop-in' : 'e-no-drop'
             return
         }
+        // A loco lands in the folder that contains the target (or the target itself, if a folder).
+        this._highlightDrop(this._containerOfNode(targetId))
         args.dropIndicator = targetId.startsWith(FOLDER_PREFIX) ? 'e-drop-in' : 'e-drop-next'
     }
 
@@ -871,6 +907,22 @@ export class RosterEditorCustomElement {
                 return
             }
             this._followFolder(from, to)
+            this._rebuildTree()
+            return
+        }
+
+        if (draggedId.startsWith('group:')) {
+            // A #define group moves as a whole: every loco using that macro in the group's folder.
+            const { macroName, folderPath } = parseGroupNodeId(draggedId)
+            if (container === folderPath) return
+            if (this.editBuffer !== null) this.commitBuffer()
+            this.state.roster
+                .map((r, i) => (r.functionMacro === macroName && (r.folder ?? '') === folderPath ? i : -1))
+                .filter(i => i >= 0)
+                .forEach(i => this.state.moveToFolder('roster', i, container))
+            if (this.selectedNodeType === 'group' && this.selectedMacroName === macroName && this.selectedGroupFolder === folderPath) {
+                this.selectedGroupFolder = container
+            }
             this._rebuildTree()
             return
         }
