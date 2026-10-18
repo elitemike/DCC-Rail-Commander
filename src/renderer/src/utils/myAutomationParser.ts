@@ -67,7 +67,13 @@ export type TurnoutProfile = 'Instant' | 'Fast' | 'Medium' | 'Slow' | 'Bounce';
 export type TurnoutType = 'SERVO' | 'DCC' | 'DCCL' | 'PIN' | 'VIRTUAL';
 export type TurnoutDefaultState = 'CLOSED' | 'THROWN';
 
-interface TurnoutBase { id: number; description: string; comment?: string; defaultState: TurnoutDefaultState; }
+/**
+ * `folder` / `parentId` place a turnout in the editor's tree view and are purely organisational —
+ * they live in `// @tree:` comment lines above the entry (see parseTurnoutFromFile), so the EXRAIL
+ * macros themselves are untouched. At most one is set: `folder` is a "/"-separated path of
+ * organisation-only folders, `parentId` is the id of a VIRTUAL turnout acting as the parent node.
+ */
+interface TurnoutBase { id: number; description: string; comment?: string; defaultState: TurnoutDefaultState; folder?: string; parentId?: number; }
 
 /** SERVO_TURNOUT(id, pin, activeAngle, inactiveAngle, profile[, "desc"]) */
 export interface ServoTurnout extends TurnoutBase {
@@ -1409,7 +1415,77 @@ export function commentInvalidTurnoutLines(text: string): { processedText: strin
     return { processedText: processedLines.join('\n'), invalidLines };
 }
 
+/** Normalises a folder path: trims each "/"-separated segment and drops empty ones ("A / /B" → "A/B"). */
+export function normalizeFolderPath(path: string): string {
+    return path.split('/').map(seg => seg.trim()).filter(Boolean).join('/');
+}
+
+const TREE_TAG_RE = /^\s*\/\/\s*@tree:\s*(.*?)\s*$/;
+const TREE_FOLDER_RE = /^\s*\/\/\s*@tree-folder:\s*(.*?)\s*$/;
+const TURNOUT_CALL_RE = /(?:SERVO_|PIN_|VIRTUAL_)?TURNOUTL?\s*\(\s*(\d+)/;
+const PARENT_REF_RE = /^#\s*(\d+)$/;
+
+/**
+ * Reads the tree-view metadata comments from myTurnouts.h text:
+ *
+ *   // @tree: Yard/East Throat      → the next turnout lives in that folder
+ *   // @tree: #210                  → the next turnout is a child of VIRTUAL turnout 210
+ *   // @tree-folder: Yard/Spare     → declares a folder that has no turnouts (yet)
+ *
+ * A tag applies to the next turnout call; `// [INVALID]` lines and any other code line drop a
+ * pending tag so it can't attach to the wrong entry.
+ */
+export function parseTurnoutTreeMeta(fileContent: string): {
+    placements: Map<number, { folder?: string; parentId?: number }>;
+    folders: string[];
+} {
+    const placements = new Map<number, { folder?: string; parentId?: number }>();
+    const folders: string[] = [];
+    let pending: { folder?: string; parentId?: number } | null = null;
+    for (const line of fileContent.split('\n')) {
+        const folderDecl = TREE_FOLDER_RE.exec(line);
+        if (folderDecl) {
+            const path = normalizeFolderPath(folderDecl[1]);
+            if (path && !folders.includes(path)) folders.push(path);
+            continue;
+        }
+        const tag = TREE_TAG_RE.exec(line);
+        if (tag) {
+            const ref = PARENT_REF_RE.exec(tag[1]);
+            if (ref) pending = { parentId: parseInt(ref[1], 10) };
+            else {
+                const path = normalizeFolderPath(tag[1]);
+                pending = path ? { folder: path } : null;
+            }
+            continue;
+        }
+        const trimmed = line.trim();
+        if (trimmed === '') continue;
+        if (trimmed.startsWith('//')) {
+            if (trimmed.startsWith('// [INVALID]')) pending = null;
+            continue;
+        }
+        const call = TURNOUT_CALL_RE.exec(line);
+        if (call && pending) placements.set(parseInt(call[1], 10), pending);
+        pending = null;
+    }
+    return { placements, folders };
+}
+
+/** The folders declared with `// @tree-folder:` (empty folders) — see parseTurnoutTreeMeta. */
+export function parseTurnoutFolders(fileContent: string): string[] {
+    return parseTurnoutTreeMeta(fileContent).folders;
+}
+
 export function parseTurnoutFromFile(fileContent: string): Turnout[] {
+    const { placements } = parseTurnoutTreeMeta(fileContent);
+    return parseTurnoutEntries(fileContent).map(t => {
+        const place = placements.get(t.id);
+        return place ? { ...t, ...place } : t;
+    });
+}
+
+function parseTurnoutEntries(fileContent: string): Turnout[] {
     // Strip // [INVALID] comment lines so they are not re-parsed.
     const uncommentedContent = fileContent
         .split('\n')
@@ -1505,10 +1581,22 @@ export function parseTurnoutFromFile(fileContent: string): Turnout[] {
 const descriptionArg = (description: string): string =>
     description ? (description === 'HIDDEN' ? ', HIDDEN' : `, "${description}"`) : '';
 
-export function serializeTurnoutToFile(turnouts: Turnout[]): string {
+export function serializeTurnoutToFile(turnouts: Turnout[], folders: string[] = []): string {
     const lines: string[] = [];
+    // Only folders no turnout already implies (itself or via a deeper path) need an explicit declaration.
+    const implied = new Set<string>();
+    for (const t of turnouts) {
+        if (!t.folder) continue;
+        const segs = t.folder.split('/');
+        for (let i = 1; i <= segs.length; i++) implied.add(segs.slice(0, i).join('/'));
+    }
+    for (const f of folders) {
+        if (f && !implied.has(f)) lines.push(`// @tree-folder: ${f}`);
+    }
     for (const t of turnouts) {
         let line: string;
+        if (t.parentId !== undefined) lines.push(`// @tree: #${t.parentId}`);
+        else if (t.folder) lines.push(`// @tree: ${t.folder}`);
         if (t.type === 'DCC') {
             line = `TURNOUT(${t.id}, ${t.addr}, ${t.subAddr}${descriptionArg(t.description)})`;
         } else if (t.type === 'DCCL') {

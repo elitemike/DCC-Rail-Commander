@@ -451,84 +451,143 @@ describe('TurnoutEditorCustomElement.cloneEntry', () => {
     })
 })
 
-describe('TurnoutEditorCustomElement row context menu', () => {
-    // vitest runs in node here — openMenu reads window.innerWidth to right-align the popup
-    beforeEach(() => { vi.stubGlobal('window', { innerWidth: 1000 }) })
-    afterEach(() => { vi.unstubAllGlobals() })
+describe('TurnoutEditorCustomElement tree context menu', () => {
+    const servo = (id: number, extra: Record<string, unknown> = {}) => ({
+        type: 'SERVO' as const, id, pin: 100 + id, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' as const,
+        description: `T${id}`, comment: '', defaultState: 'CLOSED' as const, ...extra,
+    })
+    const virtual = (id: number, extra: Record<string, unknown> = {}) => ({
+        type: 'VIRTUAL' as const, id, description: `V${id}`, comment: '', defaultState: 'CLOSED' as const, ...extra,
+    })
 
-    function makeMenuEditor() {
+    function makeMenuEditor(turnouts: unknown[]) {
         const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
         const cloneEntry = vi.fn().mockResolvedValue(undefined)
         const removeEntryByIndex = vi.fn().mockResolvedValue(undefined)
-        Object.assign(editor, { menuIndex: null, menuStyle: '', cloneEntry, removeEntryByIndex })
-        return { editor, cloneEntry, removeEntryByIndex }
-    }
-
-    function clickEvent(rect: { bottom: number; right: number }) {
-        const stopPropagation = vi.fn()
-        return {
-            event: { stopPropagation, currentTarget: { getBoundingClientRect: () => rect } } as unknown as Event,
-            stopPropagation,
+        const addEntry = vi.fn().mockResolvedValue(undefined)
+        const promptNewFolder = vi.fn().mockResolvedValue(undefined)
+        const promptRenameFolder = vi.fn().mockResolvedValue(undefined)
+        const deleteFolder = vi.fn().mockResolvedValue(undefined)
+        Object.assign(editor, {
+            state: { turnouts },
+            _contextMenuNodeId: null,
+            cloneEntry, removeEntryByIndex, addEntry, promptNewFolder, promptRenameFolder, deleteFolder,
+        })
+        const select = (id: string, nodeId: string) => {
+            ;(editor as any)._contextMenuNodeId = nodeId
+            ;(editor as any)._onMenuSelect({ item: { id } })
         }
+        return { editor, select, cloneEntry, removeEntryByIndex, addEntry, promptNewFolder, promptRenameFolder, deleteFolder }
     }
 
-    it('openMenu opens the menu for that row, anchored under the button, and does not select the row', () => {
-        const { editor } = makeMenuEditor()
-        const { event, stopPropagation } = clickEvent({ bottom: 100, right: 300 })
+    it('Clone / Delete on a turnout node act on that turnout’s index', () => {
+        const { select, cloneEntry, removeEntryByIndex } = makeMenuEditor([servo(1), servo(2)])
 
-        editor.openMenu(2, event)
+        select('clone', 't:1')
+        select('delete', 't:0')
 
-        expect(editor.menuIndex).toBe(2)
-        expect(editor.menuStyle).toBe(`top:102px;right:${Math.round(window.innerWidth - 300)}px`)
-        expect(stopPropagation).toHaveBeenCalled()
+        expect(cloneEntry).toHaveBeenCalledWith(1)
+        expect(removeEntryByIndex).toHaveBeenCalledWith(0)
     })
 
-    it('openMenu on the already-open row closes it', () => {
-        const { editor } = makeMenuEditor()
-        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+    it('Add Turnout Here on a VIRTUAL turnout nests the new one under it; on a plain turnout it does nothing', () => {
+        const { select, addEntry } = makeMenuEditor([servo(1), virtual(7)])
 
-        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+        select('add-here', 't:0')
+        expect(addEntry).not.toHaveBeenCalled()
 
-        expect(editor.menuIndex).toBeNull()
+        select('add-here', 't:1')
+        expect(addEntry).toHaveBeenCalledWith({ parentId: 7 })
     })
 
-    it('openMenu on a different row moves the menu to it', () => {
-        const { editor } = makeMenuEditor()
-        editor.openMenu(2, clickEvent({ bottom: 100, right: 300 }).event)
+    it('folder nodes route New Folder / Rename / Delete / Add Turnout Here to the folder path', () => {
+        const { select, promptNewFolder, promptRenameFolder, deleteFolder, addEntry } = makeMenuEditor([])
 
-        editor.openMenu(4, clickEvent({ bottom: 160, right: 300 }).event)
+        select('new-folder', 'folder:Yard/East')
+        select('rename-folder', 'folder:Yard/East')
+        select('delete-folder', 'folder:Yard/East')
+        select('add-here', 'folder:Yard/East')
 
-        expect(editor.menuIndex).toBe(4)
+        expect(promptNewFolder).toHaveBeenCalledWith('Yard/East')
+        expect(promptRenameFolder).toHaveBeenCalledWith('Yard/East')
+        expect(deleteFolder).toHaveBeenCalledWith('Yard/East')
+        expect(addEntry).toHaveBeenCalledWith({ folder: 'Yard/East' })
     })
 
-    it('menuClone closes the menu and starts the clone flow for the menu row', () => {
-        const { editor, cloneEntry } = makeMenuEditor()
-        editor.menuIndex = 3
-
-        editor.menuClone()
-
-        expect(editor.menuIndex).toBeNull()
-        expect(cloneEntry).toHaveBeenCalledWith(3)
-    })
-
-    it('menuDelete closes the menu and starts the delete flow for the menu row', () => {
-        const { editor, removeEntryByIndex } = makeMenuEditor()
-        editor.menuIndex = 1
-
-        editor.menuDelete()
-
-        expect(editor.menuIndex).toBeNull()
-        expect(removeEntryByIndex).toHaveBeenCalledWith(1)
-    })
-
-    it('menuClone / menuDelete do nothing when no menu is open', () => {
-        const { editor, cloneEntry, removeEntryByIndex } = makeMenuEditor()
-
-        editor.menuClone()
-        editor.menuDelete()
-
+    it('ignores a menu pick when no node is targeted', () => {
+        const { editor, cloneEntry, removeEntryByIndex } = makeMenuEditor([servo(1)])
+        ;(editor as any)._onMenuSelect({ item: { id: 'delete' } })
         expect(cloneEntry).not.toHaveBeenCalled()
         expect(removeEntryByIndex).not.toHaveBeenCalled()
+    })
+})
+
+describe('TurnoutEditorCustomElement tree placement', () => {
+    it('commitBuffer keeps the placement held in state, even when the edit buffer’s copy is stale', () => {
+        const stored = { type: 'VIRTUAL' as const, id: 200, description: 'Old', comment: '', defaultState: 'CLOSED' as const, folder: 'Moved/Here' }
+        const updateTurnoutEntry = vi.fn()
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: {
+                turnouts: [stored],
+                updateTurnoutEntry,
+                getPrimaryAliasNameForId: vi.fn().mockReturnValue(''),
+                syncAliasForId: vi.fn().mockReturnValue({ ok: true }),
+                strictAliases: false,
+            },
+            // The buffer was taken before the folder was renamed / the turnout was dragged elsewhere.
+            editBuffer: { ...stored, description: 'Edited', folder: 'Stale/Folder' },
+            editBufferIndex: 0,
+            aliasInput: '',
+            errorMessage: '',
+        })
+
+        editor.commitBuffer()
+
+        expect(updateTurnoutEntry).toHaveBeenCalledTimes(1)
+        const written = updateTurnoutEntry.mock.calls[0][1]
+        expect(written.description).toBe('Edited')
+        expect(written.folder).toBe('Moved/Here')
+    })
+
+    it('onLocationChange moves the selected turnout and falls back to its real location if the move is refused', () => {
+        const t = { type: 'SERVO' as const, id: 1, pin: 101, activeAngle: 400, inactiveAngle: 100, profile: 'Slow' as const, description: 'T1', comment: '', defaultState: 'CLOSED' as const }
+        const moveTurnoutTo = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false)
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts: [t], moveTurnoutTo },
+            editBuffer: { ...t },
+            editBufferIndex: 0,
+            errorMessage: '',
+            locationValue: 'folder:Yard',
+            commitBuffer: vi.fn(),
+            _afterTreeChange: vi.fn(),
+        })
+
+        editor.onLocationChange()
+        expect(moveTurnoutTo).toHaveBeenLastCalledWith(0, { folder: 'Yard' })
+
+        editor.locationValue = 'parent:9'
+        editor.onLocationChange()
+        expect(moveTurnoutTo).toHaveBeenLastCalledWith(0, { parentId: 9 })
+        expect(editor.locationValue).toBe('root') // refused → snaps back to where the turnout actually is
+    })
+
+    it('locationOptions lists top level, folders, and other VIRTUAL turnouts — but not itself or its own descendants', () => {
+        const turnouts = [
+            { type: 'VIRTUAL', id: 1, description: 'Parent', comment: '', defaultState: 'CLOSED', folder: 'Yard' },
+            { type: 'VIRTUAL', id: 2, description: 'Child', comment: '', defaultState: 'CLOSED', parentId: 1 },
+            { type: 'VIRTUAL', id: 3, description: 'Other', comment: '', defaultState: 'CLOSED' },
+        ]
+        const editor = Object.create(TurnoutEditorCustomElement.prototype) as TurnoutEditorCustomElement
+        Object.assign(editor, {
+            state: { turnouts, turnoutFolders: ['Spare'], getPrimaryAliasNameForId: () => '' },
+            editBufferIndex: 0, // "Parent" selected
+        })
+
+        const values = editor.locationOptions.map(o => o.value)
+
+        expect(values).toEqual(['root', 'folder:Spare', 'folder:Yard', 'parent:3'])
     })
 })
 

@@ -3,10 +3,24 @@ import { InstallerState } from './installer-state'
 import { AliasSortOrderService } from '../services/alias-sort-order.service'
 import { hasDeviceHeader, injectDeviceHeader } from '../utils/configHeaderParser'
 import { normalizeForComparison } from '../utils/config-file-diff'
+import {
+    addFolder,
+    allFolderPaths,
+    deleteFolder,
+    isValidFolderName,
+    moveTurnout,
+    releaseChildren,
+    renameFolder,
+    retargetChildren,
+    type TurnoutLocation,
+    type TurnoutTreeEdit,
+} from '../utils/turnout-tree'
 import { STACKED_MOTOR_DRIVER } from '../config/commandstation'
 import {
     serializeRosterToFile,
     serializeTurnoutToFile,
+    parseTurnoutFolders,
+    normalizeFolderPath,
     parseRosterFromFile,
     parseTurnoutFromFile,
     buildGeneratorHeader,
@@ -49,6 +63,7 @@ import {
     type SequenceIdEntry,
     type SequenceIdViolation,
 } from '../utils/myAutomationParser'
+import { addChildToVirtualEvents, canonicalizeVirtualEvents, syncVirtualEvents } from '../utils/virtual-turnout-events'
 import {
     parseHalDevicesFromAutomation,
     computeVpinAllocations,
@@ -399,13 +414,21 @@ export class ConfigEditorState {
      */
     turnoutPreservedComments = ''
 
+    /**
+     * Folders declared in myTurnouts.h with `// @tree-folder:` — only matters for folders that hold
+     * no turnouts (a folder with turnouts is implied by their `// @tree:` tags). See turnout-tree.ts.
+     */
+    @observable turnoutFolders: string[] = []
+
     get turnoutsRaw(): string {
         const header = buildGeneratorHeader('myTurnouts.h', this.installerState.appVersion)
-        const serialized = serializeTurnoutToFile(this.turnouts)
+        const serialized = serializeTurnoutToFile(this.turnouts, this.turnoutFolders)
         const body = this.turnoutPreservedComments
-            ? `${this.turnoutPreservedComments}\n${serialized}`
+            ? `${this.turnoutPreservedComments}
+${serialized}`
             : serialized
-        return `${header}\n${body}`
+        return `${header}
+${body}`
     }
 
     setTurnoutsFromRaw(text: string): void {
@@ -423,6 +446,7 @@ export class ConfigEditorState {
                 const previousDefaultState = previousDefaultStateById.get(t.id)
                 return previousDefaultState ? { ...t, defaultState: previousDefaultState } : t
             })
+            this.turnoutFolders = parseTurnoutFolders(text)
             this._syncGeneratedTurnoutDefaultsContent()
             this.hasChanges = true
         } catch {
@@ -432,24 +456,129 @@ export class ConfigEditorState {
     }
 
     updateTurnoutEntry(index: number, entry: Turnout): void {
-        this.turnouts = this.turnouts.map((t, i) => (i === index ? { ...entry } : t))
+        const previous = this.turnouts[index]
+        // A VIRTUAL turnout can be a tree parent: keep its children attached when its id changes,
+        // and hand them to its own parent if it stops being VIRTUAL.
+        let base = this.turnouts
+        if (previous?.type === 'VIRTUAL' && entry.type !== 'VIRTUAL') base = releaseChildren(base, index)
+        let next = base.map((t, i) => (i === index ? { ...entry } : t))
+        if (previous?.type === 'VIRTUAL' && entry.type === 'VIRTUAL') next = retargetChildren(next, previous.id, entry.id)
+        this._setTurnoutsAndSyncEvents(next)
         this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
     }
 
     addTurnoutEntry(entry: Turnout): void {
-        this.turnouts = [...this.turnouts, entry]
+        this._setTurnoutsAndSyncEvents([...this.turnouts, entry])
         this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
     }
 
     removeTurnoutEntry(index: number): void {
-        this.turnouts = this.turnouts.filter((_, i) => i !== index)
+        // Children of a removed VIRTUAL parent move up to its own location instead of being orphaned.
+        this._setTurnoutsAndSyncEvents(releaseChildren(this.turnouts, index).filter((_, i) => i !== index))
         this._syncGeneratedTurnoutDefaultsContent()
         this.hasChanges = true
         this._syncToInstallerState()
+    }
+
+    /**
+     * Replaces the turnout list and mirrors any virtual-parent changes into myEvents.h: a turnout
+     * placed under a VIRTUAL turnout that already has ONCLOSE/ONTHROW handlers gets a matching
+     * CLOSE()/THROW() line, and one that leaves (or is deleted/renumbered) loses it. See
+     * virtual-turnout-events.ts. Callers still run their own _syncToInstallerState().
+     */
+    /** Turnout id -> alias name ('' if none), for writing/recognising aliased ids in generated EXRAIL. */
+    turnoutAliasName(id: number): string {
+        return this._turnoutAliasIn(this.aliases, id)
+    }
+
+    /**
+     * A turnout's alias: one typed 'Turnout', else an untyped alias with that value — the same
+     * rule the EXRAIL block editor uses (exrail-block-compiler's canonicalRefValue), so what we
+     * write is what it will recognise rather than flag as an unknown id.
+     */
+    private _turnoutAliasIn(aliases: AliasEntry[], id: number): string {
+        const typed = getPrimaryAliasForId(aliases, id, 'Turnout')
+        if (typed) return typed.name
+        return aliases.find(a => !a.aliasType && parseAliasNumericValue(a.value) === id)?.name ?? ''
+    }
+
+    /**
+     * Re-spells the tree-managed event references after aliases changed (an alias is normally
+     * set *after* the turnout was placed under its virtual parent). `previousAliases` lets a
+     * renamed alias still be found. Callers run their own _syncToInstallerState() afterwards.
+     */
+    private _refreshVirtualEventRefs(previousAliases?: AliasEntry[]): void {
+        const handlers = canonicalizeVirtualEvents(
+            this.eventHandlers,
+            this.turnouts,
+            id => this.turnoutAliasName(id),
+            previousAliases ? id => this._turnoutAliasIn(previousAliases, id) : undefined,
+        )
+        if (handlers !== this.eventHandlers) this.eventHandlers = handlers
+    }
+
+    private _setTurnoutsAndSyncEvents(next: Turnout[]): void {
+        const handlers = syncVirtualEvents(this.eventHandlers, this.turnouts, next, id => this.turnoutAliasName(id))
+        this.turnouts = next
+        if (handlers !== this.eventHandlers) this.eventHandlers = handlers
+    }
+
+    /**
+     * Makes sure virtual turnout `parentId` has ONCLOSE/ONTHROW handlers covering every tree child.
+     * Normal edits do this automatically; this is for hierarchies that arrived pre-tagged in
+     * myTurnouts.h (hand-written or from another install) whose events were never generated.
+     */
+    syncVirtualParentEvents(parentId: number): void {
+        let handlers = this.eventHandlers
+        for (const t of this.turnouts) {
+            if (t.parentId === parentId) handlers = addChildToVirtualEvents(handlers, parentId, t.id, id => this.turnoutAliasName(id))
+        }
+        if (handlers === this.eventHandlers) return
+        this.eventHandlers = handlers
+        this.hasChanges = true
+        this._syncToInstallerState()
+    }
+
+    // ── Turnout tree (folders + VIRTUAL parents) ─────────────────────────────
+    private _applyTurnoutTreeEdit(edit: TurnoutTreeEdit): void {
+        this._setTurnoutsAndSyncEvents(edit.turnouts)
+        this.turnoutFolders = edit.folders
+        this.hasChanges = true
+        this._syncToInstallerState()
+    }
+
+    /** Declares a folder. Returns false for a blank/invalid name or one that already exists. */
+    addTurnoutFolder(path: string): boolean {
+        const p = normalizeFolderPath(path)
+        if (!p || p.split('/').some(seg => !isValidFolderName(seg))) return false
+        if (allFolderPaths(this.turnouts, this.turnoutFolders).includes(p)) return false
+        this._applyTurnoutTreeEdit(addFolder({ turnouts: this.turnouts, folders: this.turnoutFolders }, p))
+        return true
+    }
+
+    /** Renames or moves folder `from` (with everything under it) to path `to`. False if `to` is taken/invalid. */
+    renameTurnoutFolder(from: string, to: string): boolean {
+        const edit = renameFolder({ turnouts: this.turnouts, folders: this.turnoutFolders }, from, to)
+        if (!edit) return false
+        this._applyTurnoutTreeEdit(edit)
+        return true
+    }
+
+    /** Deletes a folder; its contents move up one level. */
+    deleteTurnoutFolder(path: string): void {
+        this._applyTurnoutTreeEdit(deleteFolder({ turnouts: this.turnouts, folders: this.turnoutFolders }, path))
+    }
+
+    /** Moves a turnout into a folder / under a VIRTUAL turnout / to the top level. False if the move is invalid. */
+    moveTurnoutTo(index: number, loc: TurnoutLocation): boolean {
+        const moved = moveTurnout(this.turnouts, index, loc)
+        if (!moved) return false
+        this._applyTurnoutTreeEdit({ turnouts: moved, folders: this.turnoutFolders })
+        return true
     }
 
     // ── mySensors.h ───────────────────────────────────────────────────────
@@ -629,7 +758,9 @@ export class ConfigEditorState {
             const parsed = parseAliasesFromFile(text)
             const normalized = this.normalizeAliases(parsed)
             if (!normalized.ok) return normalized
+            const previousAliases = this.aliases
             this.aliases = normalized.aliases
+            this._refreshVirtualEventRefs(previousAliases)
             this.hasChanges = true
         } catch {
             // keep existing aliases if parse fails
@@ -809,6 +940,7 @@ export class ConfigEditorState {
             return { ok: false, reason: 'An alias is required when Strict aliases is enabled.' }
         }
         const trimmedPreviousName = previousAliasName?.trim() ?? ''
+        const previousAliases = this.aliases
         const aliases = [...this.aliases]
 
         let aliasIndex = -1
@@ -834,6 +966,7 @@ export class ConfigEditorState {
             if (aliasIndex !== -1) {
                 aliases.splice(aliasIndex, 1)
                 this.aliases = aliases
+                this._refreshVirtualEventRefs(previousAliases)
                 this.hasChanges = true
                 this._syncToInstallerState()
             }
@@ -884,6 +1017,7 @@ export class ConfigEditorState {
         }
 
         this.aliases = aliases
+        this._refreshVirtualEventRefs(previousAliases)
         this.hasChanges = true
         this._syncToInstallerState()
         return { ok: true }
@@ -1120,6 +1254,7 @@ export class ConfigEditorState {
         this.configHContent = ''
         this.roster = []
         this.turnouts = []
+        this.turnoutFolders = []
         this.sensors = []
         this.signals = []
         this.routes = []
@@ -1142,6 +1277,7 @@ export class ConfigEditorState {
                 this.roster = parseRosterFromFile(f.content)
             } else if (f.name === 'myTurnouts.h') {
                 this.turnouts = parseTurnoutFromFile(f.content)
+                this.turnoutFolders = parseTurnoutFolders(f.content)
             } else if (f.name === 'mySensors.h') {
                 this.sensors = parseSensorsFromFile(f.content)
             } else if (f.name === 'mySignals.h') {

@@ -28,7 +28,9 @@ async function openSelectPin(page: Page) {
     await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
     await page.getByTitle('Add new turnout').click()
 
-    const dialog = page.getByRole('dialog')
+    // The native <dialog> specifically — the turnout tree's Syncfusion ContextMenu also puts a
+    // role="dialog" wrapper in the DOM, so a bare getByRole('dialog') is ambiguous here.
+    const dialog = page.locator('dialog[open]')
     await expect(dialog.getByRole('heading', { name: 'New Turnout' })).toBeVisible()
     await dialog.getByRole('button', { name: 'Continue' }).click()
     await expect(dialog.getByText('Select Pin', { exact: true })).toBeVisible()
@@ -130,7 +132,7 @@ test.describe('Servo pin availability — new servo turnout', () => {
 
         await prompt.getByRole('button', { name: 'Go to Accessories' }).click()
         await expect(page.locator('hal-devices-form')).toBeVisible()
-        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'New Turnout' })).toHaveCount(0)
+        await expect(page.locator('#turnout-treeview li.e-list-item', { hasText: 'New Turnout' })).toHaveCount(0)
     })
 
     test('cancelling the servo-board prompt stays on Turnouts without adding anything', async ({ csb1StackedPage }) => {
@@ -146,7 +148,7 @@ test.describe('Servo pin availability — new servo turnout', () => {
 
         await expect(prompt).not.toBeVisible()
         await expect(page.locator('hal-devices-form')).toHaveCount(0)
-        await expect(page.locator('nav[aria-label="Turnouts"] a', { hasText: 'New Turnout' })).toHaveCount(0)
+        await expect(page.locator('#turnout-treeview li.e-list-item', { hasText: 'New Turnout' })).toHaveCount(0)
     })
 
     test('on a non-CSB1 board Direct MCU pin stays available and listed first', async ({ workspacePage }) => {

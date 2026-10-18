@@ -35,55 +35,55 @@
                     <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
                         <span
                             class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Turnouts</span>
+                        <button click.trigger="promptNewFolder()" data-testid="new-turnout-folder"
+                            class="w-6 h-6 mr-1.5 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 flex items-center justify-center transition-colors"
+                            title="New folder">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                                <path d="M12 11v6M9 14h6"/>
+                            </svg>
+                        </button>
                         <button click.trigger="addEntry()"
                             class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
                             title="Add new turnout">+</button>
                     </div>
 
-                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Turnouts">
-                        <a repeat.for="turnout of turnouts" click.trigger="selectEntry(turnout)"
-                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
-                            class.bind="selectedIndex === $index
-                            ? 'bg-blue-900/60 text-white font-medium'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
-                            <span class="flex-1 min-w-0 truncate">${getListLabel(turnout)}</span>
-                            <svg if.bind="isEntryHidden(turnout)" data-testid="hidden-turnout-icon"
-                                class="w-4 h-4 shrink-0 text-gray-500" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-label="Hidden from throttles">
-                                <title>Hidden from throttles</title>
-                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                                <line x1="1" y1="1" x2="23" y2="23"/>
-                            </svg>
-                            <span if.bind="state.turnoutIdsNeedingAlias.has(turnout.id)" data-testid="alias-warning-dot"
-                                title="No alias set (Strict aliases is enabled)"
-                                class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                            <button data-testid="turnout-row-menu" aria-haspopup="menu" title="More actions"
-                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:bg-gray-900/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors"
-                                click.trigger="openMenu($index, $event)">
-                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
-                                </svg>
-                            </button>
-                        </a>
+                    <!-- Tree: a Syncfusion TreeView built in turnout-editor.ts (folders + VIRTUAL turnouts are
+                         the branches, turnouts are the leaves). Placement lives in `// @tree:` comments in
+                         myTurnouts.h, so the EXRAIL macros themselves are untouched. -->
+                    <nav class="flex-1 min-h-0 overflow-auto p-1.5" aria-label="Turnouts">
+                        <div ref="treeEl" id="turnout-treeview"></div>
                     </nav>
 
-                    <!-- Row context menu: fixed-positioned so the nav's overflow can't clip it; the backdrop closes it on outside click -->
-                    <div if.bind="menuIndex !== null" class="fixed inset-0 z-40" click.trigger="closeMenu()"></div>
-                    <div if.bind="menuIndex !== null" role="menu" data-testid="turnout-row-menu-popup" style.bind="menuStyle"
-                        class="fixed z-50 min-w-[9rem] py-1 rounded-lg border border-gray-300 dark:border-white/15 bg-gray-50 dark:bg-gray-900 shadow-xl text-sm">
-                        <button role="menuitem" click.trigger="menuClone()"
-                            class="w-full text-left px-3 py-1.5 text-gray-800 dark:text-gray-200 hover:bg-gray-900/5 dark:hover:bg-white/10 transition-colors">Clone…</button>
-                        <button role="menuitem" click.trigger="menuDelete()"
-                            class="w-full text-left px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors">Delete</button>
-                    </div>
-
-                    <div if.bind="turnouts.length === 0" class="flex-1 flex items-center justify-center p-4">
+                    <div if.bind="turnouts.length === 0 && state.turnoutFolders.length === 0" class="flex-1 flex items-center justify-center p-4">
                         <p class="text-gray-600 text-xs text-center">No turnouts.<br>Click + to add one.</p>
                     </div>
                 </div>
 
                 <!-- Detail panel -->
                 <div class="flex flex-col overflow-hidden">
+                    <!-- Folder selected -->
+                    <div if.bind="selectedFolder !== null" data-testid="turnout-folder-panel" class="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
+                        <div class="bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-4 flex flex-col gap-3">
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Folder</span>
+                                <span class="text-base font-medium text-gray-900 dark:text-gray-100">${selectedFolderName}</span>
+                                <span class="text-xs text-gray-500 font-mono">${selectedFolder}</span>
+                            </div>
+                            <p class="text-[11px] text-gray-500">Folders only organise this list &mdash; they have no effect on the firmware. They are
+                                saved as <span class="font-mono">// @tree:</span> comments in myTurnouts.h.
+                                ${selectedFolderItemCount} turnout${selectedFolderItemCount === 1 ? '' : 's'} inside.</p>
+                            <div class="flex gap-2">
+                                <button click.trigger="promptNewFolder(selectedFolder)"
+                                    class="px-2.5 py-1 text-xs font-medium rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 transition-colors">New subfolder&hellip;</button>
+                                <button click.trigger="promptRenameFolder(selectedFolder)"
+                                    class="px-2.5 py-1 text-xs font-medium rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 transition-colors">Rename&hellip;</button>
+                                <button click.trigger="deleteFolder(selectedFolder)"
+                                    class="px-2.5 py-1 text-xs font-medium rounded bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 transition-colors">Delete folder</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div if.bind="editBuffer" class="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
                         <div if.bind="errorMessage"
                             class="px-3 py-2 bg-red-50 dark:bg-red-950/60 border border-red-500/40 rounded-md text-red-700 dark:text-red-300 text-sm">
@@ -102,6 +102,17 @@
                                     value.bind="editBuffer.type" change.trigger="updateType(editBuffer.type)">
                                     <option repeat.for="t of turnoutTypes" value.bind="t.value">${t.label}</option>
                                 </select>
+                            </div>
+                            <!-- Where this turnout sits in the sidebar tree — organisation only. -->
+                            <div class="flex flex-col gap-1.5 mt-4">
+                                <label for="turnout-location"
+                                    class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Location</label>
+                                <select id="turnout-location" data-testid="turnout-location"
+                                    class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                                    value.bind="locationValue" change.trigger="onLocationChange()">
+                                    <option repeat.for="o of locationOptions" value.bind="o.value">${o.label}</option>
+                                </select>
+                                <p class="text-[11px] text-gray-500">Only organises this list. Nest under a Virtual turnout to make it a branch.</p>
                             </div>
                         </div>
 
@@ -403,6 +414,16 @@
                                 </div>
                                 <p class="text-[11px] text-gray-500">No hardware — this turnout is driven entirely by
                                     ONCLOSE/ONTHROW event handlers elsewhere (myEvents.h).</p>
+                                <div if.bind="virtualEvents" data-testid="virtual-events-hint"
+                                    class="flex items-center gap-2 text-[11px] rounded-md border px-2.5 py-1.5 ${virtualEvents.childCount === 0 || virtualEvents.missing.length === 0 ? 'border-gray-200 dark:border-white/10 text-gray-500' : 'border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400'}">
+                                    <span if.bind="virtualEvents.childCount === 0">Turnouts placed under this one in the tree are added to its ONCLOSE/ONTHROW events automatically.</span>
+                                    <span if.bind="virtualEvents.childCount > 0 && virtualEvents.missing.length === 0">Events set up: ${virtualEvents.childCount} turnout${virtualEvents.childCount === 1 ? '' : 's'} in ONCLOSE/ONTHROW (myEvents.h).</span>
+                                    <template if.bind="virtualEvents.missing.length > 0">
+                                        <span>${virtualEvents.missing.length} of ${virtualEvents.childCount} child turnouts aren't in this turnout's ONCLOSE/ONTHROW events.</span>
+                                        <button type="button" data-testid="virtual-events-fix" click.trigger="addMissingVirtualEvents()"
+                                            class="ml-auto shrink-0 rounded border border-amber-400 px-2 py-0.5 font-medium hover:bg-amber-50 dark:hover:bg-amber-500/10">Add missing</button>
+                                    </template>
+                                </div>
                                 <div class="flex flex-col gap-1.5">
                                     <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                                         <input type="checkbox" checked.bind="isHidden"
@@ -513,12 +534,15 @@
 
                     </div>
 
-                    <div if.bind="!editBuffer" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                    <div if.bind="!editBuffer && selectedFolder === null" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
                         <p if.bind="turnouts.length > 0">Select a turnout to edit its properties.</p>
                         <p if.bind="turnouts.length === 0">No turnouts. Click + to add one.</p>
                     </div>
                 </div>
             </div><!-- end #turnout-splitter -->
+
+            <!-- ContextMenu anchor — must be a <ul> per SF EJ2 docs -->
+            <ul ref="contextMenuEl"></ul>
         </div><!-- end visual tab -->
 
         <!-- ── Raw tab ────────────────────────────────────────────────────── -->
