@@ -36,6 +36,10 @@ Choosing **Servo** opens a second dialog to pick the driving pin before the entr
 
 ![Select Pin dialog, asking which VPin drives the new servo turnout](../assets/screenshots/turnout-select-pin.png)
 
+The dialog picks an accessory board and a channel on it. Channels already used by another turnout, sensor or
+signal are not offered, and the first free channel is selected for you. On an EX-CSB1 only boards are listed (no
+direct MCU pin); if no servo board is declared yet, you're prompted to add one on [Accessories](accessories.md).
+
 The new turnout is created with the next unused turnout ID (or `200` if the list is empty). A new **Servo**
 turnout jumps straight into the servo calibration dialog (below) so you can set a sensible position before
 doing anything else.
@@ -181,6 +185,15 @@ Every kind also has a **Location** field (where the turnout sits in the tree —
 Changing **Kind** on an existing turnout converts it to the new kind's shape, generating fresh defaults for any
 newly-required fields while preserving ID, Description, Comment, and Default State. Switching to Servo this way
 also opens the pin-picker dialog to choose the driving pin.
+
+## Cloning a turnout
+
+**Clone…** (in a row's **⋯** menu) opens a **Clone Turnout** dialog that creates a second turnout on the same
+pin/address. Enter a new **ID**, choose a **Profile** (Servo only), and leave **Hidden from throttles** ticked
+for the common case: a user-facing turnout paired with a hidden twin (e.g. an `Instant`-profile servo, or a relay
+for frog power) that EXRAIL automation drives directly. Hidden turnouts are written with the bare `HIDDEN`
+description, are shown with an eye-off icon in the sidebar, and are left out of the Throttle's turnouts list by
+default (see [Throttle](../throttle.md)).
 
 ## Default State and Startup
 

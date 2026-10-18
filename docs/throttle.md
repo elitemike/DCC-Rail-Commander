@@ -58,6 +58,9 @@ turnouts without leaving the throttle panel:
   the turnouts it throws/closes) and a **Trigger** button to run it.
 - **Turnouts** lists each configured turnout with its live state — **Unknown**, **Thrown**, or **Closed** — and
   a toggle button; toggling from Unknown throws the turnout.
+  Turnouts marked `HIDDEN` (hidden from throttles) are left out of the list by default. When any exist, a
+  **Show hidden turnouts** checkbox appears; ticking it lists them too, with their description masked as
+  "Hidden turnout".
 
 !!! note "Not the same as the Startup defaults"
     Throwing/closing a turnout here changes it live on the connected device. It doesn't change the turnout's
