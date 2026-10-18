@@ -350,4 +350,28 @@ test.describe('Sensors Editor', () => {
         await expect(page.locator('div.monaco-editor')).toContainText('ALIAS(SHARED_NAME, 200) // type: Turnout')
         await expect(page.locator('div.monaco-editor')).not.toContainText('type: Sensor')
     })
+
+    test('folders group sensors logically: new sensors land in the selected folder and the comment is written to the raw file', async ({ workspacePage: page }) => {
+        await openSensorsEditor(page)
+
+        await page.getByTestId('new-folder').click()
+        const dialog = page.locator('[data-testid="text-input-dialog"]')
+        await dialog.waitFor({ state: 'visible', timeout: 5_000 })
+        await dialog.getByLabel('Folder name').fill('Yard')
+        await dialog.getByRole('button', { name: 'Create' }).click()
+        await expect(page.getByTestId('folder-row')).toHaveCount(1)
+
+        // With the folder selected, a new sensor is created inside it.
+        await addSensor(page)
+        await expect(sensorRows(page)).toHaveCount(1)
+        await expect(page.getByTestId('folder-row')).toContainText('1')
+
+        // Back at "All" the sensor is still listed; an empty sibling view shows the placeholder.
+        await page.getByTestId('folder-all').click()
+        await expect(sensorRows(page)).toHaveCount(1)
+
+        await switchToRaw(page)
+        await expect(page.locator('div.monaco-editor')).toContainText('// @tree: Yard')
+        await expect(page.locator('div.monaco-editor')).toContainText('// Sensor')
+    })
 })

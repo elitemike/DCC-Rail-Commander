@@ -2,6 +2,7 @@ import { resolve } from 'aurelia'
 import { IDialogService } from '@aurelia/dialog'
 import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
+import { allFolderPaths, itemIndicesUnder } from '../../utils/folder-tree'
 import type { SensorEntry } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
@@ -81,13 +82,34 @@ export class SensorsEditorCustomElement {
 
     rawSnapshot = ''
 
+    // ── Folders (logical grouping only — see folder-tree.ts) ─────────────────
+    /** Folder whose subtree is listed; '' shows every sensor. */
+    selectedFolder = ''
+
+    /** Indices into state.sensors of the rows to show for the selected folder. */
+    get visibleIndices(): number[] {
+        return itemIndicesUnder(this.state.sensors, this.selectedFolder)
+    }
+
+    get folderPaths(): string[] {
+        return allFolderPaths(this.state.sensors, this.state.sensorFolders)
+    }
+
+    addFolder = (path: string): boolean => this.state.addSensorFolder(path)
+    renameFolder = (from: string, to: string): boolean => this.state.renameSensorFolder(from, to)
+    removeFolder = (path: string): void => this.state.deleteSensorFolder(path)
+
+    moveToFolder(idx: number, folder: string): void {
+        this.state.moveSensorToFolder(idx, folder)
+    }
+
     onRawChange = (text: string) => {
         this.rawSnapshot = text
         this.state.setSensorsFromRaw(text)
     }
 
     addSensor() {
-        this.state.sensors = [...this.state.sensors, { id: this.state.nextFreeVpin, description: 'New Sensor' }]
+        this.state.sensors = [...this.state.sensors, { id: this.state.nextFreeVpin, description: 'New Sensor', ...(this.selectedFolder ? { folder: this.selectedFolder } : {}) }]
         this.state.syncAll()
     }
 

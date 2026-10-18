@@ -20,6 +20,8 @@
 
         <div class.bind="activeTab === 'visual' ? 'flex flex-1 min-h-0 overflow-hidden' : 'hidden'"
             style="flex:1;min-height:0;overflow:hidden;">
+            <folder-tree-panel items.bind="state.sensors" folders.bind="state.sensorFolders" selected.two-way="selectedFolder"
+                label="sensors" on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder"></folder-tree-panel>
             <div class="flex-1 overflow-y-auto p-4">
                 <div class="flex items-center justify-between gap-3 mb-4">
                     <p class="text-xs text-gray-500">Digital or analog sensors that EX-RAIL and JMRI can read the
@@ -39,29 +41,41 @@
                     <p class="text-sm">No sensors yet. Click "Add Sensor" to create one.</p>
                 </div>
 
-                <div if.bind="state.sensors.length > 0" class="flex flex-col gap-2">
-                    <div repeat.for="s of state.sensors" focusin.trigger="captureRowBeforeEdit($index)"
+                <div if.bind="state.sensors.length > 0 && visibleIndices.length === 0" class="text-sm text-gray-500 py-8 text-center">
+                    No sensors in this folder.
+                </div>
+
+                <div if.bind="visibleIndices.length > 0" class="flex flex-col gap-2">
+                    <div repeat.for="idx of visibleIndices" focusin.trigger="captureRowBeforeEdit(idx)" data-testid="sensor-row"
                         class="flex items-end gap-3 px-4 py-3 bg-gray-100/70 dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg hover:border-gray-300 dark:hover:border-white/20 transition-colors">
                         <div class="flex flex-col gap-1">
                             <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Pin</label>
-                            <vpin-picker value.two-way="s.id" on-commit.bind="makeSensorCommitHandler($index)"></vpin-picker>
+                            <vpin-picker value.two-way="state.sensors[idx].id" on-commit.bind="makeSensorCommitHandler(idx)"></vpin-picker>
                         </div>
                         <div class="flex flex-col gap-1 flex-1">
                             <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
-                            <input type="text" value.two-way="s.description" blur.trigger="updateSensor($index, s)" placeholder="Description"
+                            <input type="text" value.two-way="state.sensors[idx].description" blur.trigger="updateSensor(idx, state.sensors[idx])" placeholder="Description"
                                 title="Written as a // comment — EXRAIL has no description argument for a sensor. Use Alias to name this sensor for other files or EX-RAIL scripts."
                                 class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2.5 py-1.5 text-sm placeholder-gray-400 dark:placeholder-gray-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors" />
                         </div>
                         <div class="flex flex-col gap-1 flex-1">
                             <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
                                 Alias
-                                <span if.bind="state.sensorIdsNeedingAlias.has(s.id)" data-testid="alias-warning-dot"
+                                <span if.bind="state.sensorIdsNeedingAlias.has(state.sensors[idx].id)" data-testid="alias-warning-dot"
                                     title="No alias set (Strict aliases is enabled)"
                                     class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                             </label>
-                            <alias-picker target-id.bind="s.id" alias-type="Sensor" on-change.bind="makeAliasChangeHandler($index)"></alias-picker>
+                            <alias-picker target-id.bind="state.sensors[idx].id" alias-type="Sensor" on-change.bind="makeAliasChangeHandler(idx)"></alias-picker>
                         </div>
-                        <button click.trigger="removeSensor($index)" title="Remove sensor"
+                        <div if.bind="folderPaths.length > 0" class="flex flex-col gap-1">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Folder</label>
+                            <select data-testid="sensor-folder" value.bind="state.sensors[idx].folder || ''" change.trigger="moveToFolder(idx, $event.target.value)"
+                                class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-white/15 text-gray-900 dark:text-gray-100 rounded-md px-2 py-1.5 text-sm outline-none focus:border-blue-500">
+                                <option value="">(none)</option>
+                                <option repeat.for="f of folderPaths" value.bind="f">${f}</option>
+                            </select>
+                        </div>
+                        <button click.trigger="removeSensor(idx)" title="Remove sensor"
                             class="w-7 h-7 flex items-center justify-center rounded-md bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-gray-900 dark:hover:text-white text-base font-bold transition-colors shrink-0">×</button>
                     </div>
                 </div>
