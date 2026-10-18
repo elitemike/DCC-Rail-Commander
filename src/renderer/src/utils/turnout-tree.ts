@@ -11,6 +11,7 @@
 
 import type { Turnout } from './myAutomationParser'
 import { normalizeFolderPath } from './myAutomationParser'
+import { addFolder as addFolderGeneric, allFolderPaths as allFolderPathsGeneric, deleteFolder as deleteFolderGeneric, isValidFolderName as isValidFolderNameGeneric, renameFolder as renameFolderGeneric } from './folder-tree'
 
 export interface FolderTreeNode {
     kind: 'folder'
@@ -40,26 +41,11 @@ export interface TurnoutTreeEdit {
 
 const folderParent = (path: string): string => path.split('/').slice(0, -1).join('/')
 const folderName = (path: string): string => path.split('/').pop() ?? path
-const isUnder = (path: string, ancestor: string): boolean => path === ancestor || path.startsWith(`${ancestor}/`)
 
-/** Folder names can't contain "/" (the path separator) and can't be blank. */
-export function isValidFolderName(name: string): boolean {
-    const n = name.trim()
-    return n.length > 0 && !n.includes('/') && !n.includes('\n') && !n.includes('\r')
-}
+export const isValidFolderName = isValidFolderNameGeneric
 
 /** Every folder path in use — declared ones plus every turnout's, each with all of its ancestors. Sorted. */
-export function allFolderPaths(turnouts: Turnout[], declared: string[]): string[] {
-    const set = new Set<string>()
-    const add = (path: string | undefined) => {
-        if (!path) return
-        const segs = path.split('/')
-        for (let i = 1; i <= segs.length; i++) set.add(segs.slice(0, i).join('/'))
-    }
-    declared.forEach(add)
-    turnouts.forEach(t => add(t.folder))
-    return [...set].sort((a, b) => a.localeCompare(b))
-}
+export const allFolderPaths = allFolderPathsGeneric
 
 /**
  * Index of the turnout that is `index`'s effective parent turnout, or -1 when it has none (no
@@ -163,40 +149,18 @@ export function retargetChildren(turnouts: Turnout[], oldId: number, newId: numb
 
 /** Declares a folder (and so its ancestors). */
 export function addFolder(edit: TurnoutTreeEdit, path: string): TurnoutTreeEdit {
-    const p = normalizeFolderPath(path)
-    if (!p || edit.folders.includes(p)) return edit
-    return { turnouts: edit.turnouts, folders: [...edit.folders, p] }
-}
-
-function rewritePrefix(path: string, from: string, to: string): string {
-    if (!isUnder(path, from)) return path
-    const rest = path.slice(from.length)
-    return to ? `${to}${rest}` : rest.replace(/^\//, '')
+    const r = addFolderGeneric({ items: edit.turnouts, folders: edit.folders }, path)
+    return r.folders === edit.folders ? edit : { turnouts: r.items, folders: r.folders }
 }
 
 /** Renames/moves folder `from` (and everything under it) to `to`. `to` must not already exist. */
 export function renameFolder(edit: TurnoutTreeEdit, from: string, to: string): TurnoutTreeEdit | null {
-    const target = normalizeFolderPath(to)
-    if (!target || target === from) return null
-    if (isUnder(target, from)) return null // can't move a folder inside itself
-    if (allFolderPaths(edit.turnouts, edit.folders).includes(target)) return null
-    return {
-        turnouts: edit.turnouts.map(t => (t.folder && isUnder(t.folder, from) ? { ...t, folder: rewritePrefix(t.folder, from, target) } : t)),
-        folders: [...new Set(edit.folders.map(f => rewritePrefix(f, from, target)))],
-    }
+    const r = renameFolderGeneric({ items: edit.turnouts, folders: edit.folders }, from, to)
+    return r && { turnouts: r.items, folders: r.folders }
 }
 
 /** Deletes folder `path`: its turnouts and subfolders move up to its parent (nothing is deleted but the folder). */
 export function deleteFolder(edit: TurnoutTreeEdit, path: string): TurnoutTreeEdit {
-    const parent = folderParent(path)
-    const lift = (p: string): string => (p === path ? parent : rewritePrefix(p, path, parent))
-    return {
-        turnouts: edit.turnouts.map(t => {
-            if (!t.folder || !isUnder(t.folder, path)) return t
-            const next = lift(t.folder)
-            const { folder: _f, ...rest } = t
-            return (next ? { ...rest, folder: next } : rest) as Turnout
-        }),
-        folders: [...new Set(edit.folders.filter(f => f !== path).map(lift).filter(Boolean))],
-    }
+    const r = deleteFolderGeneric({ items: edit.turnouts, folders: edit.folders }, path)
+    return { turnouts: r.items, folders: r.folders }
 }

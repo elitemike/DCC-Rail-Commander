@@ -15,6 +15,13 @@ import {
     type TurnoutLocation,
     type TurnoutTreeEdit,
 } from '../utils/turnout-tree'
+import {
+    addFolder as addGenericFolder,
+    deleteFolder as deleteGenericFolder,
+    moveItemToFolder,
+    renameFolder as renameGenericFolder,
+    type FolderEdit,
+} from '../utils/folder-tree'
 import { STACKED_MOTOR_DRIVER } from '../config/commandstation'
 import {
     serializeRosterToFile,
@@ -25,6 +32,7 @@ import {
     parseTurnoutFromFile,
     buildGeneratorHeader,
     parseSensorsFromFile,
+    parseSensorFolders,
     serializeSensorsToFile,
     parseSignalsFromFile,
     serializeSignalsToFile,
@@ -583,21 +591,59 @@ ${body}`
 
     // ── mySensors.h ───────────────────────────────────────────────────────
     @observable sensors: SensorEntry[] = []
+    /** Folders declared in mySensors.h with `// @tree-folder:` — only needed for folders holding no sensors. */
+    @observable sensorFolders: string[] = []
 
     get sensorsRaw(): string {
         const header = buildGeneratorHeader('mySensors.h', this.installerState.appVersion)
-        const serialized = serializeSensorsToFile(this.sensors)
+        const serialized = serializeSensorsToFile(this.sensors, this.sensorFolders)
         return `${header}\n${serialized}`
     }
 
     setSensorsFromRaw(text: string): void {
         try {
             this.sensors = parseSensorsFromFile(text)
+            this.sensorFolders = parseSensorFolders(text)
             this.hasChanges = true
         } catch {
             // keep existing sensors if parse fails
         }
         this._syncToInstallerState()
+    }
+
+    // ── Sensor folders (logical grouping only — see folder-tree.ts) ──────────
+    private _applySensorFolderEdit(edit: FolderEdit<SensorEntry>): void {
+        this.sensors = edit.items
+        this.sensorFolders = edit.folders
+        this.hasChanges = true
+        this._syncToInstallerState()
+    }
+
+    /** Declares a folder. Returns false for a blank/invalid name or one that already exists. */
+    addSensorFolder(path: string): boolean {
+        const p = normalizeFolderPath(path)
+        if (!p || p.split('/').some(seg => !isValidFolderName(seg))) return false
+        if (allFolderPaths(this.sensors, this.sensorFolders).includes(p)) return false
+        this._applySensorFolderEdit(addGenericFolder({ items: this.sensors, folders: this.sensorFolders }, p))
+        return true
+    }
+
+    /** Renames or moves folder `from` (with everything under it) to path `to`. False if `to` is taken/invalid. */
+    renameSensorFolder(from: string, to: string): boolean {
+        const edit = renameGenericFolder({ items: this.sensors, folders: this.sensorFolders }, from, to)
+        if (!edit) return false
+        this._applySensorFolderEdit(edit)
+        return true
+    }
+
+    /** Deletes a folder; its sensors move up one level. */
+    deleteSensorFolder(path: string): void {
+        this._applySensorFolderEdit(deleteGenericFolder({ items: this.sensors, folders: this.sensorFolders }, path))
+    }
+
+    /** Moves a sensor into a folder ('' = top level). */
+    moveSensorToFolder(index: number, folder: string): void {
+        this._applySensorFolderEdit({ items: moveItemToFolder(this.sensors, index, folder), folders: this.sensorFolders })
     }
 
     // ── mySignals.h ───────────────────────────────────────────────────────
@@ -1256,6 +1302,7 @@ ${body}`
         this.turnouts = []
         this.turnoutFolders = []
         this.sensors = []
+        this.sensorFolders = []
         this.signals = []
         this.routes = []
         this.automations = []
@@ -1280,6 +1327,7 @@ ${body}`
                 this.turnoutFolders = parseTurnoutFolders(f.content)
             } else if (f.name === 'mySensors.h') {
                 this.sensors = parseSensorsFromFile(f.content)
+                this.sensorFolders = parseSensorFolders(f.content)
             } else if (f.name === 'mySignals.h') {
                 this.signals = parseSignalsFromFile(f.content)
             } else if (f.name === 'myRoutes.h') {

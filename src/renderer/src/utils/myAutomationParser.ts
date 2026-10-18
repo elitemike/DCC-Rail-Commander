@@ -122,6 +122,8 @@ export interface AutomationData {
 export interface SensorEntry {
     id: number;
     description: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 /** SIGNAL(redPin, amberPin, greenPin) — three GPIO/HAL pins driving LEDs directly */
@@ -450,11 +452,29 @@ export function parseSensorsFromFile(fileContent: string): SensorEntry[] {
     }
 
     found.sort((a, b) => a.index - b.index);
-    return found.flatMap(f => f.entries);
+    const { placements } = parseFolderMeta(fileContent, sensorEntryKey);
+    return found.flatMap(f => f.entries).map(e => {
+        const folder = placements.get(String(e.id));
+        return folder ? { ...e, folder } : e;
+    });
 }
 
-export function serializeSensorsToFile(sensors: SensorEntry[]): string {
-    return sensors.map(s => `// Sensor ${s.id}${s.description ? ` - ${s.description}` : ''}`).join('\n');
+/** Entry-start key for parseFolderMeta: the canonical `// Sensor <id>` comment or a JMRI_SENSOR(vpin...) call. */
+function sensorEntryKey(line: string): string | null {
+    const m = /^\s*\/\/\s*Sensor\s+(\d+)\b/i.exec(line) ?? /^\s*JMRI_SENSOR(?:_NOPULLUP)?\s*\(\s*(\d+)/.exec(line);
+    return m ? m[1] : null;
+}
+
+/** Folder declarations (`// @tree-folder:`) in mySensors.h — empty folders only matter here. */
+export function parseSensorFolders(fileContent: string): string[] {
+    return parseFolderMeta(fileContent, sensorEntryKey).folders;
+}
+
+export function serializeSensorsToFile(sensors: SensorEntry[], folders: string[] = []): string {
+    return [
+        ...serializeFolderDecls(sensors, folders),
+        ...sensors.flatMap(s => [...folderTagLines(s.folder), `// Sensor ${s.id}${s.description ? ` - ${s.description}` : ''}`]),
+    ].join('\n');
 }
 
 export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
@@ -605,7 +625,10 @@ function extractLeadingComment(pendingLines: string[]): string | undefined {
     let start = end;
     while (start > 0 && /^\s*\/\//.test(pendingLines[start - 1])) start--;
     if (start === end) return undefined;
-    return pendingLines.slice(start, end).map(l => l.replace(/^\s*\/\/\s?/, '')).join('\n');
+    // Folder-tree tags sit in the same `//` run above a header but aren't part of the user's comment.
+    const kept = pendingLines.slice(start, end).filter(l => !TREE_TAG_RE.test(l) && !TREE_FOLDER_RE.test(l));
+    if (kept.length === 0) return undefined;
+    return kept.map(l => l.replace(/^\s*\/\/\s?/, '')).join('\n');
 }
 
 export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
@@ -1475,6 +1498,63 @@ export function parseTurnoutTreeMeta(fileContent: string): {
 /** The folders declared with `// @tree-folder:` (empty folders) — see parseTurnoutTreeMeta. */
 export function parseTurnoutFolders(fileContent: string): string[] {
     return parseTurnoutTreeMeta(fileContent).folders;
+}
+
+/**
+ * Generic form of parseTurnoutTreeMeta for the other config files (sensors, signals, routes, ...):
+ * `// @tree: A/B` above an entry puts it in that folder and `// @tree-folder: A/B` declares an empty
+ * one. `keyOf` returns a stable key for a line that *starts an entry* (or null) — the tag attaches
+ * to the next such line. Blank lines and ordinary comments between a tag and its entry are
+ * skipped; any other line drops the pending tag so it can't attach to the wrong entry. Folders only
+ * — the `#id` parent form is turnout-specific and ignored here.
+ */
+export function parseFolderMeta(
+    fileContent: string,
+    keyOf: (line: string) => string | null,
+): { placements: Map<string, string>; folders: string[] } {
+    const placements = new Map<string, string>();
+    const folders: string[] = [];
+    let pending: string | null = null;
+    for (const line of fileContent.split('\n')) {
+        const folderDecl = TREE_FOLDER_RE.exec(line);
+        if (folderDecl) {
+            const path = normalizeFolderPath(folderDecl[1]);
+            if (path && !folders.includes(path)) folders.push(path);
+            continue;
+        }
+        const tag = TREE_TAG_RE.exec(line);
+        if (tag) {
+            pending = PARENT_REF_RE.test(tag[1]) ? null : (normalizeFolderPath(tag[1]) || null);
+            continue;
+        }
+        const key = keyOf(line);
+        if (key !== null) {
+            if (pending) placements.set(key, pending);
+            pending = null;
+            continue;
+        }
+        const trimmed = line.trim();
+        if (trimmed === '') continue;
+        if (trimmed.startsWith('//') && !trimmed.startsWith('// [INVALID]')) continue;
+        pending = null;
+    }
+    return { placements, folders };
+}
+
+/** `// @tree-folder:` declarations for folders no item already implies (itself or via a deeper path). */
+export function serializeFolderDecls(items: { folder?: string }[], folders: string[]): string[] {
+    const implied = new Set<string>();
+    for (const t of items) {
+        if (!t.folder) continue;
+        const segs = t.folder.split('/');
+        for (let i = 1; i <= segs.length; i++) implied.add(segs.slice(0, i).join('/'));
+    }
+    return folders.filter(f => f && !implied.has(f)).map(f => `// @tree-folder: ${f}`);
+}
+
+/** The `// @tree:` line to emit above an entry (empty when it sits at the top level). */
+export function folderTagLines(folder: string | undefined): string[] {
+    return folder ? [`// @tree: ${folder}`] : [];
 }
 
 export function parseTurnoutFromFile(fileContent: string): Turnout[] {
