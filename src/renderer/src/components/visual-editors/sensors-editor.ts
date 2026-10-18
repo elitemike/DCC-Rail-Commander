@@ -108,12 +108,12 @@ export class SensorsEditorCustomElement {
 
     itemLabel = (item: SensorEntry): string => (item.description ? `${item.description} (${item.id})` : `Sensor ${item.id}`)
 
-    addFolder = (path: string): boolean => this.state.addSensorFolder(path)
-    renameFolder = (from: string, to: string): boolean => this.state.renameSensorFolder(from, to)
-    removeFolder = (path: string): void => this.state.deleteSensorFolder(path)
+    addFolder = (path: string): boolean => this.state.addFolderTo('sensors', path)
+    renameFolder = (from: string, to: string): boolean => this.state.renameFolderIn('sensors', from, to)
+    removeFolder = (path: string): void => this.state.deleteFolderFrom('sensors', path)
 
     moveToFolder = (idx: number, folder: string): void => {
-        this.state.moveSensorToFolder(idx, folder)
+        this.state.moveToFolder('sensors', idx, folder)
     }
 
     onRawChange = (text: string) => {

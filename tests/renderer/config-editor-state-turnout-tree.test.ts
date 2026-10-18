@@ -6,7 +6,7 @@ import { ConfigEditorState } from '../../src/renderer/src/models/config-editor-s
 // constructor's DI call; @observable fields need real own-property descriptors).
 function makeState(myTurnouts: string): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'signalFolders', 'routeFolders', 'sequenceFolders', 'automationFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {

@@ -3,6 +3,7 @@ import { IDialogService } from '@aurelia/dialog'
 import { confirmAction } from '../../utils/confirm-action'
 import { ConfigEditorState } from '../../models/config-editor-state'
 import type { SignalEntry } from '../../utils/myAutomationParser'
+import { allFolderPaths } from '../../utils/folder-tree'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 type SignalKind = SignalEntry['type']
@@ -23,6 +24,7 @@ export class SignalsEditorCustomElement {
         // file's editor already existed still takes effect, as long as the user
         // hasn't manually picked a tab for it this session (_userChoseTab).
         this._applyDefaultViewIfUnset()
+        this._ensureSelection()
         try { console.debug('SignalsEditor attached') } catch { /* ignore */ }
     }
 
@@ -40,10 +42,40 @@ export class SignalsEditorCustomElement {
     private _applyTab(t: 'visual' | 'raw') {
         if (t === 'raw') this.rawSnapshot = this.state.signalsRaw
         this.activeTab = t
+        if (t === 'visual') this._ensureSelection()
         if (t === 'raw') setTimeout(() => { try { this.rawEditor?.editor?.layout?.() } catch { } }, 50)
     }
 
     rawSnapshot = ''
+
+    // ── Folders (logical grouping only — see folder-tree.ts) ─────────────────
+    /** Folder selected in the tree ('' = none); new signals are created inside it. */
+    selectedFolder = ''
+    /** Index into state.signals of the signal being edited, or -1. The right pane shows only this one. */
+    selectedIndex = -1
+
+    get selectedIndices(): number[] {
+        return this.selectedIndex >= 0 && this.selectedIndex < this.state.signals.length ? [this.selectedIndex] : []
+    }
+
+    get folderPaths(): string[] {
+        return allFolderPaths(this.state.signals, this.state.signalFolders)
+    }
+
+    itemLabel = (item: SignalEntry, index: number): string => item.description || `Signal ${index + 1}`
+
+    addFolder = (path: string): boolean => this.state.addFolderTo('signals', path)
+    renameFolder = (from: string, to: string): boolean => this.state.renameFolderIn('signals', from, to)
+    removeFolder = (path: string): void => this.state.deleteFolderFrom('signals', path)
+    moveToFolder = (idx: number, folder: string): void => this.state.moveToFolder('signals', idx, folder)
+
+    /** Keeps the right pane useful: pick the first signal when nothing valid is selected. */
+    private _ensureSelection(): void {
+        if (this.selectedFolder) return
+        if (this.selectedIndex < 0 || this.selectedIndex >= this.state.signals.length) {
+            this.selectedIndex = this.state.signals.length > 0 ? 0 : -1
+        }
+    }
 
     onRawChange = (text: string) => {
         this.rawSnapshot = text
@@ -56,7 +88,10 @@ export class SignalsEditorCustomElement {
     ]
 
     addSignal() {
-        this.state.signals = [...this.state.signals, { type: 'PIN', red: 0, amber: 0, green: 0, description: '' }]
+        const folder = this.selectedIndex >= 0 ? this.state.signals[this.selectedIndex]?.folder ?? '' : this.selectedFolder
+        this.state.signals = [...this.state.signals, { type: 'PIN', red: 0, amber: 0, green: 0, description: '', ...(folder ? { folder } : {}) }]
+        this.selectedFolder = ''
+        this.selectedIndex = this.state.signals.length - 1
         this.state.syncAll()
     }
 
@@ -65,6 +100,7 @@ export class SignalsEditorCustomElement {
         if (!entry) return
         if (!(await confirmAction(this.dialogService, `Delete "${entry.description ? entry.description : `Signal ${idx + 1}`}"?`, 'Are you sure you want to remove this signal?'))) return
         this.state.signals = this.state.signals.filter((_, i) => i !== idx)
+        this.selectedIndex = -1
         this.state.syncAll()
     }
 
@@ -81,9 +117,10 @@ export class SignalsEditorCustomElement {
         const current = this.state.signals[idx]
         if (!current || current.type === type) return
         const description = current.description
+        const folder = current.folder
         const next: SignalEntry = type === 'DCC'
-            ? { type: 'DCC', id: 0, addr: 0, subAddr: 0, description }
-            : { type: 'PIN', red: 0, amber: 0, green: 0, description }
+            ? { type: 'DCC', id: 0, addr: 0, subAddr: 0, description, ...(folder ? { folder } : {}) }
+            : { type: 'PIN', red: 0, amber: 0, green: 0, description, ...(folder ? { folder } : {}) }
         this.updateSignal(idx, next)
     }
 

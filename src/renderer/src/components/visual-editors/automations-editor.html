@@ -23,34 +23,12 @@
             <div id="automations-splitter" style="height:100%;width:100%;">
 
                 <!-- Sidebar -->
-                <div class="flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
-                    <div class="flex items-center px-3 py-2.5 border-b border-gray-200 dark:border-white/10">
-                        <span
-                            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-1">Automations</span>
-                        <button click.trigger="addAutomation()"
-                            class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors"
-                            title="Add new automation">+</button>
-                    </div>
-
-                    <nav class="flex flex-col gap-0.5 overflow-y-auto flex-1 p-1.5" aria-label="Automations">
-                        <a repeat.for="a of state.automations" click.trigger="selectEntry(a)"
-                            class="flex items-center justify-between gap-2 px-2.5 py-2 rounded text-sm cursor-pointer transition-colors"
-                            class.bind="selectedId === a.id
-                            ? 'bg-blue-900/60 text-white font-medium'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-900/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'">
-                            <span class="flex-1 min-w-0 truncate" title.bind="getDisplayName(a)">${getDisplayName(a)}</span>
-                            <span if.bind="state.automationIdsNeedingAlias.has(a.id)" data-testid="alias-warning-dot"
-                                title="No alias set (Strict aliases is enabled)"
-                                class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                            <button
-                                class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                                click.trigger="removeAutomation($index, $event)" title="Remove">×</button>
-                        </a>
-                    </nav>
-
-                    <div if.bind="state.automations.length === 0" class="flex-1 flex items-center justify-center p-4">
-                        <p class="text-gray-600 text-xs text-center">No automations.<br>Click + to add one.</p>
-                    </div>
+                <div class="h-full overflow-hidden">
+                    <folder-tree-panel embedded.bind="true" items.bind="state.automations" folders.bind="state.automationFolders"
+                        selected-folder.two-way="selectedFolder" selected-index.to-view="selectedTreeIndex" label="Automations"
+                        item-label.bind="itemLabel" item-warn.bind="itemWarn" add-title="Add new automation"
+                        on-add-item.bind="addFromTree" on-remove-item.bind="removeFromTree" on-select-item.bind="selectFromTree"
+                        on-add.bind="addFolder" on-rename.bind="renameFolder" on-remove.bind="removeFolder" on-move.bind="moveToFolder"></folder-tree-panel>
                 </div>
 
                 <!-- Detail panel -->

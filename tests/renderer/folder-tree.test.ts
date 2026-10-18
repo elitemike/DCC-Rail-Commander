@@ -61,3 +61,52 @@ describe('tree tags are not user comments', () => {
         expect(seq[0].comment).toBeUndefined()
     })
 })
+
+import {
+    parseAutomationsFromFile, parseRouteFolders, parseRoutesFromFile, parseSequenceFolders, parseSignalsFromFile,
+    serializeAutomationsToFile, serializeRoutesToFile, serializeSequencesToFile, serializeSignalsToFile,
+} from '../../src/renderer/src/utils/myAutomationParser'
+
+describe('folder metadata for signals, routes, sequences, automations', () => {
+    it('signals round-trip folder per entry, keyed by pin/id', () => {
+        const signals = [
+            { type: 'PIN' as const, red: 30, amber: 31, green: 32, description: '', folder: 'Yard' },
+            { type: 'DCC' as const, id: 7, addr: 5, subAddr: 1, description: '' },
+        ]
+        const text = serializeSignalsToFile(signals, [])
+        expect(text).toBe('// @tree: Yard\nSIGNAL(30, 31, 32)\nDCC_SIGNAL(7, 5, 1)')
+        expect(parseSignalsFromFile(text)).toEqual(signals)
+    })
+
+    it('routes round-trip folders, declared empty folders, and leave the ROUTE macro lines untouched', () => {
+        const routes = [
+            { id: 1, description: 'A', body: 'DONE', folder: 'Yard/East' },
+            { id: 2, description: 'B', body: 'DONE' },
+        ]
+        const text = serializeRoutesToFile(routes, ['Spare'])
+        expect(parseRoutesFromFile(text)).toEqual(routes.map(r => ({ ...r, comment: undefined })))
+        expect(parseRouteFolders(text)).toEqual(['Spare'])
+        expect(text.split('\n').filter(l => l.startsWith('ROUTE('))).toEqual(['ROUTE(1, "A")', 'ROUTE(2, "B")'])
+    })
+
+    it('a body with no terminator does not swallow the next route\'s tag (no duplication on re-serialize)', () => {
+        const text = 'ROUTE(1, "A")\nFWD(50)\n// @tree: Yard\nROUTE(2, "B")\nDONE'
+        const routes = parseRoutesFromFile(text)
+        expect(routes[0].body).toBe('FWD(50)')
+        expect(routes[1].folder).toBe('Yard')
+        expect(serializeRoutesToFile(routes)).toBe('// @tree: Yard\nROUTE(2, "B")\nDONE'.replace(/^/, 'ROUTE(1, "A")\nFWD(50)\n\n'))
+    })
+
+    it('sequences keep the tag apart from the user comment block', () => {
+        const seqs = [{ id: 5, description: 'x', comment: 'note', body: 'DONE', folder: 'Depot' }]
+        const text = serializeSequencesToFile(seqs, [])
+        expect(text.startsWith('// @tree: Depot\n// note\nSEQUENCE(5)')).toBe(true)
+        expect(parseSequenceFolders(text)).toEqual([])
+    })
+
+    it('automations round-trip folders', () => {
+        const autos = [{ id: 9, description: 'Z', body: 'DONE', folder: 'Shows' }]
+        const parsed = parseAutomationsFromFile(serializeAutomationsToFile(autos))
+        expect(parsed[0].folder).toBe('Shows')
+    })
+})

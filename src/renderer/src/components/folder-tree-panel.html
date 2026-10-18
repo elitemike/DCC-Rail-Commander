@@ -1,7 +1,8 @@
 <template>
-    <div data-testid="folder-tree-panel" css="width: ${width}px"
-        class="relative flex flex-col h-full shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40">
-        <div data-testid="folder-tree-resize" pointerdown.trigger="startResize($event)" title="Drag to resize"
+    <div data-testid="folder-tree-panel" css="${embedded ? '' : 'width: ' + width + 'px'}"
+        class="relative flex flex-col h-full border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-gray-900/40"
+        class.bind="embedded ? 'w-full overflow-hidden border-r' : 'shrink-0 border-r'">
+        <div if.bind="!embedded" data-testid="folder-tree-resize" pointerdown.trigger="startResize($event)" title="Drag to resize"
             class="absolute top-0 -right-1 w-2 h-full cursor-col-resize z-10 hover:bg-blue-500/30"></div>
         <div class="flex items-center justify-between gap-1 px-3 py-2 border-b border-gray-200 dark:border-white/10">
             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">${label}</span>
@@ -11,26 +12,39 @@
                 <button if.bind="selectedFolder && selectedIndex < 0" click.trigger="confirmDelete()" data-testid="delete-folder" title="Delete folder"
                     class="px-1.5 py-0.5 text-xs rounded text-red-500 hover:bg-red-500/10 transition-colors">Delete</button>
                 <button click.trigger="promptNewFolder()" data-testid="new-folder" title="New folder"
-                    class="w-6 h-6 flex items-center justify-center rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-base font-bold transition-colors">+</button>
+                    class="w-6 h-6 flex items-center justify-center rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm transition-colors">&#128193;</button>
+                <button if.bind="addTitle" click.trigger="onAddItem()" title.bind="addTitle"
+                    class="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg flex items-center justify-center leading-none transition-colors">+</button>
             </span>
         </div>
-        <div class="flex-1 overflow-y-auto py-1" role="tree" dragover.trigger="dragOver($event)" drop.trigger="drop($event, '')">
+        <nav class="flex-1 overflow-y-auto py-1" aria-label.bind="label" dragover.trigger="dragOver($event)" drop.trigger="drop($event, '')">
             <div if.bind="rows.length === 0" class="px-3 py-6 text-xs text-gray-500 text-center">Nothing here yet.</div>
-            <div repeat.for="row of rows" key.bind="row.key" role="treeitem"
-                data-testid.bind="row.kind === 'folder' ? 'folder-row' : 'tree-item'"
-                draggable.bind="row.kind === 'item'"
-                dragstart.trigger="dragStart($event, row)"
-                dragover.trigger="dragOver($event)"
-                drop.trigger="drop($event, row.path)"
-                click.trigger="row.kind === 'folder' ? selectFolder(row.path) : selectItem(row.index)"
-                css="padding-left: ${8 + row.depth * 14}px"
-                class="flex items-center gap-1.5 pr-3 py-1.5 text-sm cursor-pointer select-none transition-colors"
-                class.bind="isSelected(row) ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
-                <span if.bind="row.kind === 'folder'" click.trigger="toggle(row.path) & self" class="w-4 text-center text-xs text-gray-500">${row.open ? '▾' : '▸'}</span>
-                <span if.bind="row.kind === 'item'" class="w-4"></span>
-                <span class="truncate flex-1">${row.label}</span>
-                <span if.bind="row.kind === 'folder'" class="text-xs text-gray-500">${row.count}</span>
-            </div>
-        </div>
+            <template repeat.for="row of rows">
+                <div if.bind="row.kind === 'folder'" data-testid="folder-row" role="treeitem"
+                    dragover.trigger="dragOver($event)" drop.trigger="drop($event, row.path)"
+                    click.trigger="selectFolder(row.path)"
+                    css="padding-left: ${8 + row.depth * 14}px"
+                    class="flex items-center gap-1.5 pr-3 py-1.5 text-sm cursor-pointer select-none transition-colors"
+                    class.bind="isSelected(row) ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
+                    <span click.trigger="toggle(row.path) & self" class="w-4 text-center text-xs text-gray-500">${row.open ? '▾' : '▸'}</span>
+                    <span class="truncate flex-1">${row.label}</span>
+                    <span class="text-xs text-gray-500">${row.count}</span>
+                </div>
+                <a if.bind="row.kind === 'item'" data-testid="tree-item" role="treeitem" draggable="true"
+                    dragstart.trigger="dragStart($event, row)"
+                    dragover.trigger="dragOver($event)" drop.trigger="drop($event, row.path)"
+                    click.trigger="selectItem(row.index)"
+                    css="padding-left: ${8 + row.depth * 14}px"
+                    class="flex items-center gap-1.5 pr-2 py-1.5 text-sm cursor-pointer select-none transition-colors"
+                    class.bind="isSelected(row) ? 'bg-blue-600/15 text-gray-900 dark:text-white font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/5'">
+                    <span class="w-4"></span>
+                    <span class="truncate flex-1" title.bind="row.label">${row.label}</span>
+                    <span if.bind="warn(row)" data-testid="alias-warning-dot" title="No alias set (Strict aliases is enabled)"
+                        class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                    <button if.bind="onRemoveItem" click.trigger="remove(row, $event)" title="Remove"
+                        class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-colors">×</button>
+                </a>
+            </template>
+        </nav>
     </div>
 </template>

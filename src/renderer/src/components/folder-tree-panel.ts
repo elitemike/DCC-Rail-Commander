@@ -36,6 +36,17 @@ export class FolderTreePanelCustomElement {
     @bindable folders: string[] = []
     @bindable({ mode: 'twoWay' }) selectedFolder = ''
     @bindable({ mode: 'twoWay' }) selectedIndex = -1
+    /** Embedded inside a Syncfusion Splitter pane (routes/sequences/automations): the splitter owns the width, so no resize handle of our own. */
+    @bindable embedded = false
+    /** When set, a blue "+" button (with this title) calls `onAddItem` — for editors whose Add button lives in the tree header. */
+    @bindable addTitle = ''
+    @bindable onAddItem?: () => void
+    /** When set, each leaf gets a × button that calls it (the editor confirms and deletes). */
+    @bindable onRemoveItem?: (index: number, event: Event) => void
+    /** Called when a leaf is selected, for editors that track their selection themselves (by id). */
+    @bindable onSelectItem?: (index: number) => void
+    /** Returns true to show the "no alias" warning dot on a leaf. */
+    @bindable itemWarn?: (item: FolderItem, index: number) => boolean
     @bindable label = 'Items'
     @bindable itemLabel: (item: FolderItem, index: number) => string = (_i, n) => `#${n + 1}`
     @bindable onAdd!: (path: string) => boolean
@@ -108,6 +119,16 @@ export class FolderTreePanelCustomElement {
     selectItem(index: number): void {
         this.selectedIndex = index
         this.selectedFolder = ''
+        this.onSelectItem?.(index)
+    }
+
+    warn(row: TreeRow): boolean {
+        return row.kind === 'item' && !!this.itemWarn && this.itemWarn(this.items[row.index], row.index)
+    }
+
+    remove(row: TreeRow, event: Event): void {
+        event.stopPropagation()
+        this.onRemoveItem?.(row.index, event)
     }
 
     toggle(path: string): void {

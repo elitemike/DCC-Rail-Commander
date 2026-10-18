@@ -21,7 +21,7 @@ import { makeDialogService } from './dialog-service-stub'
 
 function makeConfigEditorState(configFiles: Array<{ name: string; content: string }>): ConfigEditorState {
     const state = Object.create(ConfigEditorState.prototype) as ConfigEditorState
-    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
+    for (const field of ['roster', 'turnouts', 'turnoutFolders', 'sensorFolders', 'signalFolders', 'routeFolders', 'sequenceFolders', 'automationFolders', 'sensors', 'signals', 'routes', 'automations', 'sequences', 'eventHandlers', 'aliases']) {
         Object.defineProperty(state, field, { value: [], writable: true, enumerable: true, configurable: true })
     }
     Object.assign(state, {

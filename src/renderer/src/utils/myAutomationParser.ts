@@ -133,6 +133,8 @@ export interface PinSignal {
     amber: number;
     green: number;
     description?: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 /** DCC_SIGNAL(id, addr, subAddr) — DCC accessory decoder-controlled signal */
@@ -142,6 +144,8 @@ export interface DccSignal {
     addr: number;
     subAddr: number;
     description?: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 export type SignalEntry = PinSignal | DccSignal;
@@ -159,6 +163,8 @@ export interface RouteEntry {
      * own. See serializeRoutesToFile()'s matching behavior.
      */
     body: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 export interface SequenceEntry {
@@ -169,6 +175,8 @@ export interface SequenceEntry {
     comment?: string;
     /** Raw text between SEQUENCE(...) and the next SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 /**
@@ -188,6 +196,8 @@ export interface AutomationEntry {
     comment?: string;
     /** Raw text between AUTOMATION(...) and the next ROUTE/AUTOMATION/SEQUENCE(...)/EOF — see RouteEntry.body. */
     body: string;
+    /** Logical tree folder ("A/B"), stored as a `// @tree:` comment above the entry — see parseFolderMeta. */
+    folder?: string;
 }
 
 /**
@@ -477,6 +487,31 @@ export function serializeSensorsToFile(sensors: SensorEntry[], folders: string[]
     ].join('\n');
 }
 
+/** Stamps `folder` onto entries whose key has a `// @tree:` placement. */
+function withFolders<T extends { folder?: string }>(entries: T[], placements: Map<string, string>, keyOf: (e: T) => string): T[] {
+    return entries.map(e => {
+        const folder = placements.get(keyOf(e));
+        return folder ? { ...e, folder } : e;
+    });
+}
+
+const signalLineKey = (line: string): string | null => {
+    const dcc = /^\s*DCC_SIGNAL\s*\(\s*(\d+)/.exec(line);
+    if (dcc) return `D${dcc[1]}`;
+    const pin = /^\s*SIGNAL\s*\(\s*(\d+)/.exec(line);
+    return pin ? `P${pin[1]}` : null;
+};
+const signalKey = (s: SignalEntry): string => (s.type === 'DCC' ? `D${s.id}` : `P${s.red}`);
+const idLineKey = (macro: string) => (line: string): string | null => new RegExp(`^\\s*${macro}\\s*\\(\\s*(\\d+)`).exec(line)?.[1] ?? null;
+const routeLineKey = idLineKey('ROUTE');
+const sequenceLineKey = idLineKey('SEQUENCE');
+const automationLineKey = idLineKey('AUTOMATION');
+
+export function parseSignalFolders(fileContent: string): string[] { return parseFolderMeta(fileContent, signalLineKey).folders; }
+export function parseRouteFolders(fileContent: string): string[] { return parseFolderMeta(fileContent, routeLineKey).folders; }
+export function parseSequenceFolders(fileContent: string): string[] { return parseFolderMeta(fileContent, sequenceLineKey).folders; }
+export function parseAutomationFolders(fileContent: string): string[] { return parseFolderMeta(fileContent, automationLineKey).folders; }
+
 export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
     const uncommented = fileContent
         .split('\n')
@@ -495,13 +530,17 @@ export function parseSignalsFromFile(fileContent: string): SignalEntry[] {
         out.push({ type: 'DCC', id: parseInt(m[1], 10), addr: parseInt(m[2], 10), subAddr: parseInt(m[3], 10), description: m[4] || '' });
     }
 
-    return out;
+    return withFolders(out, parseFolderMeta(fileContent, signalLineKey).placements, signalKey);
 }
 
-export function serializeSignalsToFile(signals: SignalEntry[]): string {
-    return signals.map(s => (
-        s.type === 'DCC' ? `DCC_SIGNAL(${s.id}, ${s.addr}, ${s.subAddr})` : `SIGNAL(${s.red}, ${s.amber}, ${s.green})`
-    )).join('\n');
+export function serializeSignalsToFile(signals: SignalEntry[], folders: string[] = []): string {
+    return [
+        ...serializeFolderDecls(signals, folders),
+        ...signals.flatMap(s => [
+            ...folderTagLines(s.folder),
+            s.type === 'DCC' ? `DCC_SIGNAL(${s.id}, ${s.addr}, ${s.subAddr})` : `SIGNAL(${s.red}, ${s.amber}, ${s.green})`,
+        ]),
+    ].join('\n');
 }
 
 /** Matches a DONE, RETURN, or FOLLOW(...) line, however it's indented — the three statements
@@ -606,6 +645,15 @@ function scanBlockBody(lines: string[], start: number, blockStart: RegExp): { bo
         bodyLines.push(line);
         i++;
     }
+    // A folder tag for the *next* block sits just above its header; when this body had no terminator
+    // it was scanned into this one — hand it back so it isn't duplicated on re-serialize.
+    for (let k = bodyLines.length - 1; k >= 0; k--) {
+        const t = bodyLines[k].trim();
+        const isTag = TREE_TAG_RE.test(t) || TREE_FOLDER_RE.test(t);
+        if (isTag) { bodyLines.splice(k, 1); continue; }
+        if (t === '' || t.startsWith('//')) continue;
+        break;
+    }
     return { body: bodyLines.join('\n').trim(), next: i };
 }
 
@@ -649,7 +697,7 @@ export function parseRoutesFromFile(fileContent: string): RouteEntry[] {
         }
         i++;
     }
-    return out;
+    return withFolders(out, parseFolderMeta(fileContent, routeLineKey).placements, r => String(r.id));
 }
 
 /**
@@ -675,7 +723,7 @@ export function parseAutomationsFromFile(fileContent: string): AutomationEntry[]
         }
         i++;
     }
-    return out;
+    return withFolders(out, parseFolderMeta(fileContent, automationLineKey).placements, a => String(a.id));
 }
 
 /**
@@ -934,9 +982,10 @@ export function commentOutUnrecognizedExrailBlocks(
     });
 }
 
-export function serializeRoutesToFile(routes: RouteEntry[]): string {
-    const lines: string[] = [];
+export function serializeRoutesToFile(routes: RouteEntry[], folders: string[] = []): string {
+    const lines: string[] = serializeFolderDecls(routes, folders);
     for (const r of routes) {
+        lines.push(...folderTagLines(r.folder));
         const comment = r.comment && r.comment.trim() ? ` // ${r.comment.trim()}` : '';
         lines.push(`ROUTE(${r.id}, "${r.description}")${comment}`);
         const trimmedBody = (r.body ?? '').trim();
@@ -952,9 +1001,10 @@ export function serializeRoutesToFile(routes: RouteEntry[]): string {
 
 /** Mirrors serializeRoutesToFile exactly — AUTOMATION shares ROUTE's exact shape (id, quoted
  *  description, optional trailing comment, DONE-or-user's-own-terminator body). */
-export function serializeAutomationsToFile(automations: AutomationEntry[]): string {
-    const lines: string[] = [];
+export function serializeAutomationsToFile(automations: AutomationEntry[], folders: string[] = []): string {
+    const lines: string[] = serializeFolderDecls(automations, folders);
     for (const a of automations) {
+        lines.push(...folderTagLines(a.folder));
         const comment = a.comment && a.comment.trim() ? ` // ${a.comment.trim()}` : '';
         lines.push(`AUTOMATION(${a.id}, "${a.description}")${comment}`);
         const trimmedBody = (a.body ?? '').trim();
@@ -988,12 +1038,13 @@ export function parseSequencesFromFile(fileContent: string): SequenceEntry[] {
         pendingLines.push(lines[i]);
         i++;
     }
-    return out;
+    return withFolders(out, parseFolderMeta(stripGeneratorHeader(fileContent), sequenceLineKey).placements, q => String(q.id));
 }
 
-export function serializeSequencesToFile(seqs: SequenceEntry[]): string {
-    const lines: string[] = [];
+export function serializeSequencesToFile(seqs: SequenceEntry[], folders: string[] = []): string {
+    const lines: string[] = serializeFolderDecls(seqs, folders);
     for (const s of seqs) {
+        lines.push(...folderTagLines(s.folder));
         if (s.comment && s.comment.trim()) {
             for (const commentLine of s.comment.trim().split('\n')) lines.push(`// ${commentLine}`);
         }
