@@ -127,14 +127,14 @@ test('a roster loco only shows its defined functions — no generic Fn padding',
     await expect(card.getByRole('button', { name: 'F4', exact: true })).toHaveCount(0)
 })
 
-test('a freeform address loco shows the full generic F0-F28 grid', async ({ workspacePage: page }) => {
+test('a freeform address loco shows the full generic F0-F68 grid', async ({ workspacePage: page }) => {
     await openThrottleSection(page)
     await addFreeform(page, '99')
     const card = cardFor(page, 'Cab 99')
     await expect(card).toBeVisible()
 
     await expect(card.getByRole('button', { name: 'F0', exact: true })).toBeVisible()
-    await expect(card.getByRole('button', { name: 'F28', exact: true })).toBeVisible()
+    await expect(card.getByRole('button', { name: 'F68', exact: true })).toBeVisible()
 })
 
 test('toggling a latching function updates immediately (optimistic local state)', async ({ workspacePage: page }) => {

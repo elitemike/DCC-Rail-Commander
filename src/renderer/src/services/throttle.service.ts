@@ -6,8 +6,8 @@ import { createLineSplitter } from '../utils/serial-line-buffer'
 import { deriveRouteStatus, parseRouteTurnoutCommands, type RouteStatus, type TurnoutLiveState } from '../utils/routeStatus'
 import { getAliasIdByName } from '../utils/myAutomationParser'
 
-/** F0-F28 — matches the 29-function cap already enforced by the roster editor. */
-export const MAX_FUNCTIONS = 29
+/** F0-F68 — the DCC protocol ceiling; also the roster editor's per-loco function cap. */
+export const MAX_FUNCTIONS = 69
 
 export interface ThrottleCabState {
     cab: number
@@ -33,9 +33,13 @@ export function decodeSpeedByte(byte: number): { speed: number; direction: 0 | 1
     return { speed, direction }
 }
 
-/** Bit N of `functmap` is the state of function Fn. */
+/**
+ * Bit N of `functmap` is the state of function Fn. DCC-EX's `<l>` reports only a
+ * 32-bit map (F0-F31); higher functions can't be read back, so they decode as off
+ * (and JS `1 << 32` would wrap to bit 0, so they must not be shifted).
+ */
 export function decodeFunctionMap(functmap: number, count: number = MAX_FUNCTIONS): boolean[] {
-    return Array.from({ length: count }, (_, i) => (functmap & (1 << i)) !== 0)
+    return Array.from({ length: count }, (_, i) => i < 32 && (functmap & (1 << i)) !== 0)
 }
 
 const LOCO_RESPONSE_RE = /^<l\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)>$/

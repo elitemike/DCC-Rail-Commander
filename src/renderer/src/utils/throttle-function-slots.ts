@@ -13,11 +13,11 @@ export interface ThrottleFunctionSlot {
  *
  * - Roster-matched loco (`isRosterMatch` true): only the functions the
  *   roster actually defines are shown — e.g. a loco with `LIGHT/HORN` shows
- *   exactly F0/F1, no padding out to F28. A `noFunction` placeholder within
+ *   exactly F0/F1, no padding out to F68. A `noFunction` placeholder within
  *   that range (e.g. `LIGHT/-/HORN`) still renders as a disabled slot, since
  *   it occupies a real F-number position on the decoder.
  * - Freeform / unmatched address (`isRosterMatch` false): no function data
- *   exists at all, so all F0-F28 are shown with generic "Fn" labels so the
+ *   exists at all, so all F0-F68 are shown with generic "Fn" labels so the
  *   loco can still be tested.
  *
  * Kept as a standalone pure function (rather than a method on

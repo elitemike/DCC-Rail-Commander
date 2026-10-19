@@ -137,7 +137,7 @@
                                         click.trigger="removeFunction($index)" title="Remove">×</button>
                                 </div>
                             </div>
-                            <div if.bind="editBuffer.functions.length < 29"
+                            <div if.bind="editBuffer.functions.length < maxFunctions"
                                 class="shrink-0 flex gap-2 items-center px-3 py-2 bg-green-500/5 border border-green-500/30 rounded hover:bg-green-500/10 transition-colors">
                                 <span
                                     class="text-xs font-mono text-gray-500 w-7 shrink-0">F${editBuffer.functions.length}</span>
@@ -286,7 +286,7 @@
                                 </div>
                             </div>
 
-                            <div if.bind="editBuffer.functions.length + appendedFunctionsList.length < 29"
+                            <div if.bind="editBuffer.functions.length + appendedFunctionsList.length < maxFunctions"
                                 class="shrink-0 flex gap-2 items-center px-3 py-2 bg-green-500/5 border border-green-500/30 rounded hover:bg-green-500/10 transition-colors">
                                 <span class="text-xs font-mono text-gray-500 w-7 shrink-0">${editBuffer.functions.length
                                     + appendedFunctionsList.length}</span>
@@ -393,7 +393,7 @@
                                         click.trigger="removeGroupFunction($index)" title="Remove">×</button>
                                 </div>
                             </div>
-                            <div if.bind="groupFunctions.length < 29"
+                            <div if.bind="groupFunctions.length < maxFunctions"
                                 class="shrink-0 flex gap-2 items-center px-3 py-2 bg-green-500/5 border border-green-500/30 rounded hover:bg-green-500/10 transition-colors">
                                 <span
                                     class="text-xs font-mono text-gray-500 w-7 shrink-0">F${groupFunctions.length}</span>

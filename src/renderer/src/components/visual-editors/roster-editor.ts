@@ -16,6 +16,7 @@ import {
     serializeFunction,
 } from '../../utils/myAutomationParser'
 import { ToastService } from '../../services/toast.service'
+import { MAX_FUNCTIONS } from '../../services/throttle.service'
 import { EditorDefaultViewService } from '../../services/editor-default-view.service'
 
 type ViewTab = 'visual' | 'raw'
@@ -55,6 +56,7 @@ function parseGroupNodeId(id: string): { macroName: string; folderPath: string }
 // by Electron's CSP. We use the drawNode event to build DOM directly instead.
 
 export class RosterEditorCustomElement {
+    readonly maxFunctions = MAX_FUNCTIONS
     readonly state = resolve(ConfigEditorState)
     private readonly dialogService = resolve(IDialogService)
     private readonly toastService = resolve(ToastService)

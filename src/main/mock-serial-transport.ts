@@ -83,7 +83,7 @@ export class MockSerialTransport {
             const func = Number(funcStr)
             const on = stateStr === '1'
             const existing = this.cabState.get(cab) ?? { speedByte: 128, functmap: 0 }
-            const functmap = on ? existing.functmap | (1 << func) : existing.functmap & ~(1 << func)
+            const functmap = func > 31 ? existing.functmap : on ? existing.functmap | (1 << func) : existing.functmap & ~(1 << func)
             this.cabState.set(cab, { ...existing, functmap })
             return `<l ${cab} 0 ${existing.speedByte} ${functmap}>\n`
         }

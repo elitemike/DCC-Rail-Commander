@@ -14,7 +14,7 @@ describe('buildFunctionSlots — freeform / unmatched address (isRosterMatch = f
         const slots = buildFunctionSlots([], false)
         expect(slots).toHaveLength(MAX_FUNCTIONS)
         expect(slots[0]).toEqual({ index: 0, label: 'F0', isMomentary: false, disabled: false })
-        expect(slots[28]).toEqual({ index: 28, label: 'F28', isMomentary: false, disabled: false })
+        expect(slots[68]).toEqual({ index: 68, label: 'F68', isMomentary: false, disabled: false })
     })
 
     it('ignores any rosterFunctions passed alongside isRosterMatch = false', () => {
